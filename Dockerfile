@@ -1,4 +1,4 @@
-FROM openjdk:21-jdk-slim as builder
+FROM eclipse-temurin:21-jdk-jammy as builder
 WORKDIR /app
 COPY gradlew ./
 COPY gradle gradle
@@ -7,7 +7,7 @@ COPY settings.gradle .
 COPY src src
 RUN ./gradlew bootJar
 
-FROM openjdk:21-jre-slim
+FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 COPY --from=builder /app/build/libs/*.jar app.jar
 EXPOSE 8080
