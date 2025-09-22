@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for Etalente Security Groups
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: etalente
+    Description: Name of the project
+  VpcId:
+    Type: String
+    Description: The ID of the VPC where security groups will be created
+
+Resources:
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Etalente Application Load Balancer
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-alb-sg
+
+  EcsTasksSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Etalente ECS Fargate tasks
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080 # Spring Boot backend port
+          ToPort: 8080
+          SourceSecurityGroupId: !GetAtt AlbSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 80 # Angular frontend port (if served by Nginx in container)
+          ToPort: 80
+          SourceSecurityGroupId: !GetAtt AlbSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-ecs-tasks-sg
+
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Etalente RDS database
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432 # PostgreSQL default port
+          ToPort: 5432
+          SourceSecurityGroupId: !GetAtt EcsTasksSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-rds-sg
+
+Outputs:
+  AlbSecurityGroupId:
+    Description: The ID of the ALB Security Group
+    Value: !Ref AlbSecurityGroup
+    Export:
+      Name: !Sub ${ProjectName}-AlbSecurityGroupId
+  EcsTasksSecurityGroupId:
+    Description: The ID of the ECS Tasks Security Group
+    Value: !Ref EcsTasksSecurityGroup
+    Export:
+      Name: !Sub ${ProjectName}-EcsTasksSecurityGroupId
+  RdsSecurityGroupId:
+    Description: The ID of the RDS Security Group
+    Value: !Ref RdsSecurityGroup
+    Export:
+      Name: !Sub ${ProjectName}-RdsSecurityGroupId
