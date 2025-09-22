@@ -1,0 +1,220 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for Etalente VPC and Networking components
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: etalente
+    Description: Name of the project
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR block for the VPC
+  PublicSubnet1aCidr:
+    Type: String
+    Default: 10.0.1.0/24
+    Description: CIDR block for Public Subnet in AZ1
+  PublicSubnet1bCidr:
+    Type: String
+    Default: 10.0.2.0/24
+    Description: CIDR block for Public Subnet in AZ2
+  PrivateSubnet1aCidr:
+    Type: String
+    Default: 10.0.10.0/24
+    Description: CIDR block for Private Subnet in AZ1
+  PrivateSubnet1bCidr:
+    Type: String
+    Default: 10.0.11.0/24
+    Description: CIDR block for Private Subnet in AZ2
+  AvailabilityZone1:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: af-south-1a
+    Description: First Availability Zone
+  AvailabilityZone2:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: af-south-1b
+    Description: Second Availability Zone
+
+Resources:
+  EtalenteVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-igw
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref EtalenteVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet1a:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EtalenteVPC
+      CidrBlock: !Ref PublicSubnet1aCidr
+      AvailabilityZone: !Ref AvailabilityZone1
+      MapPublicIpOnLaunch: true # Important for public subnets
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-public-subnet-1a
+
+  PublicSubnet1b:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EtalenteVPC
+      CidrBlock: !Ref PublicSubnet1bCidr
+      AvailabilityZone: !Ref AvailabilityZone2
+      MapPublicIpOnLaunch: true # Important for public subnets
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-public-subnet-1b
+
+  PrivateSubnet1a:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EtalenteVPC
+      CidrBlock: !Ref PrivateSubnet1aCidr
+      AvailabilityZone: !Ref AvailabilityZone1
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-private-subnet-1a
+
+  PrivateSubnet1b:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EtalenteVPC
+      CidrBlock: !Ref PrivateSubnet1bCidr
+      AvailabilityZone: !Ref AvailabilityZone2
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-private-subnet-1b
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref EtalenteVPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-public-rt
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1aRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1a
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet1bRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1b
+      RouteTableId: !Ref PublicRouteTable
+
+  EIPforNATGateway:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-nat-eip
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIPforNATGateway.AllocationId
+      SubnetId: !Ref PublicSubnet1a # Place NAT Gateway in one public subnet
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-nat-gateway
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref EtalenteVPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-private-rt
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
+  PrivateSubnet1aRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1a
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet1bRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1b
+      RouteTableId: !Ref PrivateRouteTable
+
+Outputs:
+  VpcId:
+    Description: The ID of the VPC
+    Value: !Ref EtalenteVPC
+    Export: 
+      Name: !Sub ${ProjectName}-VpcId
+  PublicSubnet1aId:
+    Description: The ID of Public Subnet 1a
+    Value: !Ref PublicSubnet1a
+    Export: 
+      Name: !Sub ${ProjectName}-PublicSubnet1aId
+  PublicSubnet1bId:
+    Description: The ID of Public Subnet 1b
+    Value: !Ref PublicSubnet1b
+    Export: 
+      Name: !Sub ${ProjectName}-PublicSubnet1bId
+  PrivateSubnet1aId:
+    Description: The ID of Private Subnet 1a
+    Value: !Ref PrivateSubnet1a
+    Export: 
+      Name: !Sub ${ProjectName}-PrivateSubnet1aId
+  PrivateSubnet1bId:
+    Description: The ID of Private Subnet 1b
+    Value: !Ref PrivateSubnet1b
+    Export: 
+      Name: !Sub ${ProjectName}-PrivateSubnet1bId
+  PublicRouteTableId:
+    Description: The ID of the Public Route Table
+    Value: !Ref PublicRouteTable
+    Export:
+      Name: !Sub ${ProjectName}-PublicRouteTableId
+  PrivateRouteTableId:
+    Description: The ID of the Private Route Table
+    Value: !Ref PrivateRouteTable
+    Export:
+      Name: !Sub ${ProjectName}-PrivateRouteTableId
+  InternetGatewayId:
+    Description: The ID of the Internet Gateway
+    Value: !Ref InternetGateway
+    Export:
+      Name: !Sub ${ProjectName}-InternetGatewayId
+  NATGatewayId:
+    Description: The ID of the NAT Gateway
+    Value: !Ref NATGateway
+    Export:
+      Name: !Sub ${ProjectName}-NATGatewayId
