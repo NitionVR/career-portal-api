@@ -1,7 +1,7 @@
 stages:
   - validate_iac
   - deploy_infra
-  # - lint_and_test
+  # - lint_and_test_
   # - build_image
   # - security_scan
   # - deploy_app
