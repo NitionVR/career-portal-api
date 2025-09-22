@@ -1,0 +1,6 @@
+[allowlist]
+  description = "Allowlist for gitleaks false positives"
+  regexes = [
+    '''Outputs\[\?OutputKey=='[a-zA-Z0-9]+\]\.OutputValue'''
+  ]
+
