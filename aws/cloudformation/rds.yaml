@@ -36,7 +36,7 @@ Parameters:
     Description: Name of the initial database
   DBInstanceClass:
     Type: String
-    Default: db.t3.micro # Use db.t2.micro for free tier if t3 is not available
+    Default: db.t3.micro
     Description: The DB instance class
   DBAllocatedStorage:
     Type: Number
