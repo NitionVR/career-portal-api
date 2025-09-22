@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for Etalente Application Load Balancer
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: etalente
+    Description: Name of the project
+  VpcId:
+    Type: String
+    Description: The ID of the VPC
+  PublicSubnet1aId:
+    Type: String
+    Description: The ID of Public Subnet 1a
+  PublicSubnet1bId:
+    Type: String
+    Description: The ID of Public Subnet 1b
+  AlbSecurityGroupId:
+    Type: String
+    Description: The ID of the ALB Security Group
+
+Resources:
+  EtalenteAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${ProjectName}-alb
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicSubnet1aId
+        - !Ref PublicSubnet1bId
+      SecurityGroups:
+        - !Ref AlbSecurityGroupId
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-alb
+
+  BackendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${ProjectName}-backend-tg
+      Port: 8080 # Spring Boot application port
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /actuator/health # Assuming Spring Boot Actuator is enabled
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      TargetType: ip
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-backend-tg
+
+  # Listener for HTTP traffic on port 80
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref EtalenteAlb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-http-listener
+
+  # Listener for HTTPS traffic on port 443 (requires ACM certificate)
+  # HttpsListener:
+  #   Type: AWS::ElasticLoadBalancingV2::Listener
+  #   Properties:
+  #     LoadBalancerArn: !Ref EtalenteAlb
+  #     Port: 443
+  #     Protocol: HTTPS
+  #     Certificates:
+  #       - CertificateArn: arn:aws:acm:REGION:ACCOUNT_ID:certificate/CERTIFICATE_ID # Replace with your ACM certificate ARN
+  #     DefaultActions:
+  #       - Type: forward
+  #         TargetGroupArn: !Ref BackendTargetGroup
+  #     Tags:
+  #       - Key: Name
+  #         Value: !Sub ${ProjectName}-https-listener
+
+Outputs:
+  AlbArn:
+    Description: The ARN of the Application Load Balancer
+    Value: !Ref EtalenteAlb
+    Export:
+      Name: !Sub ${ProjectName}-AlbArn
+  AlbDnsName:
+    Description: The DNS name of the Application Load Balancer
+    Value: !GetAtt EtalenteAlb.DNSName
+    Export:
+      Name: !Sub ${ProjectName}-AlbDnsName
+  BackendTargetGroupArn:
+    Description: The ARN of the Backend Target Group
+    Value: !Ref BackendTargetGroup
+    Export:
+      Name: !Sub ${ProjectName}-BackendTargetGroupArn
