@@ -1,7 +1,7 @@
 stages:
   - validate_iac
   - deploy_infra
-  # - lint_and_test_
+  # - lint_and_test
   # - build_image
   # - security_scan
   # - deploy_app
@@ -30,33 +30,32 @@ validate_iac:
     - aws cloudformation validate-template --template-body file://aws/cloudformation/alb.yaml
     - aws cloudformation validate-template --template-body file://aws/cloudformation/ecs.yaml
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes:
         - aws/cloudformation/*.yaml
+    - if: '$CI_COMMIT_TAG =~ /^infra-/'
 
 deploy_infra:
   extends: .aws_base
   stage: deploy_infra
   script:
+    - echo "Deploying Networking CloudFormation stack..."
+    - aws cloudformation deploy --template-file aws/cloudformation/networking.yaml --stack-name ${ProjectName}-NetworkingStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
+
     - |
       VPC_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-NetworkingStack --query "Stacks[0].Outputs[?OutputKey=='VpcId'].OutputValue" --output text)
       PRIVATE_SUBNET_1A_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-NetworkingStack --query "Stacks[0].Outputs[?OutputKey=='PrivateSubnet1aId'].OutputValue" --output text)
       PRIVATE_SUBNET_1B_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-NetworkingStack --query "Stacks[0].Outputs[?OutputKey=='PrivateSubnet1bId'].OutputValue" --output text)
       PUBLIC_SUBNET_1A_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-NetworkingStack --query "Stacks[0].Outputs[?OutputKey=='PublicSubnet1aId'].OutputValue" --output text)
       PUBLIC_SUBNET_1B_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-NetworkingStack --query "Stacks[0].Outputs[?OutputKey=='PublicSubnet1bId'].OutputValue" --output text)
-      RDS_SECURITY_GROUP_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-SecurityGroupsStack --query "Stacks[0].Outputs[?OutputKey=='RdsSecurityGroupId'].OutputValue" --output text)
-      ECS_TASKS_SECURITY_GROUP_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-SecurityGroupsStack --query "Stacks[0].Outputs[?OutputKey=='EcsTasksSecurityGroupId'].OutputValue" --output text)
-      ALB_SECURITY_GROUP_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-SecurityGroupsStack --query "Stacks[0].Outputs[?OutputKey=='AlbSecurityGroupId'].OutputValue" --output text)
-      ALB_ARN=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-AlbStack --query "Stacks[0].Outputs[?OutputKey=='AlbArn'].OutputValue" --output text)
-      BACKEND_TARGET_GROUP_ARN=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-AlbStack --query "Stacks[0].Outputs[?OutputKey=='BackendTargetGroupArn'].OutputValue" --output text)
-      DB_ENDPOINT_ADDRESS=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-RdsStack --query "Stacks[0].Outputs[?OutputKey=='DBEndpointAddress'].OutputValue" --output text)
-      DB_ENDPOINT_PORT=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-RdsStack --query "Stacks[0].Outputs[?OutputKey=='DBEndpointPort'].OutputValue" --output text)
-
-    - echo "Deploying Networking CloudFormation stack..."
-    - aws cloudformation deploy --template-file aws/cloudformation/networking.yaml --stack-name ${ProjectName}-NetworkingStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
 
     - echo "Deploying Security Groups CloudFormation stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/security-groups.yaml --stack-name ${ProjectName}-SecurityGroupsStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName VpcId=$VPC_ID --region $AWS_REGION
+
+    - |
+      RDS_SECURITY_GROUP_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-SecurityGroupsStack --query "Stacks[0].Outputs[?OutputKey=='RdsSecurityGroupId'].OutputValue" --output text)
+      ECS_TASKS_SECURITY_GROUP_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-SecurityGroupsStack --query "Stacks[0].Outputs[?OutputKey=='EcsTasksSecurityGroupId'].OutputValue" --output text)
+      ALB_SECURITY_GROUP_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-SecurityGroupsStack --query "Stacks[0].Outputs[?OutputKey=='AlbSecurityGroupId'].OutputValue" --output text)
 
     - echo "Deploying RDS CloudFormation stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/rds.yaml --stack-name ${ProjectName}-RdsStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName VpcId=$VPC_ID PrivateSubnet1aId=$PRIVATE_SUBNET_1A_ID PrivateSubnet1bId=$PRIVATE_SUBNET_1B_ID RdsSecurityGroupId=$RDS_SECURITY_GROUP_ID DBMasterUserPassword=$DB_MASTER_PASSWORD --region $AWS_REGION
@@ -64,9 +63,16 @@ deploy_infra:
     - echo "Deploying ALB CloudFormation stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/alb.yaml --stack-name ${ProjectName}-AlbStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName VpcId=$VPC_ID PublicSubnet1aId=$PUBLIC_SUBNET_1A_ID PublicSubnet1bId=$PUBLIC_SUBNET_1B_ID AlbSecurityGroupId=$ALB_SECURITY_GROUP_ID --region $AWS_REGION
 
+    - |
+      ALB_ARN=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-AlbStack --query "Stacks[0].Outputs[?OutputKey=='AlbArn'].OutputValue" --output text)
+      BACKEND_TARGET_GROUP_ARN=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-AlbStack --query "Stacks[0].Outputs[?OutputKey=='BackendTargetGroupArn'].OutputValue" --output text)
+      DB_ENDPOINT_ADDRESS=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-RdsStack --query "Stacks[0].Outputs[?OutputKey=='DBEndpointAddress'].OutputValue" --output text)
+      DB_ENDPOINT_PORT=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-RdsStack --query "Stacks[0].Outputs[?OutputKey=='DBEndpointPort'].OutputValue" --output text)
+
     - echo "Deploying ECS CloudFormation stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/ecs.yaml --stack-name ${ProjectName}-EcsStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName VpcId=$VPC_ID PrivateSubnet1aId=$PRIVATE_SUBNET_1A_ID PrivateSubnet1bId=$PRIVATE_SUBNET_1B_ID EcsTasksSecurityGroupId=$ECS_TASKS_SECURITY_GROUP_ID AlbArn=$ALB_ARN BackendTargetGroupArn=$BACKEND_TARGET_GROUP_ARN BackendImageUri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG}" DBEndpointAddress=$DB_ENDPOINT_ADDRESS DBEndpointPort=$DB_ENDPOINT_PORT DBMasterUsername=postgres DBMasterUserPassword=$DB_MASTER_PASSWORD --region $AWS_REGION
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes:
         - aws/cloudformation/*.yaml
+    - if: '$CI_COMMIT_TAG =~ /^infra-/'
