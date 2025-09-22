@@ -1,3 +1,4 @@
+# Stage 1: Build the Spring Boot application
 FROM eclipse-temurin:21-jdk-jammy as builder
 WORKDIR /app
 COPY gradlew ./
@@ -7,6 +8,7 @@ COPY settings.gradle .
 COPY src src
 RUN ./gradlew bootJar
 
+# Stage 2: Serve the application
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 COPY --from=builder /app/build/libs/*.jar app.jar
