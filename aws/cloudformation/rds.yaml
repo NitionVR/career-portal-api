@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for Etalente RDS PostgreSQL Database
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: etalente
+    Description: Name of the project
+  VpcId:
+    Type: String
+    Description: The ID of the VPC where the database will be created
+  PrivateSubnet1aId:
+    Type: String
+    Description: The ID of Private Subnet 1a
+  PrivateSubnet1bId:
+    Type: String
+    Description: The ID of Private Subnet 1b
+  RdsSecurityGroupId:
+    Type: String
+    Description: The ID of the RDS Security Group
+  DBInstanceIdentifier:
+    Type: String
+    Default: etalente-db
+    Description: The DB instance identifier
+  DBMasterUsername:
+    Type: String
+    Default: postgres
+    Description: Master username for the database
+  DBMasterUserPassword:
+    Type: String
+    NoEcho: true # Important for sensitive information
+    Description: Master password for the database
+  DBName:
+    Type: String
+    Default: etalente
+    Description: Name of the initial database
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro # Use db.t2.micro for free tier if t3 is not available
+    Description: The DB instance class
+  DBAllocatedStorage:
+    Type: Number
+    Default: 20
+    Description: The allocated storage in GiB
+
+Resources:
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for Etalente RDS database
+      SubnetIds:
+        - !Ref PrivateSubnet1aId
+        - !Ref PrivateSubnet1bId
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-db-subnet-group
+
+  EtalenteDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Ref DBInstanceIdentifier
+      DBName: !Ref DBName
+      Engine: postgres
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterUserPassword
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: !Ref DBAllocatedStorage
+      VPCSecurityGroups:
+        - !Ref RdsSecurityGroupId
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      MultiAZ: false # Set to true for production for high availability
+      PubliclyAccessible: false # Crucial for security
+      BackupRetentionPeriod: 7
+      PreferredBackupWindow: 03:00-04:00
+      PreferredMaintenanceWindow: Mon:05:00-Mon:06:00
+      DeletionProtection: false # Set to true for production
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-db
+
+Outputs:
+  DBEndpointAddress:
+    Description: The address of the RDS database endpoint
+    Value: !GetAtt EtalenteDB.Endpoint.Address
+    Export:
+      Name: !Sub ${ProjectName}-DBEndpointAddress
+  DBEndpointPort:
+    Description: The port of the RDS database endpoint
+    Value: !GetAtt EtalenteDB.Endpoint.Port
+    Export:
+      Name: !Sub ${ProjectName}-DBEndpointPort
