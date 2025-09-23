@@ -1,10 +1,10 @@
 stages:
   - validate_iac
   - deploy_infra
+  - build_image
+  - deploy_app
   # - lint_and_test
-  # - build_image
   # - security_scan
-  # - deploy_app
   # - integration_test
 
 variables:
@@ -70,9 +70,36 @@ deploy_infra:
       DB_ENDPOINT_PORT=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-RdsStack --query "Stacks[0].Outputs[?OutputKey=='DBEndpointPort'].OutputValue" --output text)
 
     - echo "Deploying ECS CloudFormation stack..."
-    - aws cloudformation deploy --template-file aws/cloudformation/ecs.yaml --stack-name ${ProjectName}-EcsStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName VpcId=$VPC_ID PrivateSubnet1aId=$PRIVATE_SUBNET_1A_ID PrivateSubnet1bId=$PRIVATE_SUBNET_1B_ID EcsTasksSecurityGroupId=$ECS_TASKS_SECURITY_GROUP_ID AlbArn=$ALB_ARN BackendTargetGroupArn=$BACKEND_TARGET_GROUP_ARN BackendImageUri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG}" DBEndpointAddress=$DB_ENDPOINT_ADDRESS DBEndpointPort=$DB_ENDPOINT_PORT DBMasterUsername=postgres DBMasterUserPassword=$DB_MASTER_PASSWORD --region $AWS_REGION
+    - aws cloudformation deploy --template-file aws/cloudformation/ecs.yaml --stack-name ${ProjectName}-EcsStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName VpcId=$VPC_ID PrivateSubnet1aId=$PRIVATE_SUBNET_1A_ID PrivateSubnet1bId=$PRIVATE_SUBNET_1B_ID EcsTasksSecurityGroupId=$ECS_TASKS_SECURITY_GROUP_ID AlbArn=$ALB_ARN BackendTargetGroupArn=$BACKEND_TARGET_GROUP_ARN BackendImageUri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:latest" DBEndpointAddress=$DB_ENDPOINT_ADDRESS DBEndpointPort=$DB_ENDPOINT_PORT DBMasterUsername=postgres DBMasterUserPassword=$DB_MASTER_PASSWORD --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes:
         - aws/cloudformation/*.yaml
     - if: '$CI_COMMIT_TAG =~ /^infra-/'
+
+build_image:
+  stage: build_image
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - apk add --no-cache aws-cli
+    - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+  script:
+    - echo "Building Docker image..."
+    - docker build --platform linux/amd64 -t ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG} .
+    - echo "Pushing Docker image to ECR..."
+    - docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG}
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+deploy_app:
+  extends: .aws_base
+  stage: deploy_app
+  script:
+    - echo "Updating ECS service to force a new deployment..."
+    - aws ecs update-service --cluster ${ProjectName}-cluster --service ${ProjectName}-backend-service --force-new-deployment --region $AWS_REGION
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      needs:
+        - build_image
