@@ -1,55 +1,20 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: CloudFormation template for Etalente ECS Cluster, Task Definition, and Service
+Description: CloudFormation template for the Etalente Backend ECS Service
 
 Parameters:
   ProjectName:
     Type: String
     Default: etalente
     Description: Name of the project
-  VpcId:
-    Type: String
-    Description: The ID of the VPC
-  PrivateSubnet1aId:
-    Type: String
-    Description: The ID of Private Subnet 1a
-  PrivateSubnet1bId:
-    Type: String
-    Description: The ID of Private Subnet 1b
-  EcsTasksSecurityGroupId:
-    Type: String
-    Description: The ID of the ECS Tasks Security Group
-  AlbArn:
-    Type: String
-    Description: The ARN of the Application Load Balancer
-  BackendTargetGroupArn:
-    Type: String
-    Description: The ARN of the Backend Target Group
   BackendImageUri:
     Type: String
     Description: ECR URI for the backend Docker image
-  DBEndpointAddress:
-    Type: String
-    Description: The address of the RDS database endpoint
-  DBEndpointPort:
-    Type: String
-    Description: The port of the RDS database endpoint
-  DBMasterUsername:
-    Type: String
-    Description: Master username for the database
   DBMasterUserPassword:
     Type: String
     NoEcho: true
     Description: Master password for the database
 
 Resources:
-  EcsCluster:
-    Type: AWS::ECS::Cluster
-    Properties:
-      ClusterName: !Sub ${ProjectName}-cluster
-      Tags:
-        - Key: Name
-          Value: !Sub ${ProjectName}-cluster
-
   # IAM Role for ECS Task Execution (pulling images, sending logs to CloudWatch)
   EcsTaskExecutionRole:
     Type: AWS::IAM::Role
@@ -63,7 +28,6 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-ecs-task-execution-role
@@ -79,9 +43,7 @@ Resources:
             Principal:
               Service: ecs-tasks.amazonaws.com
             Action: sts:AssumeRole
-      # Add policies here if your application needs to access other AWS services (e.g., S3, Secrets Manager)
-      # ManagedPolicyArns:
-      #   - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+      # Add policies here if your application needs to access other AWS services
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-ecs-task-role
@@ -96,7 +58,7 @@ Resources:
       RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
-      TaskRoleArn: !GetAtt EcsTaskRole.Arn # Use this if your app needs AWS permissions
+      TaskRoleArn: !GetAtt EcsTaskRole.Arn
       ContainerDefinitions:
         - Name: !Sub ${ProjectName}-backend-container
           Image: !Ref BackendImageUri
@@ -105,9 +67,12 @@ Resources:
               Protocol: tcp
           Environment:
             - Name: SPRING_DATASOURCE_URL
-              Value: !Sub "jdbc:postgresql://${DBEndpointAddress}:${DBEndpointPort}/${ProjectName}"
+              Value: !Sub
+                - "jdbc:postgresql://${DBEndpointAddress}:${DBEndpointPort}/${ProjectName}"
+                - DBEndpointAddress: !Fn::ImportValue ${ProjectName}-DBEndpointAddress
+                  DBEndpointPort: !Fn::ImportValue ${ProjectName}-DBEndpointPort
             - Name: SPRING_DATASOURCE_USERNAME
-              Value: !Ref DBMasterUsername
+              Value: !Fn::ImportValue ${ProjectName}-DBMasterUsername
             - Name: SPRING_DATASOURCE_PASSWORD
               Value: !Ref DBMasterUserPassword
           LogConfiguration:
@@ -124,7 +89,7 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /ecs/${ProjectName}-backend
-      RetentionInDays: 30 # Adjust as needed
+      RetentionInDays: 30
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-backend-log-group
@@ -132,10 +97,10 @@ Resources:
   BackendEcsService:
     Type: AWS::ECS::Service
     Properties:
-      Cluster: !Ref EcsCluster
+      Cluster: !Fn::ImportValue ${ProjectName}-EcsClusterName
       ServiceName: !Sub ${ProjectName}-backend-service
       TaskDefinition: !Ref BackendTaskDefinition
-      DesiredCount: 1 # Start with 1 task
+      DesiredCount: 1
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
@@ -144,24 +109,19 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
           Subnets:
-            - !Ref PrivateSubnet1aId
-            - !Ref PrivateSubnet1bId
+            - !Fn::ImportValue ${ProjectName}-PrivateSubnet1aId
+            - !Fn::ImportValue ${ProjectName}-PrivateSubnet1bId
           SecurityGroups:
-            - !Ref EcsTasksSecurityGroupId
+            - !Fn::ImportValue ${ProjectName}-EcsTasksSecurityGroupId
       LoadBalancers:
         - ContainerName: !Sub ${ProjectName}-backend-container
           ContainerPort: 8080
-          TargetGroupArn: !Ref BackendTargetGroupArn
+          TargetGroupArn: !Fn::ImportValue ${ProjectName}-BackendTargetGroupArn
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-backend-service
 
 Outputs:
-  EcsClusterName:
-    Description: The name of the ECS Cluster
-    Value: !Ref EcsCluster
-    Export:
-      Name: !Sub ${ProjectName}-EcsClusterName
   BackendTaskDefinitionArn:
     Description: The ARN of the Backend Task Definition
     Value: !Ref BackendTaskDefinition
