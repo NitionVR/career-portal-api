@@ -67,10 +67,10 @@ Resources:
               Protocol: tcp
           Environment:
             - Name: SPRING_DATASOURCE_URL
-              Value: !Sub
-                - "jdbc:postgresql://${DBEndpointAddress}:${DBEndpointPort}/${ProjectName}"
-                - DBEndpointAddress: !Fn::ImportValue ${ProjectName}-DBEndpointAddress
-                  DBEndpointPort: !Fn::ImportValue ${ProjectName}-DBEndpointPort
+              Value: 
+                Fn::Sub:
+                  - "jdbc:postgresql://${DBEndpointAddress}:${DBEndpointPort}/${ProjectName}"
+                  - { DBEndpointAddress: !Fn::ImportValue '${ProjectName}-DBEndpointAddress', DBEndpointPort: !Fn::ImportValue '${ProjectName}-DBEndpointPort' }
             - Name: SPRING_DATASOURCE_USERNAME
               Value: !Fn::ImportValue ${ProjectName}-DBMasterUsername
             - Name: SPRING_DATASOURCE_PASSWORD
