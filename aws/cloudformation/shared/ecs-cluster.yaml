@@ -1,0 +1,24 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for the shared Etalente ECS Cluster
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: etalente
+    Description: Name of the project
+
+Resources:
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub ${ProjectName}-cluster
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-cluster
+
+Outputs:
+  EcsClusterName:
+    Description: The name of the ECS Cluster
+    Value: !GetAtt EcsCluster.Arn
+    Export:
+      Name: !Sub ${ProjectName}-EcsClusterName
