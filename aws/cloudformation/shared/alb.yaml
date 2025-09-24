@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: CloudFormation template for Etalente Application Load Balancer
+Description: CloudFormation template for Etalente Application Load Balancer with path-based routing
 
 Parameters:
   ProjectName:
@@ -42,7 +42,7 @@ Resources:
       Protocol: HTTP
       VpcId: !Ref VpcId
       HealthCheckIntervalSeconds: 30
-      HealthCheckPath: /actuator/health # Assuming Spring Boot Actuator is enabled
+      HealthCheckPath: /actuator/health
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 10
       HealthyThresholdCount: 2
@@ -52,35 +52,49 @@ Resources:
         - Key: Name
           Value: !Sub ${ProjectName}-backend-tg
 
-  # Listener for HTTP traffic on port 80
+  FrontendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${ProjectName}-frontend-tg
+      Port: 80 # Nginx container port
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: / # Default path for frontend health check
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      TargetType: ip
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-frontend-tg
+
   HttpListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       LoadBalancerArn: !Ref EtalenteAlb
       Port: 80
       Protocol: HTTP
-      DefaultActions:
+      DefaultActions: # Default action is to forward to the frontend
         - Type: forward
-          TargetGroupArn: !Ref BackendTargetGroup
+          TargetGroupArn: !Ref FrontendTargetGroup
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-http-listener
 
-  # Listener for HTTPS traffic on port 443 (requires ACM certificate)
-  # HttpsListener:
-  #   Type: AWS::ElasticLoadBalancingV2::Listener
-  #   Properties:
-  #     LoadBalancerArn: !Ref EtalenteAlb
-  #     Port: 443
-  #     Protocol: HTTPS
-  #     Certificates:
-  #       - CertificateArn: arn:aws:acm:REGION:ACCOUNT_ID:certificate/CERTIFICATE_ID # Replace with your ACM certificate ARN
-  #     DefaultActions:
-  #       - Type: forward
-  #         TargetGroupArn: !Ref BackendTargetGroup
-  #     Tags:
-  #       - Key: Name
-  #         Value: !Sub ${ProjectName}-https-listener
+  HttpListenerRuleApi:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpListener
+      Priority: 1
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /api/*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
 
 Outputs:
   AlbArn:
@@ -98,3 +112,8 @@ Outputs:
     Value: !Ref BackendTargetGroup
     Export:
       Name: !Sub ${ProjectName}-BackendTargetGroupArn
+  FrontendTargetGroupArn:
+    Description: The ARN of the Frontend Target Group
+    Value: !Ref FrontendTargetGroup
+    Export:
+      Name: !Sub ${ProjectName}-FrontendTargetGroupArn
