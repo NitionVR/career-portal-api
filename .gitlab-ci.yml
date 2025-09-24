@@ -28,6 +28,7 @@ validate_iac:
     - aws cloudformation validate-template --template-body file://aws/cloudformation/shared/rds.yaml
     - aws cloudformation validate-template --template-body file://aws/cloudformation/shared/alb.yaml
     - aws cloudformation validate-template --template-body file://aws/cloudformation/shared/ecs-cluster.yaml
+    - aws cloudformation validate-template --template-body file://aws/cloudformation/shared/ecr-repositories.yaml
     - aws cloudformation validate-template --template-body file://aws/cloudformation/application/ecs-service.yaml
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
@@ -58,6 +59,8 @@ deploy_shared_infra:
     - aws cloudformation deploy --template-file aws/cloudformation/shared/alb.yaml --stack-name ${ProjectName}-AlbStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName VpcId=$VPC_ID PublicSubnet1aId=$PUBLIC_SUBNET_1A_ID PublicSubnet1bId=$PUBLIC_SUBNET_1B_ID AlbSecurityGroupId=$ALB_SECURITY_GROUP_ID --region $AWS_REGION
     - echo "Deploying Shared ECS Cluster CloudFormation stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/shared/ecs-cluster.yaml --stack-name ${ProjectName}-EcsClusterStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
+    - echo "Deploying Shared ECR Repositories CloudFormation stack..."
+    - aws cloudformation deploy --template-file aws/cloudformation/shared/ecr-repositories.yaml --stack-name ${ProjectName}-EcrRepositoriesStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes:

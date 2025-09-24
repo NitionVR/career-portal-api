@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for creating shared ECR repositories for the Etalente project
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: etalente
+    Description: Name of the project used to prefix repository names
+
+Resources:
+  BackendEcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${ProjectName}-backend
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep only the last 30 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 30
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-backend-ecr
+
+  FrontendEcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${ProjectName}-frontend
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep only the last 30 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 30
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-frontend-ecr
+
+Outputs:
+  BackendEcrRepositoryUri:
+    Description: The URI of the Backend ECR repository
+    Value: !GetAtt BackendEcrRepository.RepositoryUri
+    Export:
+      Name: !Sub ${ProjectName}-BackendEcrRepositoryUri
+
+  FrontendEcrRepositoryUri:
+    Description: The URI of the Frontend ECR repository
+    Value: !GetAtt FrontendEcrRepository.RepositoryUri
+    Export:
+      Name: !Sub ${ProjectName}-FrontendEcrRepositoryUri
