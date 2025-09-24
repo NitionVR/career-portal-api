@@ -69,9 +69,13 @@ Resources:
             - Name: SPRING_DATASOURCE_URL
               Value: !Sub
                 - 'jdbc:postgresql://${DBEndpointAddress}:${DBEndpointPort}/${ProjectName}'
-                - { DBEndpointAddress: !ImportValue '${ProjectName}-DBEndpointAddress', DBEndpointPort: !ImportValue '${ProjectName}-DBEndpointPort' }
+                - DBEndpointAddress: !ImportValue
+                    Fn::Sub: '${ProjectName}-DBEndpointAddress'
+                  DBEndpointPort: !ImportValue
+                    Fn::Sub: '${ProjectName}-DBEndpointPort'
             - Name: SPRING_DATASOURCE_USERNAME
-              Value: !Fn::ImportValue ${ProjectName}-DBMasterUsername
+              Value: !ImportValue
+                Fn::Sub: '${ProjectName}-DBMasterUsername'
             - Name: SPRING_DATASOURCE_PASSWORD
               Value: !Ref DBMasterUserPassword
           LogConfiguration:
@@ -96,7 +100,8 @@ Resources:
   BackendEcsService:
     Type: AWS::ECS::Service
     Properties:
-      Cluster: !Fn::ImportValue ${ProjectName}-EcsClusterName
+      Cluster: !ImportValue
+        Fn::Sub: '${ProjectName}-EcsClusterName'
       ServiceName: !Sub ${ProjectName}-backend-service
       TaskDefinition: !Ref BackendTaskDefinition
       DesiredCount: 1
@@ -108,14 +113,18 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
           Subnets:
-            - !Fn::ImportValue ${ProjectName}-PrivateSubnet1aId
-            - !Fn::ImportValue ${ProjectName}-PrivateSubnet1bId
+            - !ImportValue
+              Fn::Sub: '${ProjectName}-PrivateSubnet1aId'
+            - !ImportValue
+              Fn::Sub: '${ProjectName}-PrivateSubnet1bId'
           SecurityGroups:
-            - !Fn::ImportValue ${ProjectName}-EcsTasksSecurityGroupId
+            - !ImportValue
+              Fn::Sub: '${ProjectName}-EcsTasksSecurityGroupId'
       LoadBalancers:
         - ContainerName: !Sub ${ProjectName}-backend-container
           ContainerPort: 8080
-          TargetGroupArn: !Fn::ImportValue ${ProjectName}-BackendTargetGroupArn
+          TargetGroupArn: !ImportValue
+            Fn::Sub: '${ProjectName}-BackendTargetGroupArn'
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-backend-service
