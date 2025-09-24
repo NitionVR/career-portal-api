@@ -67,12 +67,15 @@ deploy_shared_infra:
 deploy_app_infra:
   extends: .aws_base
   stage: deploy_app_infra
+  needs:
+    - deploy_shared_infra
   script:
     - echo "Deploying Backend Application ECS Service stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/application/ecs-service.yaml --stack-name ${ProjectName}-BackendServiceStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName BackendImageUri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_LATEST_TAG}" DBMasterUserPassword=$DB_MASTER_PASSWORD --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes:
+        - aws/cloudformation/shared/*.yaml
         - aws/cloudformation/application/*.yaml
     - if: '$CI_COMMIT_TAG =~ /^infra-/'
 

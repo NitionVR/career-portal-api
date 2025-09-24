@@ -47,7 +47,7 @@ Resources:
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: Subnet group for Etalente RDS database
+      DBSubnetGroupDescription: "Subnet group for the Etalente RDS database" # Trivial change to force update
       SubnetIds:
         - !Ref PrivateSubnet1aId
         - !Ref PrivateSubnet1bId
