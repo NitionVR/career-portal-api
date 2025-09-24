@@ -89,3 +89,8 @@ Outputs:
     Value: !GetAtt EtalenteDB.Endpoint.Port
     Export:
       Name: !Sub ${ProjectName}-DBEndpointPort
+  DBMasterUsername:
+    Description: The master username for the database
+    Value: !Ref DBMasterUsername
+    Export:
+      Name: !Sub ${ProjectName}-DBMasterUsername
