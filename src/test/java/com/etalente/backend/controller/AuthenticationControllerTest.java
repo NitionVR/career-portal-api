@@ -10,6 +10,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -38,5 +40,19 @@ class AuthenticationControllerTest {
                 .content(requestBody))
                 .andExpect(status().isOk())
                 .andExpect(content().string("Magic link sent. Please check your email."));
+    }
+
+    @Test
+    void verify_shouldReturnJwt_whenTokenIsValid() throws Exception {
+        String magicToken = "valid-magic-token";
+        String sessionJwt = "new-session-jwt";
+
+        // Mock the service layer to return a session JWT when the magic token is valid
+        when(authenticationService.verifyMagicLinkAndIssueJwt(magicToken)).thenReturn(sessionJwt);
+
+        mockMvc.perform(get("/api/auth/verify")
+                .param("token", magicToken))
+                .andExpect(status().isOk())
+                .andExpect(content().string(sessionJwt));
     }
 }

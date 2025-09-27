@@ -13,6 +13,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
@@ -64,5 +66,59 @@ class AuthenticationServiceImplTest {
         // Then
         verify(userRepository).findByEmail(email);
         verify(emailService).sendMagicLink(email, "http://localhost:4200/auth/callback?token=magic-token");
+    }
+
+    @Test
+    void verifyMagicLinkAndIssueJwt_shouldReturnJwt_whenTokenIsValidAndUserExists() {
+        // Given
+        String token = "valid-token";
+        String email = "test@example.com";
+        User user = new User();
+        user.setEmail(email);
+        UserDetails userDetails = new org.springframework.security.core.userdetails.User(email, "", new java.util.ArrayList<>());
+
+        when(jwtService.extractUsername(token)).thenReturn(email);
+        when(jwtService.isTokenValid(token, userDetails)).thenReturn(true);
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(jwtService.generateToken(userDetails)).thenReturn("session-jwt");
+
+        // When
+        String jwt = authenticationService.verifyMagicLinkAndIssueJwt(token);
+
+        // Then
+        assertEquals("session-jwt", jwt);
+    }
+
+    @Test
+    void verifyMagicLinkAndIssueJwt_shouldThrowException_whenTokenIsInvalid() {
+        // Given
+        String token = "invalid-token";
+        String email = "test@example.com";
+        UserDetails userDetails = new org.springframework.security.core.userdetails.User(email, "", new java.util.ArrayList<>());
+
+        when(jwtService.extractUsername(token)).thenReturn(email);
+        when(jwtService.isTokenValid(token, userDetails)).thenReturn(false);
+
+        // When & Then
+        assertThrows(RuntimeException.class, () -> {
+            authenticationService.verifyMagicLinkAndIssueJwt(token);
+        });
+    }
+
+    @Test
+    void verifyMagicLinkAndIssueJwt_shouldThrowException_whenUserNotFound() {
+        // Given
+        String token = "valid-token";
+        String email = "test@example.com";
+        UserDetails userDetails = new org.springframework.security.core.userdetails.User(email, "", new java.util.ArrayList<>());
+
+        when(jwtService.extractUsername(token)).thenReturn(email);
+        when(jwtService.isTokenValid(token, userDetails)).thenReturn(true);
+        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
+
+        // When & Then
+        assertThrows(RuntimeException.class, () -> {
+            authenticationService.verifyMagicLinkAndIssueJwt(token);
+        });
     }
 }

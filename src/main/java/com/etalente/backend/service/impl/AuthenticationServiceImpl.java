@@ -45,4 +45,20 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         // 4. Send the email
         emailService.sendMagicLink(email, magicLink);
     }
+
+    @Override
+    public String verifyMagicLinkAndIssueJwt(String token) {
+        final String email = jwtService.extractUsername(token);
+        UserDetails userDetails = new org.springframework.security.core.userdetails.User(email, "", new ArrayList<>());
+
+        if (!jwtService.isTokenValid(token, userDetails)) {
+            throw new RuntimeException("Invalid or expired magic link token.");
+        }
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found for the given token."));
+
+        // Token is valid and user exists, issue a new session JWT
+        return jwtService.generateToken(userDetails);
+    }
 }
