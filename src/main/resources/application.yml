@@ -1,0 +1,5 @@
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET}
+      expiration: 86400000 # 24 hours in milliseconds
