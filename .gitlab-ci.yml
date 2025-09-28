@@ -96,7 +96,7 @@ test:
 security_scan:
   stage: security_scan
   image:
-    name: "gitleaks/gitleaks:latest"
+    name: "zricethezav/gitleaks"
     entrypoint: [""]
   script:
     - gitleaks detect --source . --verbose --report-path gitleaks-report.json
