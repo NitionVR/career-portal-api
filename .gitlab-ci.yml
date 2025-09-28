@@ -3,6 +3,7 @@ stages:
   - deploy_shared_infra
   - deploy_app_infra
   - test
+  - security_scan
   - build_image
   - deploy_app
 
@@ -92,6 +93,19 @@ test:
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
+security_scan:
+  stage: security_scan
+  image:
+    name: "gitleaks/gitleaks:latest"
+    entrypoint: [""]
+  script:
+    - gitleaks detect --source . --verbose --report-path gitleaks-report.json
+  artifacts:
+    paths:
+      - gitleaks-report.json
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
 build_image:
   stage: build_image
   image: docker:latest
@@ -99,6 +113,7 @@ build_image:
     - docker:dind
   needs:
     - test
+    - security_scan
   before_script:
     - apk add --no-cache aws-cli
     - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
