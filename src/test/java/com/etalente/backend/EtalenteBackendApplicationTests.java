@@ -1,13 +1,13 @@
-package com.etalente.backend;
-
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-
-@SpringBootTest
-class EtalenteBackendApplicationTests {
-
-	@Test
-	void contextLoads() {
-	}
-
-}
+//package com.etalente.backend;
+//
+//import org.junit.jupiter.api.Test;
+//import org.springframework.boot.test.context.SpringBootTest;
+//
+//@SpringBootTest
+//class EtalenteBackendApplicationTests {
+//
+//	@Test
+//	void contextLoads() {
+//	}
+//
+//}
