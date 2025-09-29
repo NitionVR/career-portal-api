@@ -2,8 +2,8 @@ stages:
   - validate_iac
   - deploy_shared_infra
   - deploy_app_infra
-  - test
   - security_scan
+  - test
   - build_image
   - deploy_app
 
