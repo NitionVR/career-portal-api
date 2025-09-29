@@ -7,6 +7,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -21,10 +24,10 @@ public class User {
     private String email;
 
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     private Role role;
 
     private LocalDateTime createdAt;
-
 
     private LocalDateTime updatedAt;
 
