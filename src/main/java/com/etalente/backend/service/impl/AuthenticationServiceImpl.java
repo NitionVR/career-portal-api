@@ -35,7 +35,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                     User newUser = new User();
                     newUser.setEmail(email);
                     // Set a default role for new users
-                    // newUser.setRole(User.Role.CANDIDATE);
+                    newUser.setRole(com.etalente.backend.model.Role.CANDIDATE);
                     return userRepository.save(newUser);
                 });
 

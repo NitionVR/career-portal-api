@@ -1,5 +1,6 @@
 package com.etalente.backend.service.impl;
 
+import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
@@ -7,6 +8,7 @@ import com.etalente.backend.service.EmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -43,7 +45,7 @@ class AuthenticationServiceImplTest {
     }
 
     @Test
-    void initiateMagicLinkLogin_shouldCreateNewUser_whenUserNotFound() {
+    void initiateMagicLinkLogin_shouldCreateNewUserWithDefaultRole_whenUserNotFound() {
         // Given
         String email = "newuser@example.com";
         when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
@@ -54,7 +56,9 @@ class AuthenticationServiceImplTest {
         authenticationService.initiateMagicLinkLogin(email);
 
         // Then
-        verify(userRepository).save(any(User.class));
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        assertEquals(Role.CANDIDATE, userCaptor.getValue().getRole());
         verify(emailService).sendMagicLink(email, "http://localhost:4200/auth/callback?token=magic-token");
     }
 
