@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: CloudFormation template for the Etalente Backend ECS Service
+Description: CloudFormation template for the Etalente Backend ECS Service and associated IAM Policies
 
 Parameters:
   ProjectName:
@@ -43,17 +43,32 @@ Resources:
             Principal:
               Service: ecs-tasks.amazonaws.com
             Action: sts:AssumeRole
-      # Add policies here if your application needs to access other AWS services
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-ecs-task-role
+
+  # IAM Policy for SES Send Email
+  SesSendEmailPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${ProjectName}-SesSendEmailPolicy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - ses:SendEmail
+              - ses:SendRawEmail
+            Resource: "*"
+      Roles:
+        - !Ref EcsTaskRole
 
   BackendTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: !Sub ${ProjectName}-backend-task
-      Cpu: 512 # 0.5 vCPU
-      Memory: 1024 # 1 GB
+      Cpu: 512
+      Memory: 1024
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
@@ -69,13 +84,9 @@ Resources:
             - Name: SPRING_DATASOURCE_URL
               Value: !Sub
                 - 'jdbc:postgresql://${DBEndpointAddress}:${DBEndpointPort}/${ProjectName}'
-                - DBEndpointAddress: !ImportValue
-                    Fn::Sub: '${ProjectName}-DBEndpointAddress'
-                  DBEndpointPort: !ImportValue
-                    Fn::Sub: '${ProjectName}-DBEndpointPort'
+                - { DBEndpointAddress: !ImportValue '${ProjectName}-DBEndpointAddress', DBEndpointPort: !ImportValue '${ProjectName}-DBEndpointPort' }
             - Name: SPRING_DATASOURCE_USERNAME
-              Value: !ImportValue
-                Fn::Sub: '${ProjectName}-DBMasterUsername'
+              Value: !ImportValue '${ProjectName}-DBMasterUsername'
             - Name: SPRING_DATASOURCE_PASSWORD
               Value: !Ref DBMasterUserPassword
           LogConfiguration:
@@ -100,8 +111,7 @@ Resources:
   BackendEcsService:
     Type: AWS::ECS::Service
     Properties:
-      Cluster: !ImportValue
-        Fn::Sub: '${ProjectName}-EcsClusterName'
+      Cluster: !ImportValue '${ProjectName}-EcsClusterName'
       ServiceName: !Sub ${ProjectName}-backend-service
       TaskDefinition: !Ref BackendTaskDefinition
       DesiredCount: 1
@@ -113,28 +123,19 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
           Subnets:
-            - !ImportValue
-              Fn::Sub: '${ProjectName}-PrivateSubnet1aId'
-            - !ImportValue
-              Fn::Sub: '${ProjectName}-PrivateSubnet1bId'
+            - !ImportValue '${ProjectName}-PrivateSubnet1aId'
+            - !ImportValue '${ProjectName}-PrivateSubnet1bId'
           SecurityGroups:
-            - !ImportValue
-              Fn::Sub: '${ProjectName}-EcsTasksSecurityGroupId'
+            - !ImportValue '${ProjectName}-EcsTasksSecurityGroupId'
       LoadBalancers:
         - ContainerName: !Sub ${ProjectName}-backend-container
           ContainerPort: 8080
-          TargetGroupArn: !ImportValue
-            Fn::Sub: '${ProjectName}-BackendTargetGroupArn'
+          TargetGroupArn: !ImportValue '${ProjectName}-BackendTargetGroupArn'
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-backend-service
 
 Outputs:
-  EcsTaskRoleName:
-    Description: The Name of the ECS Task Role
-    Value: !Ref EcsTaskRole
-    Export:
-      Name: !Sub ${ProjectName}-EcsTaskRoleName
   BackendTaskDefinitionArn:
     Description: The ARN of the Backend Task Definition
     Value: !Ref BackendTaskDefinition
