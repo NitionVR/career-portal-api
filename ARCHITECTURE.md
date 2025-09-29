@@ -5,7 +5,7 @@ This document serves as the central point of communication and documentation for
 ## Guiding Principles
 
 1.  **Single Source of Truth:** This document is the primary reference for the API contract.
-2.  **Document As You Develop:** Any change to an API endpoint (creation, modification, deletion) on the backend must be reflected here immediately. Any decision on the frontend on how to consume the API should also be logged.
+2.  **Document As You Develop:** Any change to an "API endpoint" (creation, modification, deletion) on the backend must be reflected here immediately. Any decision on the frontend on how to consume the API should also be logged.
 3.  **Clarity and Brevity:** Use clear language. Provide examples where necessary.
 
 ---
@@ -18,30 +18,30 @@ This document serves as the central point of communication and documentation for
 
 ### API Contract
 
-*As of 2025-09-28, no API endpoints have been implemented.*
+The following endpoints are implemented for the magic link authentication flow.
 
-**(Example format for future use)**
-```
-### GET /api/users/{id}
+#### `POST /api/auth/login`
 
-*   **Description:** Retrieves a user's profile information.
-*   **Request:**
-    *   `id` (URL parameter): The unique identifier of the user.
+*   **Description:** Initiates the login or registration process by sending a magic link to the user's email.
+*   **Request Body:**
+    ```json
+    {
+      "email": "user@example.com"
+    }
+    ```
 *   **Success Response (200 OK):**
-    ```json
-    {
-      "id": "123",
-      "name": "Jane Doe",
-      "email": "jane.doe@example.com"
-    }
-    ```
-*   **Error Response (404 Not Found):**
-    ```json
-    {
-      "error": "User not found"
-    }
-    ```
-```
+    *   **Content-Type:** `text/plain`
+    *   **Body:** `Magic link sent. Please check your email.`
+
+#### `GET /api/auth/verify`
+
+*   **Description:** Verifies the token from a magic link and, if valid, returns a JWT for session management.
+*   **Request:**
+    *   `token` (URL query parameter): The unique token sent to the user's email.
+    *   Example: `/api/auth/verify?token=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+*   **Success Response (200 OK):**
+    *   **Content-Type:** `text/plain`
+    *   **Body:** A JWT string (e.g., `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`)
 
 ---
 
@@ -53,11 +53,11 @@ This document serves as the central point of communication and documentation for
 
 ### API Consumption Notes
 
-*As of 2025-09-28, no API calls are being made.*
+The frontend authentication flow is implemented as follows:
 
-**(Example format for future use)**
-*   **User Profile Page:** Consumes `GET /api/users/{id}` to display user data. Implemented in `user-profile.component.ts`.
-*   **Authentication:** Uses the `/api/auth/login` and `/api/auth/refresh` endpoints. Logic is handled in `auth.service.ts`.
+*   **`core/services/auth.ts`:** An `AuthService` handles all communication with the backend API. It provides methods for `login()` and `verify()`.
+*   **`pages/login/login.ts`:** The `LoginPage` component uses the `AuthService` to call the `POST /api/auth/login` endpoint when the user submits their email.
+*   **`pages/magic-link/magic-link.ts`:** The `MagicLinkPage` component handles the callback from the email link. It extracts the token from the URL and uses the `AuthService` to call `GET /api/auth/verify`, storing the returned JWT upon success.
 
 ---
 
@@ -73,3 +73,4 @@ The following is a high-level summary of the development plan, derived from `eta
 *   **Epic 6: Performance & Scalability:** Optimize the application's performance through database indexing, caching, and load testing.
 *   **Epic 7: Security & Compliance:** Harden the application against security vulnerabilities and ensure data protection compliance.
 *   **Epic 8: Documentation & Deployment:** Create technical and user documentation and deploy the final application to the production environment.
+
