@@ -84,9 +84,9 @@ Resources:
             - Name: SPRING_DATASOURCE_URL
               Value: !Sub
                 - 'jdbc:postgresql://${DBEndpointAddress}:${DBEndpointPort}/${ProjectName}'
-                - { DBEndpointAddress: !ImportValue '${ProjectName}-DBEndpointAddress', DBEndpointPort: !ImportValue '${ProjectName}-DBEndpointPort' }
+                - { DBEndpointAddress: !ImportValue !Sub '${ProjectName}-DBEndpointAddress', DBEndpointPort: !ImportValue !Sub '${ProjectName}-DBEndpointPort' }
             - Name: SPRING_DATASOURCE_USERNAME
-              Value: !ImportValue '${ProjectName}-DBMasterUsername'
+              Value: !ImportValue !Sub '${ProjectName}-DBMasterUsername'
             - Name: SPRING_DATASOURCE_PASSWORD
               Value: !Ref DBMasterUserPassword
           LogConfiguration:
@@ -111,7 +111,7 @@ Resources:
   BackendEcsService:
     Type: AWS::ECS::Service
     Properties:
-      Cluster: !ImportValue '${ProjectName}-EcsClusterName'
+      Cluster: !ImportValue !Sub '${ProjectName}-EcsClusterName'
       ServiceName: !Sub ${ProjectName}-backend-service
       TaskDefinition: !Ref BackendTaskDefinition
       DesiredCount: 1
@@ -123,14 +123,14 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
           Subnets:
-            - !ImportValue '${ProjectName}-PrivateSubnet1aId'
-            - !ImportValue '${ProjectName}-PrivateSubnet1bId'
+            - !ImportValue !Sub '${ProjectName}-PrivateSubnet1aId'
+            - !ImportValue !Sub '${ProjectName}-PrivateSubnet1bId'
           SecurityGroups:
-            - !ImportValue '${ProjectName}-EcsTasksSecurityGroupId'
+            - !ImportValue !Sub '${ProjectName}-EcsTasksSecurityGroupId'
       LoadBalancers:
         - ContainerName: !Sub ${ProjectName}-backend-container
           ContainerPort: 8080
-          TargetGroupArn: !ImportValue '${ProjectName}-BackendTargetGroupArn'
+          TargetGroupArn: !ImportValue !Sub '${ProjectName}-BackendTargetGroupArn'
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-backend-service
