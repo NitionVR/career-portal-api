@@ -151,7 +151,7 @@ deploy_app:
   stage: deploy_app
   script:
     - echo "Updating ECS service to force a new deployment..."
-    - aws cloudformation deploy --template-file aws/cloudformation/application/ecs-service.yaml --stack-name ${ProjectName}-BackendServiceStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName BackendImageUri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG}" DBMasterUserPassword=$DB_MASTER_PASSWORD --region $AWS_REGION
+    - aws ecs update-service --cluster ${ProjectName}-cluster --service ${ProjectName}-backend-service --force-new-deployment --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       needs:
