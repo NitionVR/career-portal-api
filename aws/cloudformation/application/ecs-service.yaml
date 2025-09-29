@@ -13,6 +13,10 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Master password for the database
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    Description: The secret key for signing JWTs
 
 Resources:
   # IAM Role for ECS Task Execution (pulling images, sending logs to CloudWatch)
@@ -94,6 +98,8 @@ Resources:
                 Fn::ImportValue: !Sub "${ProjectName}-DBMasterUsername"
             - Name: SPRING_DATASOURCE_PASSWORD
               Value: !Ref DBMasterUserPassword
+            - Name: JWT_SECRET
+              Value: !Ref JwtSecret
           LogConfiguration:
             LogDriver: awslogs
             Options:
