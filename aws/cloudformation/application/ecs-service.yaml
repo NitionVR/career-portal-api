@@ -130,6 +130,11 @@ Resources:
           Value: !Sub ${ProjectName}-backend-service
 
 Outputs:
+  EcsTaskRoleName:
+    Description: The Name of the ECS Task Role
+    Value: !Ref EcsTaskRole
+    Export:
+      Name: !Sub ${ProjectName}-EcsTaskRoleName
   BackendTaskDefinitionArn:
     Description: The ARN of the Backend Task Definition
     Value: !Ref BackendTaskDefinition

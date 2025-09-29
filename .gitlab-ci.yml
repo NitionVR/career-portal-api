@@ -32,6 +32,7 @@ validate_iac:
     - aws cloudformation validate-template --template-body file://aws/cloudformation/shared/ecs-cluster.yaml
     - aws cloudformation validate-template --template-body file://aws/cloudformation/shared/ecr-repositories.yaml
     - aws cloudformation validate-template --template-body file://aws/cloudformation/application/ecs-service.yaml
+    - aws cloudformation validate-template --template-body file://aws/cloudformation/shared/iam-policies.yaml
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes:
@@ -77,6 +78,8 @@ deploy_app_infra:
   script:
     - echo "Deploying Backend Application ECS Service stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/application/ecs-service.yaml --stack-name ${ProjectName}-BackendServiceStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName BackendImageUri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_LATEST_TAG}" DBMasterUserPassword=$DB_MASTER_PASSWORD --region $AWS_REGION
+    - echo "Deploying Application IAM Policies stack..."
+    - aws cloudformation deploy --template-file aws/cloudformation/shared/iam-policies.yaml --stack-name ${ProjectName}-AppPoliciesStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes:
