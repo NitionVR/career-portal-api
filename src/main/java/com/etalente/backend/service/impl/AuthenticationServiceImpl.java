@@ -10,6 +10,9 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class AuthenticationServiceImpl implements AuthenticationService {
@@ -29,19 +32,22 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
     @Override
     public void initiateMagicLinkLogin(String email) {
-        // 1. Find or create the user
-        User user = userRepository.findByEmail(email)
-                .orElseGet(() -> {
-                    User newUser = new User();
-                    newUser.setEmail(email);
-                    // Set a default role for new users
-                    newUser.setRole(com.etalente.backend.model.Role.CANDIDATE);
-                    return userRepository.save(newUser);
-                });
+        // 1. Find the user, determining if they are new or existing
+        Optional<User> userOptional = userRepository.findByEmail(email);
+        final boolean isNewUser = userOptional.isEmpty();
 
-        // 2. Generate a short-lived magic link token
+        User user = userOptional.orElseGet(() -> {
+            User newUser = new User();
+            newUser.setEmail(email);
+            newUser.setRole(com.etalente.backend.model.Role.CANDIDATE);
+            return userRepository.save(newUser);
+        });
+
+        // 2. Generate a short-lived magic link token with the is_new_user claim
         UserDetails userDetails = new org.springframework.security.core.userdetails.User(user.getEmail(), "", new ArrayList<>());
-        String magicToken = jwtService.generateToken(userDetails);
+        Map<String, Object> extraClaims = new HashMap<>();
+        extraClaims.put("is_new_user", isNewUser);
+        String magicToken = jwtService.generateToken(extraClaims, userDetails);
 
         // 3. Construct the magic link URL
         String magicLink = magicLinkUrl + "?token=" + magicToken;

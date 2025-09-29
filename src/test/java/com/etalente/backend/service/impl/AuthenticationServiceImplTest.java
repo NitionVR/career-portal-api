@@ -15,10 +15,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
@@ -50,7 +52,7 @@ class AuthenticationServiceImplTest {
         String email = "newuser@example.com";
         when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(jwtService.generateToken(any(UserDetails.class))).thenReturn("magic-token");
+        when(jwtService.generateToken(any(Map.class), any(UserDetails.class))).thenReturn("magic-token");
 
         // When
         authenticationService.initiateMagicLinkLogin(email);
@@ -59,6 +61,11 @@ class AuthenticationServiceImplTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
         assertEquals(Role.CANDIDATE, userCaptor.getValue().getRole());
+
+        ArgumentCaptor<Map<String, Object>> claimsCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(jwtService).generateToken(claimsCaptor.capture(), any(UserDetails.class));
+        assertTrue((Boolean) claimsCaptor.getValue().get("is_new_user"));
+
         verify(emailService).sendMagicLink(email, "http://localhost:4200/auth/callback?token=magic-token");
     }
 
@@ -69,7 +76,7 @@ class AuthenticationServiceImplTest {
         User existingUser = new User();
         existingUser.setEmail(email);
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(existingUser));
-        when(jwtService.generateToken(any(UserDetails.class))).thenReturn("magic-token");
+        when(jwtService.generateToken(any(Map.class), any(UserDetails.class))).thenReturn("magic-token");
 
         // When
         authenticationService.initiateMagicLinkLogin(email);
