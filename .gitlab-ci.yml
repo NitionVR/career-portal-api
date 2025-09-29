@@ -1,7 +1,6 @@
 stages:
   - validate_iac
-  - deploy_shared_infra
-  - deploy_app_infra
+  - deploy_infrastructure
   - test
   - security_scan
   - build_image
@@ -38,9 +37,9 @@ validate_iac:
         - aws/cloudformation/**/*.yaml
     - if: '$CI_COMMIT_TAG =~ /^infra-/'
 
-deploy_shared_infra:
+deploy_infrastructure:
   extends: .aws_base
-  stage: deploy_shared_infra
+  stage: deploy_infrastructure
   script:
     - echo "Deploying Shared Networking CloudFormation stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/shared/networking.yaml --stack-name ${ProjectName}-NetworkingStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
@@ -55,6 +54,7 @@ deploy_shared_infra:
     - |
       RDS_SECURITY_GROUP_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-SecurityGroupsStack --query "Stacks[0].Outputs[?OutputKey=='RdsSecurityGroupId'].OutputValue" --output text)
       ALB_SECURITY_GROUP_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-SecurityGroupsStack --query "Stacks[0].Outputs[?OutputKey=='AlbSecurityGroupId'].OutputValue" --output text)
+      ECS_TASKS_SECURITY_GROUP_ID=$(aws cloudformation describe-stacks --stack-name ${ProjectName}-SecurityGroupsStack --query "Stacks[0].Outputs[?OutputKey=='EcsTasksSecurityGroupId'].OutputValue" --output text)
     - echo "Deploying Shared RDS CloudFormation stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/shared/rds.yaml --stack-name ${ProjectName}-RdsStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName VpcId=$VPC_ID PrivateSubnet1aId=$PRIVATE_SUBNET_1A_ID PrivateSubnet1bId=$PRIVATE_SUBNET_1B_ID RdsSecurityGroupId=$RDS_SECURITY_GROUP_ID DBMasterUserPassword=$DB_MASTER_PASSWORD --region $AWS_REGION
     - echo "Deploying Shared ALB CloudFormation stack..."
@@ -63,25 +63,12 @@ deploy_shared_infra:
     - aws cloudformation deploy --template-file aws/cloudformation/shared/ecs-cluster.yaml --stack-name ${ProjectName}-EcsClusterStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
     - echo "Deploying Shared ECR Repositories CloudFormation stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/shared/ecr-repositories.yaml --stack-name ${ProjectName}-EcrRepositoriesStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      changes:
-        - aws/cloudformation/shared/*.yaml
-    - if: '$CI_COMMIT_TAG =~ /^infra-/'
-
-deploy_app_infra:
-  extends: .aws_base
-  stage: deploy_app_infra
-  needs:
-    - deploy_shared_infra
-  script:
     - echo "Deploying Backend Application ECS Service stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/application/ecs-service.yaml --stack-name ${ProjectName}-BackendServiceStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName BackendImageUri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_LATEST_TAG}" DBMasterUserPassword=$DB_MASTER_PASSWORD --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes:
-        - aws/cloudformation/shared/*.yaml
-        - aws/cloudformation/application/*.yaml
+        - aws/cloudformation/**/*.yaml
     - if: '$CI_COMMIT_TAG =~ /^infra-/'
 
 test:
