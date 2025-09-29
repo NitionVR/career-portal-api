@@ -1,9 +1,10 @@
 stages:
   - validate_iac
   - deploy_shared_infra
-  - deploy_app_infra
-  - security_scan
+  - deploy_app_service
+  - deploy_app_policies
   - test
+  - security_scan
   - build_image
   - deploy_app
 
@@ -70,14 +71,27 @@ deploy_shared_infra:
         - aws/cloudformation/shared/*.yaml
     - if: '$CI_COMMIT_TAG =~ /^infra-/'
 
-deploy_app_infra:
+deploy_app_service:
   extends: .aws_base
-  stage: deploy_app_infra
+  stage: deploy_app_service
   needs:
     - deploy_shared_infra
   script:
     - echo "Deploying Backend Application ECS Service stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/application/ecs-service.yaml --stack-name ${ProjectName}-BackendServiceStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName BackendImageUri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_LATEST_TAG}" DBMasterUserPassword=$DB_MASTER_PASSWORD --region $AWS_REGION
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      changes:
+        - aws/cloudformation/shared/*.yaml
+        - aws/cloudformation/application/*.yaml
+    - if: '$CI_COMMIT_TAG =~ /^infra-/'
+
+deploy_app_policies:
+  extends: .aws_base
+  stage: deploy_app_policies
+  needs:
+    - deploy_app_service
+  script:
     - echo "Deploying Application IAM Policies stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/shared/iam-policies.yaml --stack-name ${ProjectName}-AppPoliciesStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
   rules:
@@ -99,7 +113,7 @@ test:
 security_scan:
   stage: security_scan
   image:
-    name: "zricethezav/gitleaks"
+    name: "gitleaks/gitleaks:latest"
     entrypoint: [""]
   script:
     - gitleaks detect --source . --verbose --report-path gitleaks-report.json
@@ -137,7 +151,7 @@ deploy_app:
   stage: deploy_app
   script:
     - echo "Updating ECS service to force a new deployment..."
-    - aws ecs update-service --cluster ${ProjectName}-cluster --service ${ProjectName}-backend-service --force-new-deployment --region $AWS_REGION
+    - aws cloudformation deploy --template-file aws/cloudformation/application/ecs-service.yaml --stack-name ${ProjectName}-BackendServiceStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName BackendImageUri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG}" DBMasterUserPassword=$DB_MASTER_PASSWORD --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       needs:
