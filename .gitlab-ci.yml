@@ -1,9 +1,9 @@
 stages:
+  - security_scan
+  - test
+  - build_image
   - validate_iac
   - deploy_infrastructure
-  - test
-  - security_scan
-  - build_image
   - deploy_app
 
 variables:
