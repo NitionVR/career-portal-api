@@ -21,7 +21,7 @@ Resources:
               - ses:SendRawEmail
             Resource: "*" # You can restrict this to specific identities (domains/emails) for better security
       Roles:
-        - !Fn::ImportValue ${ProjectName}-EcsTaskRoleName # Attach this policy to the ECS Task Role
+        - !ImportValue ${ProjectName}-EcsTaskRoleName # Attach this policy to the ECS Task Role
 
 Outputs:
   SesSendEmailPolicyArn:
