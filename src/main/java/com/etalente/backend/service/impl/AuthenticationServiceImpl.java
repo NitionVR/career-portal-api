@@ -5,6 +5,7 @@ import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.AuthenticationService;
 import com.etalente.backend.service.EmailService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +17,9 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     private final UserRepository userRepository;
     private final EmailService emailService;
     private final JwtService jwtService;
+
+    @Value("${application.magic-link-url}")
+    private String magicLinkUrl;
 
     public AuthenticationServiceImpl(UserRepository userRepository, EmailService emailService, JwtService jwtService) {
         this.userRepository = userRepository;
@@ -40,7 +44,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         String magicToken = jwtService.generateToken(userDetails);
 
         // 3. Construct the magic link URL
-        String magicLink = "http://localhost:4200/auth/callback?token=" + magicToken; // This should be configurable
+        String magicLink = magicLinkUrl + "?token=" + magicToken;
 
         // 4. Send the email
         emailService.sendMagicLink(email, magicLink);

@@ -3,3 +3,5 @@ application:
     jwt:
       secret-key: ${JWT_SECRET}
       expiration: 86400000 # 24 hours in milliseconds
+  magic-link-url: ${MAGIC_LINK_URL:http://localhost:4200/auth/callback}
+  cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
