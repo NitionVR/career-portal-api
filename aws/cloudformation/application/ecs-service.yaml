@@ -82,11 +82,16 @@ Resources:
               Protocol: tcp
           Environment:
             - Name: SPRING_DATASOURCE_URL
-              Value: !Sub
-                - 'jdbc:postgresql://${DBEndpointAddress}:${DBEndpointPort}/${ProjectName}'
-                - { DBEndpointAddress: !ImportValue !Sub '${ProjectName}-DBEndpointAddress', DBEndpointPort: !ImportValue !Sub '${ProjectName}-DBEndpointPort' }
+              Value:
+                Fn::Sub:
+                  - "jdbc:postgresql://${DBEndpointAddress}:${DBEndpointPort}/${ProjectName}"
+                  - DBEndpointAddress:
+                      Fn::ImportValue: !Sub "${ProjectName}-DBEndpointAddress"
+                    DBEndpointPort:
+                      Fn::ImportValue: !Sub "${ProjectName}-DBEndpointPort"
             - Name: SPRING_DATASOURCE_USERNAME
-              Value: !ImportValue !Sub '${ProjectName}-DBMasterUsername'
+              Value:
+                Fn::ImportValue: !Sub "${ProjectName}-DBMasterUsername"
             - Name: SPRING_DATASOURCE_PASSWORD
               Value: !Ref DBMasterUserPassword
           LogConfiguration:
@@ -111,7 +116,8 @@ Resources:
   BackendEcsService:
     Type: AWS::ECS::Service
     Properties:
-      Cluster: !ImportValue !Sub '${ProjectName}-EcsClusterName'
+      Cluster:
+        Fn::ImportValue: !Sub "${ProjectName}-EcsClusterName"
       ServiceName: !Sub ${ProjectName}-backend-service
       TaskDefinition: !Ref BackendTaskDefinition
       DesiredCount: 1
@@ -123,14 +129,15 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
           Subnets:
-            - !ImportValue !Sub '${ProjectName}-PrivateSubnet1aId'
-            - !ImportValue !Sub '${ProjectName}-PrivateSubnet1bId'
+            - Fn::ImportValue: !Sub "${ProjectName}-PrivateSubnet1aId"
+            - Fn::ImportValue: !Sub "${ProjectName}-PrivateSubnet1bId"
           SecurityGroups:
-            - !ImportValue !Sub '${ProjectName}-EcsTasksSecurityGroupId'
+            - Fn::ImportValue: !Sub "${ProjectName}-EcsTasksSecurityGroupId"
       LoadBalancers:
         - ContainerName: !Sub ${ProjectName}-backend-container
           ContainerPort: 8080
-          TargetGroupArn: !ImportValue !Sub '${ProjectName}-BackendTargetGroupArn'
+          TargetGroupArn:
+            Fn::ImportValue: !Sub "${ProjectName}-BackendTargetGroupArn"
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-backend-service
