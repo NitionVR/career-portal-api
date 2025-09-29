@@ -100,6 +100,8 @@ Resources:
               Value: !Ref DBMasterUserPassword
             - Name: JWT_SECRET
               Value: !Ref JwtSecret
+            - Name: SPRING_PROFILES_ACTIVE
+              Value: production
           LogConfiguration:
             LogDriver: awslogs
             Options:
