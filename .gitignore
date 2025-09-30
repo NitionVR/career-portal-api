@@ -39,3 +39,5 @@ out/
 ###
 *.spec
 venv/
+resume.json
+job_schema.json
