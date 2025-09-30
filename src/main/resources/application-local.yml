@@ -1,0 +1,33 @@
+# Configuration for local development
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/etalente
+    username: user
+    password: password
+    hikari:
+      connection-timeout: 20000
+      maximum-pool-size: 5
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+  flyway:
+    enabled: true
+    clean-on-validation-error: true
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.etalente.backend: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+application:
+  security:
+    jwt:
+      secret-key: 48404D635166546A576E5A7234753778214125442A472D4B6150645367566B59
+  magic-link-url: http://localhost:4200/auth/callback
+  cors-allowed-origins: http://localhost:4200
