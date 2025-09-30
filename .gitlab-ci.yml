@@ -5,6 +5,7 @@ stages:
   - validate_iac
   - deploy_infrastructure
   - deploy_app
+  - mirror
 
 variables:
   ECR_REPOSITORY_NAME: etalente-backend
@@ -79,6 +80,12 @@ deploy_infrastructure:
 test:
   stage: test
   image: gradle:jdk21
+  services:
+    - name: docker:dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
   script:
     - echo "Running unit and integration tests..."
     - make test
@@ -131,3 +138,17 @@ deploy_app:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       needs:
         - build_image
+
+mirror_to_github:
+  stage: mirror
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache git openssh
+    - git config --global user.email "$GITHUB_EMAIL"
+    - git config --global user.name "$GITHUB_USERNAME"
+  script:
+    - git remote add github https://$GITHUB_TOKEN@github.com/$GITHUB_USERNAME/$GITHUB_PROJECT.git
+    - git push github HEAD:main
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  allow_failure: true
