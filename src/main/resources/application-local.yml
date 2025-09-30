@@ -13,7 +13,6 @@ spring:
     show-sql: true
   flyway:
     enabled: true
-    clean-on-validation-error: true
 
 server:
   port: 8080
