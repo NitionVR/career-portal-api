@@ -1,0 +1,25 @@
+# Test configuration
+spring:
+  datasource:
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+    url: jdbc:tc:postgresql:15:///etalente
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  flyway:
+    enabled: true
+    clean-disabled: false
+
+logging:
+  level:
+    root: WARN
+    com.etalente.backend: DEBUG
+
+application:
+  security:
+    jwt:
+      secret-key: test-secret-key-for-testing-only-do-not-use-in-production
+      expiration: 3600000 # 1 hour for tests
+  magic-link-url: http://localhost:4200/auth/callback
+  cors-allowed-origins: http://localhost:4200
