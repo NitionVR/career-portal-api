@@ -2,6 +2,7 @@ stages:
   - security_scan
   - test
   - build_image
+  - test_e2e
   - validate_iac
   - deploy_infrastructure
   - deploy_app
@@ -19,6 +20,160 @@ variables:
   before_script:
     - aws --version
     - echo "AWS CLI configured for region $AWS_REGION"
+
+security_scan:
+  stage: security_scan
+  image:
+    name: "zricethezav/gitleaks"
+    entrypoint: [""]
+  script:
+    - gitleaks detect --source . --no-git --verbose --report-path gitleaks-report.json
+    - |
+      if [ -s gitleaks-report.json ]; then
+        echo "Secrets detected! Check gitleaks-report.json"
+        cat gitleaks-report.json
+        exit 1
+      fi
+  artifacts:
+    paths:
+      - gitleaks-report.json
+    when: always
+    expire_in: 30 days
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+unit_tests:
+  stage: test
+  image: gradle:jdk21
+  script:
+    - echo "Running unit tests..."
+    - ./gradlew unitTest --no-daemon
+  artifacts:
+    reports:
+      junit: build/test-results/unitTest/TEST-*.xml
+    when: always
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+integration_tests:
+  stage: test
+  image: gradle:jdk21
+  services:
+    - name: docker:dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - echo "Running integration tests..."
+    - ./gradlew integrationTest --no-daemon
+  artifacts:
+    reports:
+      junit: build/test-results/integrationTest/TEST-*.xml
+    when: always
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+build_image:
+  stage: build_image
+  image: docker:latest
+  services:
+    - docker:dind
+  needs:
+    - job: security_scan
+    - job: unit_tests
+    - job: integration_tests
+  before_script:
+    - apk add --no-cache aws-cli
+    - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+  script:
+    - |
+      IMAGE_URI_COMMIT="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG}"
+      IMAGE_URI_LATEST="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_LATEST_TAG}"
+      echo "Building Docker image..."
+      docker build --platform linux/amd64 --build-arg SKIP_TESTS=true -t $IMAGE_URI_COMMIT -t $IMAGE_URI_LATEST .
+      echo "Pushing Docker image to ECR..."
+      docker push $IMAGE_URI_COMMIT
+      docker push $IMAGE_URI_LATEST
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+acceptance_tests_e2e:
+  stage: test_e2e
+  image: docker:latest
+  services:
+    - docker:dind
+  needs:
+    - job: build_image
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - apk add --no-cache aws-cli curl openjdk21 gradle
+    - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+  script:
+    - echo "Pulling newly built image..."
+    - docker pull ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG}
+    
+    - echo "Starting application with docker-compose..."
+    - |
+      cat > docker-compose.test.yml <<EOF
+      version: '3.8'
+      services:
+        postgres:
+          image: postgres:15-alpine
+          environment:
+            POSTGRES_DB: etalente
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+          healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U postgres"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+        
+        backend:
+          image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG}
+          ports:
+            - "8080:8080"
+          environment:
+            SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/etalente
+            SPRING_DATASOURCE_USERNAME: postgres
+            SPRING_DATASOURCE_PASSWORD: postgres
+            SPRING_PROFILES_ACTIVE: test
+            APPLICATION_SECURITY_JWT_SECRET_KEY: $JWT_SECRET
+          depends_on:
+            postgres:
+              condition: service_healthy
+          healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+      EOF
+    
+    - docker-compose -f docker-compose.test.yml up -d
+    - echo "Waiting for application to be healthy..."
+    - timeout 120 sh -c 'until docker-compose -f docker-compose.test.yml ps | grep -q "healthy"; do sleep 2; done'
+    
+    - echo "Running acceptance tests against running container..."
+    - export TEST_BASE_URL=http://localhost:8080
+    - gradle acceptanceTest --no-daemon -Dkarate.env=docker
+    
+    - echo "Collecting logs..."
+    - docker-compose -f docker-compose.test.yml logs backend
+  after_script:
+    - docker-compose -f docker-compose.test.yml down -v || true
+  artifacts:
+    reports:
+      junit: build/test-results/acceptanceTest/TEST-*.xml
+    paths:
+      - build/reports/karate/
+    when: always
+    expire_in: 30 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 validate_iac:
   extends: .aws_base
@@ -41,6 +196,9 @@ validate_iac:
 deploy_infrastructure:
   extends: .aws_base
   stage: deploy_infrastructure
+  needs:
+    - job: validate_iac
+      optional: true
   script:
     - echo "Deploying Shared Networking CloudFormation stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/shared/networking.yaml --stack-name ${ProjectName}-NetworkingStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
@@ -77,93 +235,16 @@ deploy_infrastructure:
         - aws/cloudformation/**/*.yaml
     - if: '$CI_COMMIT_TAG =~ /^infra-/'
 
-unit_tests:
-  stage: test
-  image: gradle:jdk21
-  script:
-    - echo "Running unit tests..."
-    - ./gradlew unitTest
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-
-integration_tests:
-  stage: test
-  image: gradle:jdk21
-  services:
-    - name: docker:dind
-      alias: docker
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-  script:
-    - echo "Running integration tests..."
-    - ./gradlew integrationTest
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-
-acceptance_tests:
-  stage: test
-  image: gradle:jdk21
-  services:
-    - name: docker:dind
-      alias: docker
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-  script:
-    - echo "Running acceptance tests..."
-    - ./gradlew acceptanceTest
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-
-security_scan:
-  stage: security_scan
-  image:
-    name: "zricethezav/gitleaks"
-    entrypoint: [""]
-  script:
-    - gitleaks detect --source . --verbose --report-path gileaks-report.json
-  artifacts:
-    paths:
-      - gitleaks-report.json
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-
-build_image:
-  stage: build_image
-  image: docker:latest
-  services:
-    - docker:dind
-  needs:
-    - unit_tests
-    - integration_tests
-    - acceptance_tests
-    - security_scan
-  before_script:
-    - apk add --no-cache aws-cli
-    - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-  script:
-    - |
-      IMAGE_URI_COMMIT="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG}"
-      IMAGE_URI_LATEST="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_LATEST_TAG}"
-      echo "Building Docker image..."
-      docker build --platform linux/amd64 -t $IMAGE_URI_COMMIT -t $IMAGE_URI_LATEST .
-      echo "Pushing Docker image to ECR..."
-      docker push $IMAGE_URI_COMMIT
-      docker push $IMAGE_URI_LATEST
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-
 deploy_app:
   extends: .aws_base
   stage: deploy_app
+  needs:
+    - job: acceptance_tests_e2e
   script:
     - echo "Updating ECS service via CloudFormation to force a new deployment..."
     - aws cloudformation deploy --template-file aws/cloudformation/application/ecs-service.yaml --stack-name ${ProjectName}-BackendServiceStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName BackendImageUri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG}" DesiredCount=1 AttachLoadBalancer=true DBMasterUserPassword=$DB_MASTER_PASSWORD JwtSecret=$JWT_SECRET --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      needs:
-        - build_image
 
 mirror_to_github:
   stage: mirror
@@ -175,8 +256,8 @@ mirror_to_github:
     - git config --global user.email "$GITHUB_EMAIL"
     - git config --global user.name "$GITHUB_USERNAME"
   script:
-    - git remote add github https://$GITHUB_TOKEN@github.com/$GITHUB_USERNAME/$GITHUB_PROJECT.git
-    - git push github HEAD:refs/heads/main
+    - git remote add github https://$GITHUB_TOKEN@github.com/$GITHUB_USERNAME/$GITHUB_PROJECT.git || true
+    - git push github HEAD:refs/heads/main --force
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
     - if: '$CI_COMMIT_TAG =~ /^mirror-/'

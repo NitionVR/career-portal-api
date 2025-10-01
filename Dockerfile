@@ -6,7 +6,16 @@ COPY gradle gradle
 COPY build.gradle .
 COPY settings.gradle .
 COPY src src
-RUN ./gradlew bootJar
+
+# Add build argument
+ARG SKIP_TESTS=false
+
+# Conditionally skip tests during build
+RUN if [ "$SKIP_TESTS" = "true" ]; then \
+      ./gradlew bootJar -x test; \
+    else \
+      ./gradlew bootJar; \
+    fi
 
 # Stage 2: Serve the application
 FROM eclipse-temurin:21-jre-jammy

@@ -41,4 +41,12 @@ out/
 venv/
 resume.json
 job_schema.json
+# Misc
+.gradle
+.idea
+build/
+!build/karate-reports/
+!build/karate-reports/*
+gitleakvenv/
+TESTING_GUIDE.md
 .env
