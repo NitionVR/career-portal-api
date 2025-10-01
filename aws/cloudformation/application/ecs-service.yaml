@@ -21,6 +21,14 @@ Parameters:
     Type: String
     NoEcho: true
     Description: The secret key for signing JWTs
+  AttachLoadBalancer:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Whether to attach the service to the Application Load Balancer.
+
+Conditions:
+  ShouldAttachLoadBalancer: !Equals [!Ref AttachLoadBalancer, "true"]
 
 Resources:
   # IAM Role for ECS Task Execution (pulling images, sending logs to CloudWatch)
@@ -145,11 +153,13 @@ Resources:
             - Fn::ImportValue: !Sub "${ProjectName}-PrivateSubnet1bId"
           SecurityGroups:
             - Fn::ImportValue: !Sub "${ProjectName}-EcsTasksSecurityGroupId"
-      LoadBalancers:
-        - ContainerName: !Sub ${ProjectName}-backend-container
-          ContainerPort: 8080
-          TargetGroupArn:
-            Fn::ImportValue: !Sub "${ProjectName}-BackendTargetGroupArn"
+      LoadBalancers: !If
+        - ShouldAttachLoadBalancer
+        - - ContainerName: !Sub ${ProjectName}-backend-container
+            ContainerPort: 8080
+            TargetGroupArn:
+              Fn::ImportValue: !Sub "${ProjectName}-BackendTargetGroupArn"
+        - !Ref "AWS::NoValue"
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-backend-service
