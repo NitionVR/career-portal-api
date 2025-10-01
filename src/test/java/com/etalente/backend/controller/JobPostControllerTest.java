@@ -11,6 +11,8 @@ import com.etalente.backend.repository.JobPostRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.javafaker.Faker;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -19,14 +21,21 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.hamcrest.Matchers.is;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Transactional
 class JobPostControllerTest extends BaseIntegrationTest {
@@ -46,25 +55,19 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    private Faker faker;
+
+    @BeforeEach
+    void setUp() {
+        faker = new Faker();
+    }
+
     @Test
     void createJobPost_shouldCreateJobPost_whenHiringManager() throws Exception {
         // Given
-        User user = createUser("hiring.manager@example.com", Role.HIRING_MANAGER);
+        User user = createUser(Role.HIRING_MANAGER);
         String token = generateToken(user);
-
-        JobPostRequest request = new JobPostRequest(
-                "Software Engineer",
-                "Acme Corp",
-                "Full-time",
-                "We are looking for a talented software engineer to join our team. You will be responsible for developing high-quality applications.",
-                new LocationDto("123 Main St", "10001", "New York", "US", "NY"),
-                "Hybrid",
-                "100000-120000",
-                "Mid-level",
-                Arrays.asList("Develop software", "Write tests", "Review code"),
-                Arrays.asList("BS in Computer Science", "3+ years experience"),
-                Collections.emptyList()
-        );
+        JobPostRequest request = createFakeJobPostRequest();
 
         // When & Then
         mockMvc.perform(post("/api/job-posts")
@@ -72,7 +75,7 @@ class JobPostControllerTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.title", is("Software Engineer")))
+                .andExpect(jsonPath("$.title", is(request.title())))
                 .andExpect(jsonPath("$.status", is("DRAFT")));
 
         assertEquals(1, jobPostRepository.count());
@@ -81,22 +84,9 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void createJobPost_shouldFail_whenNotHiringManager() throws Exception {
         // Given
-        User user = createUser("candidate@example.com", Role.CANDIDATE);
+        User user = createUser(Role.CANDIDATE);
         String token = generateToken(user);
-
-        JobPostRequest request = new JobPostRequest(
-                "Software Engineer",
-                "Acme Corp",
-                "Full-time",
-                "We are looking for a talented software engineer to join our team.",
-                null,
-                "Remote",
-                null,
-                "Mid-level",
-                Arrays.asList("Develop software"),
-                Arrays.asList("BS in Computer Science"),
-                null
-        );
+        JobPostRequest request = createFakeJobPostRequest();
 
         // When & Then
         mockMvc.perform(post("/api/job-posts")
@@ -109,12 +99,12 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void createJobPost_shouldFail_whenInvalidData() throws Exception {
         // Given
-        User user = createUser("hiring.manager@example.com", Role.HIRING_MANAGER);
+        User user = createUser(Role.HIRING_MANAGER);
         String token = generateToken(user);
 
         JobPostRequest request = new JobPostRequest(
                 "", // Invalid: empty title
-                "Acme Corp",
+                faker.company().name(),
                 "Invalid-Type", // Invalid job type
                 "Short", // Invalid: too short description
                 null,
@@ -140,7 +130,7 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void getJobPost_shouldReturnJobPost_whenExists() throws Exception {
         // Given
-        User user = createUser("hiring.manager@example.com", Role.HIRING_MANAGER);
+        User user = createUser(Role.HIRING_MANAGER);
         JobPost jobPost = createJobPost(user);
 
         // When & Then
@@ -160,7 +150,7 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void listJobPosts_shouldReturnPaginatedResults() throws Exception {
         // Given
-        User user = createUser("hiring.manager@example.com", Role.HIRING_MANAGER);
+        User user = createUser(Role.HIRING_MANAGER);
         createJobPost(user);
         createJobPost(user);
         createJobPost(user);
@@ -177,8 +167,8 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void listMyJobPosts_shouldReturnOnlyUsersPosts() throws Exception {
         // Given
-        User user1 = createUser("hiring1@example.com", Role.HIRING_MANAGER);
-        User user2 = createUser("hiring2@example.com", Role.HIRING_MANAGER);
+        User user1 = createUser(Role.HIRING_MANAGER);
+        User user2 = createUser(Role.HIRING_MANAGER);
         String token = generateToken(user1);
 
         createJobPost(user1);
@@ -196,23 +186,10 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void updateJobPost_shouldUpdatePost_whenOwner() throws Exception {
         // Given
-        User user = createUser("hiring.manager@example.com", Role.HIRING_MANAGER);
+        User user = createUser(Role.HIRING_MANAGER);
         String token = generateToken(user);
         JobPost jobPost = createJobPost(user);
-
-        JobPostRequest updateRequest = new JobPostRequest(
-                "Updated Software Engineer",
-                "Updated Corp",
-                "Part-time",
-                "Updated description that is long enough to meet the validation requirements for this field",
-                new LocationDto("456 Updated St", "20002", "Washington", "US", "DC"),
-                "Remote",
-                "120000-140000",
-                "Senior-level",
-                Arrays.asList("Lead development", "Mentor juniors"),
-                Arrays.asList("MS in Computer Science", "5+ years experience"),
-                Collections.emptyList()
-        );
+        JobPostRequest updateRequest = createFakeJobPostRequest();
 
         // When & Then
         mockMvc.perform(put("/api/job-posts/{id}", jobPost.getId())
@@ -220,31 +197,18 @@ class JobPostControllerTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title", is("Updated Software Engineer")))
-                .andExpect(jsonPath("$.jobType", is("Part-time")));
+                .andExpect(jsonPath("$.title", is(updateRequest.title())))
+                .andExpect(jsonPath("$.jobType", is(updateRequest.jobType())));
     }
 
     @Test
     void updateJobPost_shouldFail_whenNotOwner() throws Exception {
         // Given
-        User owner = createUser("owner@example.com", Role.HIRING_MANAGER);
-        User other = createUser("other@example.com", Role.HIRING_MANAGER);
+        User owner = createUser(Role.HIRING_MANAGER);
+        User other = createUser(Role.HIRING_MANAGER);
         String token = generateToken(other);
         JobPost jobPost = createJobPost(owner);
-
-        JobPostRequest updateRequest = new JobPostRequest(
-                "Hacked Title",
-                "Hacked Corp",
-                "Full-time",
-                "This is an attempt to update someone else's job post which should not be allowed",
-                null,
-                "Remote",
-                null,
-                "Mid-level",
-                Arrays.asList("Hack the system"),
-                Arrays.asList("Be a hacker"),
-                null
-        );
+        JobPostRequest updateRequest = createFakeJobPostRequest();
 
         // When & Then
         mockMvc.perform(put("/api/job-posts/{id}", jobPost.getId())
@@ -257,7 +221,7 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void deleteJobPost_shouldDeletePost_whenOwner() throws Exception {
         // Given
-        User user = createUser("hiring.manager@example.com", Role.HIRING_MANAGER);
+        User user = createUser(Role.HIRING_MANAGER);
         String token = generateToken(user);
         JobPost jobPost = createJobPost(user);
 
@@ -272,8 +236,8 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void deleteJobPost_shouldFail_whenNotOwner() throws Exception {
         // Given
-        User owner = createUser("owner@example.com", Role.HIRING_MANAGER);
-        User other = createUser("other@example.com", Role.HIRING_MANAGER);
+        User owner = createUser(Role.HIRING_MANAGER);
+        User other = createUser(Role.HIRING_MANAGER);
         String token = generateToken(other);
         JobPost jobPost = createJobPost(owner);
 
@@ -286,10 +250,12 @@ class JobPostControllerTest extends BaseIntegrationTest {
     }
 
     // Helper methods
-    private User createUser(String email, Role role) {
+    private User createUser(Role role) {
         User user = new User();
-        user.setEmail(email);
+        user.setEmail(faker.internet().emailAddress());
         user.setRole(role);
+        user.setFirstName(faker.name().firstName());
+        user.setLastName(faker.name().lastName());
         return userRepository.save(user);
     }
 
@@ -305,15 +271,44 @@ class JobPostControllerTest extends BaseIntegrationTest {
 
     private JobPost createJobPost(User user) {
         JobPost jobPost = new JobPost();
-        jobPost.setTitle("Test Software Engineer");
-        jobPost.setCompany("Test Corp");
-        jobPost.setJobType("Full-time");
-        jobPost.setDescription("Test description");
-        jobPost.setRemote("Hybrid");
-        jobPost.setExperienceLevel("Mid-level");
+        jobPost.setTitle(faker.job().title());
+        jobPost.setCompany(faker.company().name());
+        jobPost.setJobType(faker.options().option("Full-time", "Part-time", "Contract"));
+        jobPost.setDescription(faker.lorem().paragraph(2)); // Shorter description
+        jobPost.setRemote(faker.options().option("On-site", "Remote", "Hybrid"));
+        jobPost.setExperienceLevel(faker.options().option("Entry-level", "Mid-level", "Senior-level"));
         jobPost.setStatus(JobPostStatus.DRAFT);
         jobPost.setCreatedBy(user);
-        jobPost.setDatePosted("2024-01-01");
+        jobPost.setDatePosted(
+                DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneId.systemDefault())
+                        .format(faker.date().past(30, TimeUnit.DAYS).toInstant())
+        );
         return jobPostRepository.save(jobPost);
+    }
+
+    private JobPostRequest createFakeJobPostRequest() {
+        return new JobPostRequest(
+                faker.job().title(),
+                faker.company().name(),
+                faker.options().option("Full-time", "Part-time", "Contract"),
+                faker.lorem().paragraph(5), // Shorter description
+                new LocationDto(
+                        faker.address().streetAddress(),
+                        faker.address().zipCode(),
+                        faker.address().city(),
+                        faker.address().countryCode(),
+                        faker.address().stateAbbr()
+                ),
+                faker.options().option("On-site", "Remote", "Hybrid"),
+                String.format("%d-%d", faker.number().numberBetween(80, 100), faker.number().numberBetween(101, 150)), // Shorter salary
+                faker.options().option("Entry-level", "Mid-level", "Senior-level"),
+                generateFakeList(3, () -> faker.lorem().sentence(3)), // Shorter sentences
+                generateFakeList(3, () -> faker.lorem().sentence(3)), // Shorter sentences
+                Collections.emptyList()
+        );
+    }
+
+    private <T> List<T> generateFakeList(int count, java.util.function.Supplier<T> supplier) {
+        return IntStream.range(0, count).mapToObj(i -> supplier.get()).collect(Collectors.toList());
     }
 }
