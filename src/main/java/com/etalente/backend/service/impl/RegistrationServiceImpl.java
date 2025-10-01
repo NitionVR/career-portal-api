@@ -1,0 +1,168 @@
+package com.etalente.backend.service.impl;
+
+import com.etalente.backend.dto.CandidateRegistrationDto;
+import com.etalente.backend.dto.HiringManagerRegistrationDto;
+import com.etalente.backend.dto.RegistrationRequest;
+import com.etalente.backend.exception.BadRequestException;
+import com.etalente.backend.model.Role;
+import com.etalente.backend.model.User;
+import com.etalente.backend.repository.UserRepository;
+import com.etalente.backend.security.JwtService;
+import com.etalente.backend.service.EmailService;
+import com.etalente.backend.service.RegistrationService;
+import io.jsonwebtoken.Claims;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+@Transactional
+public class RegistrationServiceImpl implements RegistrationService {
+
+    private final UserRepository userRepository;
+    private final EmailService emailService;
+    private final JwtService jwtService;
+
+    @Value("${application.magic-link-url}")
+    private String magicLinkUrl;
+
+    public RegistrationServiceImpl(UserRepository userRepository,
+                                  EmailService emailService,
+                                  JwtService jwtService) {
+        this.userRepository = userRepository;
+        this.emailService = emailService;
+        this.jwtService = jwtService;
+    }
+
+    @Override
+    public void initiateRegistration(RegistrationRequest request) {
+        // Check if user already exists
+        if (userRepository.findByEmail(request.email()).isPresent()) {
+            throw new BadRequestException("User with this email already exists");
+        }
+
+        // Generate registration token with role
+        UserDetails userDetails = new org.springframework.security.core.userdetails.User(
+                request.email(), "", new ArrayList<>());
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("registration", true);
+        claims.put("role", request.role().name());
+        String token = jwtService.generateToken(claims, userDetails);
+
+        // Send magic link
+        String magicLink = magicLinkUrl + "?token=" + token + "&action=register";
+        emailService.sendRegistrationLink(request.email(), magicLink);
+    }
+
+    @Override
+    public User completeRegistration(String token, CandidateRegistrationDto dto) {
+        Claims claims = validateRegistrationToken(token);
+        String email = claims.getSubject();
+        String roleStr = claims.get("role", String.class);
+
+        if (!Role.CANDIDATE.name().equals(roleStr)) {
+            throw new BadRequestException("Invalid registration token for candidate");
+        }
+
+        // Check username uniqueness
+        if (userRepository.findByUsername(dto.username()).isPresent()) {
+            throw new BadRequestException("Username already taken");
+        }
+
+        User user = new User();
+        user.setEmail(email);
+        user.setUsername(dto.username());
+        user.setRole(Role.CANDIDATE);
+        user.setFirstName(dto.firstName());
+        user.setLastName(dto.lastName());
+        user.setGender(dto.gender());
+        user.setRace(dto.race());
+        user.setDisability(dto.disability());
+        user.setContactNumber(dto.contactNumber());
+        user.setAlternateContactNumber(dto.alternateContactNumber());
+        user.setEmailVerified(true);
+        user.setProfileComplete(true);
+
+        return userRepository.save(user);
+    }
+
+    @Override
+    public User completeRegistration(String token, HiringManagerRegistrationDto dto) {
+        Claims claims = validateRegistrationToken(token);
+        String email = claims.getSubject();
+        String roleStr = claims.get("role", String.class);
+
+        if (!Role.HIRING_MANAGER.name().equals(roleStr)) {
+            throw new BadRequestException("Invalid registration token for hiring manager");
+        }
+
+        // Check username uniqueness
+        if (userRepository.findByUsername(dto.username()).isPresent()) {
+            throw new BadRequestException("Username already taken");
+        }
+
+        User user = new User();
+        user.setEmail(email);
+        user.setUsername(dto.username());
+        user.setRole(Role.HIRING_MANAGER);
+        user.setCompanyName(dto.companyName());
+        user.setIndustry(dto.industry());
+        user.setContactPerson(dto.contactPerson());
+        user.setContactNumber(dto.contactNumber());
+        user.setEmailVerified(true);
+        user.setProfileComplete(true);
+
+        return userRepository.save(user);
+    }
+
+    private Claims validateRegistrationToken(String token) {
+        try {
+            Claims claims = jwtService.extractAllClaims(token);
+
+            // Verify it's a registration token
+            Boolean isRegistration = claims.get("registration", Boolean.class);
+            if (!Boolean.TRUE.equals(isRegistration)) {
+                throw new BadRequestException("Invalid registration token");
+            }
+
+            // Check if user already exists
+            String email = claims.getSubject();
+            if (userRepository.findByEmail(email).isPresent()) {
+                throw new BadRequestException("User already registered");
+            }
+
+            return claims;
+        } catch (Exception e) {
+            throw new BadRequestException("Invalid or expired registration token");
+        }
+    }
+
+    @Override
+    public Map<String, Object> validateToken(String token) {
+        try {
+            Claims claims = jwtService.extractAllClaims(token);
+
+            Boolean isRegistration = claims.get("registration", Boolean.class);
+            if (!Boolean.TRUE.equals(isRegistration)) {
+                throw new BadRequestException("Invalid registration token");
+            }
+
+            String email = claims.getSubject();
+            String role = claims.get("role", String.class);
+
+            return Map.of(
+                "email", email,
+                "role", role,
+                "valid", true
+            );
+        } catch (Exception e) {
+            return Map.of("valid", false, "error", e.getMessage());
+        }
+    }
+}
