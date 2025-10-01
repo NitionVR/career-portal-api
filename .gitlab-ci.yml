@@ -142,6 +142,8 @@ deploy_app:
 mirror_to_github:
   stage: mirror
   image: alpine:latest
+  variables:
+    GIT_DEPTH: 0
   before_script:
     - apk add --no-cache git openssh
     - git config --global user.email "$GITHUB_EMAIL"
