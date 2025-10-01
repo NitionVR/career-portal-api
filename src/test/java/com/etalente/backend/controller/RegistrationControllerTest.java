@@ -9,6 +9,8 @@ import com.etalente.backend.model.User;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.javafaker.Faker;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -20,10 +22,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Transactional
 class RegistrationControllerTest extends BaseIntegrationTest {
@@ -40,75 +43,62 @@ class RegistrationControllerTest extends BaseIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    private Faker faker;
+
+    @BeforeEach
+    void setUp() {
+        faker = new Faker();
+    }
+
     @Test
     void initiateRegistration_shouldSendEmail_forNewUser() throws Exception {
         // Given
-        RegistrationRequest request = new RegistrationRequest(
-            "newuser@example.com",
-            Role.CANDIDATE
-        );
+        RegistrationRequest request = new RegistrationRequest(faker.internet().emailAddress(), Role.CANDIDATE);
 
         // When & Then
         mockMvc.perform(post("/api/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Registration link sent to your email"));
 
         // Verify user not created yet
-        assertFalse(userRepository.findByEmail("newuser@example.com").isPresent());
+        assertFalse(userRepository.findByEmail(request.email()).isPresent());
     }
 
     @Test
     void initiateRegistration_shouldFail_forExistingUser() throws Exception {
         // Given
-        User existingUser = new User();
-        existingUser.setEmail("existing@example.com");
-        existingUser.setRole(Role.CANDIDATE);
-        userRepository.save(existingUser);
-
-        RegistrationRequest request = new RegistrationRequest(
-            "existing@example.com",
-            Role.CANDIDATE
-        );
+        User existingUser = createUser(Role.CANDIDATE);
+        RegistrationRequest request = new RegistrationRequest(existingUser.getEmail(), Role.CANDIDATE);
 
         // When & Then
         mockMvc.perform(post("/api/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void completeCandiateRegistration_shouldCreateUser() throws Exception {
         // Given
-        String email = "candidate@example.com";
+        String email = faker.internet().emailAddress();
         String token = generateRegistrationToken(email, Role.CANDIDATE);
-
-        CandidateRegistrationDto dto = new CandidateRegistrationDto(
-            "candidate123",
-            "John",
-            "Doe",
-            "Male",
-            "Asian",
-            "None",
-            "+1234567890",
-            "+1987654321"
-        );
+        CandidateRegistrationDto dto = createFakeCandidateDto();
 
         // When & Then
         mockMvc.perform(post("/api/auth/register/candidate")
-                .param("token", token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(dto)))
+                        .param("token", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").exists());
 
         // Verify user created
         User createdUser = userRepository.findByEmail(email).orElseThrow();
-        assertEquals("candidate123", createdUser.getUsername());
-        assertEquals("John", createdUser.getFirstName());
-        assertEquals("Doe", createdUser.getLastName());
+        assertEquals(dto.username(), createdUser.getUsername());
+        assertEquals(dto.firstName(), createdUser.getFirstName());
+        assertEquals(dto.lastName(), createdUser.getLastName());
         assertEquals(Role.CANDIDATE, createdUser.getRole());
         assertTrue(createdUser.isProfileComplete());
         assertTrue(createdUser.isEmailVerified());
@@ -117,30 +107,23 @@ class RegistrationControllerTest extends BaseIntegrationTest {
     @Test
     void completeHiringManagerRegistration_shouldCreateUser() throws Exception {
         // Given
-        String email = "hiring@example.com";
+        String email = faker.internet().emailAddress();
         String token = generateRegistrationToken(email, Role.HIRING_MANAGER);
-
-        HiringManagerRegistrationDto dto = new HiringManagerRegistrationDto(
-            "hiringmgr123",
-            "Tech Corp",
-            "Information Technology",
-            "Jane Smith",
-            "+1234567890"
-        );
+        HiringManagerRegistrationDto dto = createFakeHiringManagerDto();
 
         // When & Then
         mockMvc.perform(post("/api/auth/register/hiring-manager")
-                .param("token", token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(dto)))
+                        .param("token", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").exists());
 
         // Verify user created
         User createdUser = userRepository.findByEmail(email).orElseThrow();
-        assertEquals("hiringmgr123", createdUser.getUsername());
-        assertEquals("Tech Corp", createdUser.getCompanyName());
-        assertEquals("Information Technology", createdUser.getIndustry());
+        assertEquals(dto.username(), createdUser.getUsername());
+        assertEquals(dto.companyName(), createdUser.getCompanyName());
+        assertEquals(dto.industry(), createdUser.getIndustry());
         assertEquals(Role.HIRING_MANAGER, createdUser.getRole());
         assertTrue(createdUser.isProfileComplete());
         assertTrue(createdUser.isEmailVerified());
@@ -149,54 +132,38 @@ class RegistrationControllerTest extends BaseIntegrationTest {
     @Test
     void registration_shouldFail_withDuplicateUsername() throws Exception {
         // Given
-        User existingUser = new User();
-        existingUser.setEmail("existing@example.com");
-        existingUser.setUsername("takenusername");
-        existingUser.setRole(Role.CANDIDATE);
-        userRepository.save(existingUser);
-
-        String token = generateRegistrationToken("newuser@example.com", Role.CANDIDATE);
-
+        User existingUser = createUser(Role.CANDIDATE);
+        String token = generateRegistrationToken(faker.internet().emailAddress(), Role.CANDIDATE);
         CandidateRegistrationDto dto = new CandidateRegistrationDto(
-            "takenusername", // Duplicate username
-            "John",
-            "Doe",
-            "Male",
-            "Asian",
-            "None",
-            "+1234567890",
-            null
+                existingUser.getUsername(), // Duplicate username
+                faker.name().firstName(),
+                faker.name().lastName(),
+                "Male",
+                "Asian",
+                "None",
+                faker.phoneNumber().cellPhone(),
+                null
         );
 
         // When & Then
         mockMvc.perform(post("/api/auth/register/candidate")
-                .param("token", token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(dto)))
+                        .param("token", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void registration_shouldFail_withWrongRoleToken() throws Exception {
         // Given
-        String token = generateRegistrationToken("user@example.com", Role.HIRING_MANAGER);
-
-        CandidateRegistrationDto dto = new CandidateRegistrationDto(
-            "username",
-            "John",
-            "Doe",
-            null,
-            null,
-            null,
-            "+1234567890",
-            null
-        );
+        String token = generateRegistrationToken(faker.internet().emailAddress(), Role.HIRING_MANAGER);
+        CandidateRegistrationDto dto = createFakeCandidateDto();
 
         // When & Then
         mockMvc.perform(post("/api/auth/register/candidate")
-                .param("token", token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(dto)))
+                        .param("token", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Invalid registration token for candidate"));
     }
@@ -204,13 +171,13 @@ class RegistrationControllerTest extends BaseIntegrationTest {
     @Test
     void validateRegistrationToken_shouldReturnTokenInfo() throws Exception {
         // Given
-        String email = "test@example.com";
+        String email = faker.internet().emailAddress();
         Role role = Role.CANDIDATE;
         String token = generateRegistrationToken(email, role);
 
         // When & Then
         mockMvc.perform(get("/api/auth/validate-registration-token")
-                .param("token", token))
+                        .param("token", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(email))
                 .andExpect(jsonPath("$.role").value(role.name()))
@@ -221,13 +188,44 @@ class RegistrationControllerTest extends BaseIntegrationTest {
     void validateRegistrationToken_shouldReturnInvalid_forBadToken() throws Exception {
         // When & Then
         mockMvc.perform(get("/api/auth/validate-registration-token")
-                .param("token", "invalid-token"))
+                        .param("token", "invalid-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.valid").value(false))
                 .andExpect(jsonPath("$.error").exists());
     }
 
-    // Helper method to generate registration tokens
+    // Helper methods
+    private User createUser(Role role) {
+        User user = new User();
+        user.setEmail(faker.internet().emailAddress());
+        user.setUsername(faker.name().username());
+        user.setRole(role);
+        return userRepository.save(user);
+    }
+
+    private CandidateRegistrationDto createFakeCandidateDto() {
+        return new CandidateRegistrationDto(
+                faker.name().username(),
+                faker.name().firstName(),
+                faker.name().lastName(),
+                "Male",
+                "Asian",
+                "None",
+                "+" + faker.number().digits(11),
+                "+" + faker.number().digits(11)
+        );
+    }
+
+    private HiringManagerRegistrationDto createFakeHiringManagerDto() {
+        return new HiringManagerRegistrationDto(
+                faker.name().username(),
+                faker.company().name(),
+                faker.company().industry(),
+                faker.name().fullName(),
+                "+" + faker.number().digits(11)
+        );
+    }
+
     private String generateRegistrationToken(String email, Role role) {
         UserDetails userDetails = new org.springframework.security.core.userdetails.User(
                 email, "", new ArrayList<>());
