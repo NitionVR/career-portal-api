@@ -41,6 +41,10 @@ dependencies {
 	testImplementation 'org.testcontainers:junit-jupiter:1.19.3'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testImplementation 'com.intuit.karate:karate-junit5:1.4.1'
+	testImplementation('com.github.javafaker:javafaker:1.0.2') {
+		exclude group: 'org.yaml', module: 'snakeyaml'
+	}
+	testImplementation 'org.yaml:snakeyaml:2.2'
 }
 
 sourceSets {
