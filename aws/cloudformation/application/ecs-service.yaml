@@ -51,7 +51,7 @@ Resources:
         - Key: Name
           Value: !Sub ${ProjectName}-ecs-task-role
 
-  # IAM Policy for SES Send Email,
+  # IAM Policy for SES Send Email
   SesSendEmailPolicy:
     Type: AWS::IAM::Policy
     Properties:
