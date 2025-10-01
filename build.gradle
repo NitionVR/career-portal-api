@@ -40,8 +40,40 @@ dependencies {
 	testImplementation 'org.testcontainers:postgresql:1.19.3'
 	testImplementation 'org.testcontainers:junit-jupiter:1.19.3'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testImplementation 'com.intuit.karate:karate-junit5:1.4.1'
+}
+
+sourceSets {
+	test {
+		resources {
+			srcDir 'src/test/java'
+			exclude '**/*.java'
+		}
+	}
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+task unitTest(type: Test) {
+	useJUnitPlatform {
+		includeTags 'unit'
+	}
+}
+
+task integrationTest(type: Test) {
+	useJUnitPlatform {
+		includeTags 'integration'
+	}
+}
+
+task acceptanceTest(type: Test) {
+	useJUnitPlatform {
+		includeTags 'acceptance'
+	}
+}
+
+tasks.named('check') {
+	dependsOn unitTest, integrationTest, acceptanceTest
 }
