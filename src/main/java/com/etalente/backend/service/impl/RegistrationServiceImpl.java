@@ -10,7 +10,9 @@ import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.EmailService;
 import com.etalente.backend.service.RegistrationService;
+import com.etalente.backend.service.TokenStore;
 import io.jsonwebtoken.Claims;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @Transactional
@@ -27,16 +30,20 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final UserRepository userRepository;
     private final EmailService emailService;
     private final JwtService jwtService;
+    private final Optional<TokenStore> tokenStore;
+
 
     @Value("${application.magic-link-url}")
     private String magicLinkUrl;
 
     public RegistrationServiceImpl(UserRepository userRepository,
                                   EmailService emailService,
-                                  JwtService jwtService) {
+                                  JwtService jwtService,
+                                  @Autowired(required = false) Optional<TokenStore> tokenStore) {
         this.userRepository = userRepository;
         this.emailService = emailService;
         this.jwtService = jwtService;
+        this.tokenStore = tokenStore;
     }
 
     @Override
@@ -54,6 +61,9 @@ public class RegistrationServiceImpl implements RegistrationService {
         claims.put("registration", true);
         claims.put("role", request.role().name());
         String token = jwtService.generateToken(claims, userDetails);
+
+        // Store token for test purposes if the store is present
+        tokenStore.ifPresent(store -> store.addToken(request.email(), token));
 
         // Send magic link
         String magicLink = magicLinkUrl + "?token=" + token + "&action=register";
