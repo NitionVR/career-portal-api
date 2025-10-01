@@ -9,6 +9,10 @@ Parameters:
   BackendImageUri:
     Type: String
     Description: ECR URI for the backend Docker image
+  DesiredCount:
+    Type: Number
+    Default: 1
+    Description: The desired number of tasks for the service.
   DBMasterUserPassword:
     Type: String
     NoEcho: true
@@ -128,7 +132,7 @@ Resources:
         Fn::ImportValue: !Sub "${ProjectName}-EcsClusterName"
       ServiceName: !Sub ${ProjectName}-backend-service
       TaskDefinition: !Ref BackendTaskDefinition
-      DesiredCount: 1
+      DesiredCount: !Ref DesiredCount
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
