@@ -27,7 +27,7 @@ public class ProfileServiceImpl implements ProfileService {
 
         user.setFirstName(profileData.get("firstName"));
         user.setLastName(profileData.get("lastName"));
-        user.setPhone(profileData.get("phone"));
+        user.setContactNumber(profileData.get("contactNumber"));
         user.setSummary(profileData.get("summary"));
         user.setProfileComplete(true);
 
