@@ -27,13 +27,7 @@ security_scan:
     name: "zricethezav/gitleaks"
     entrypoint: [""]
   script:
-    - gitleaks detect --source . --no-git --verbose --report-path gitleaks-report.json
-    - |
-      if [ -s gitleaks-report.json ]; then
-        echo "Secrets detected! Check gitleaks-report.json"
-        cat gitleaks-report.json
-        exit 1
-      fi
+    - gitleaks detect --source . --no-git --verbose --report-path gitleaks-report.json --exit-code 1
   artifacts:
     paths:
       - gitleaks-report.json
