@@ -71,4 +71,24 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         // Token is valid and user exists, issue a new session JWT
         return jwtService.generateToken(userDetails);
     }
+
+    @Override
+    public String generateJwtForUser(User user) {
+        UserDetails userDetails = new org.springframework.security.core.userdetails.User(
+                user.getEmail(),
+                "",
+                new ArrayList<>()
+        );
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", user.getId().toString());
+        if (user.getRole() != null) {
+            claims.put("role", user.getRole().name());
+        }
+        if (user.getUsername() != null) {
+            claims.put("username", user.getUsername());
+        }
+
+        return jwtService.generateToken(claims, userDetails);
+    }
 }
