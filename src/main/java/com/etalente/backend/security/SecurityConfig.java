@@ -1,5 +1,6 @@
 package com.etalente.backend.security;
 
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -40,7 +41,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/actuator/**").permitAll()
-                        .requestMatchers("GET", "/api/job-posts", "/api/job-posts/**").permitAll() // Public can view job posts
+                        .requestMatchers(HttpMethod.GET, "/api/job-posts", "/api/job-posts/**").permitAll() // Public can view job posts
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

@@ -142,6 +142,7 @@ Resources:
       TaskDefinition: !Ref BackendTaskDefinition
       DesiredCount: !Ref DesiredCount
       LaunchType: FARGATE
+      HealthCheckGracePeriodSeconds: 120
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 100
