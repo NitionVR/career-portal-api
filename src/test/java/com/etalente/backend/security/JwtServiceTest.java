@@ -17,8 +17,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @Tag("integration")
 class JwtServiceTest extends BaseIntegrationTest {
 
-    //SECRET=+q3uCqso90X1ZI7EfZJjfyDv9OeEfwoFmhvS3QTR
-
     @Autowired
     private JwtService jwtService;
 

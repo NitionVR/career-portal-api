@@ -1,23 +1,23 @@
 package com.etalente.backend;
 
 import com.etalente.backend.config.TestAwsConfig;
+import org.junit.jupiter.api.Tag;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({TestAwsConfig.class})
+@Tag("integration")
+@TestPropertySource(properties = {
+        "spring.datasource.url=jdbc:tc:postgresql:15-alpine:///etalente",
+        "spring.datasource.driver-class-name=org.testcontainers.jdbc.ContainerDatabaseDriver",
+        "application.security.jwt.secret-key=NDg0MDRkNjM1MTY2NTQ2YTU3NmU1YTcyMzQ3NTM3NzgyMTQxMjU0NDJhNDcyZDRiNjE1MDY0NTM2NzU2NmI1OQ=="
+})
 public abstract class BaseIntegrationTest {
-
-    @DynamicPropertySource
-    static void databaseProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", () -> "jdbc:tc:postgresql:15-alpine:///etalente");
-        registry.add("application.security.jwt.secret-key",
-                () -> "48404D635166546A576E5A7234753778214125442A472D4B6150645367566B59");
-    }
+    // All test properties are now handled by the @TestPropertySource annotation
 }
