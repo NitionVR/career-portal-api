@@ -1,15 +1,6 @@
 package com.etalente.backend.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.EntityListeners;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import org.hibernate.annotations.JdbcType;
-import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+import jakarta.persistence.*;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -26,18 +17,35 @@ public class User {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID id;
 
+    @Column(unique = true, nullable = false)
     private String email;
 
+    @Column(unique = true)
+    private String username;
+
     @Enumerated(EnumType.STRING)
-    @JdbcType(PostgreSQLEnumJdbcType.class)
     private Role role;
 
+    // Common fields
+    private String contactNumber;
+
+    // Candidate-specific fields
     private String firstName;
     private String lastName;
-    private String phone;
+    private String gender;
+    private String race;
+    private String disability;
+    private String alternateContactNumber;
     private String summary;
     private String profileImageUrl;
+
+    // Hiring Manager-specific fields
+    private String companyName;
+    private String industry;
+    private String contactPerson;
+
     private boolean profileComplete;
+    private boolean emailVerified;
 
     @CreatedDate
     private LocalDateTime createdAt;
@@ -45,8 +53,7 @@ public class User {
     @LastModifiedDate
     private LocalDateTime updatedAt;
 
-    // Getters and Setters
-
+    // Getters and setters...
     public UUID getId() {
         return id;
     }
@@ -63,12 +70,28 @@ public class User {
         this.email = email;
     }
 
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
     public Role getRole() {
         return role;
     }
 
     public void setRole(Role role) {
         this.role = role;
+    }
+
+    public String getContactNumber() {
+        return contactNumber;
+    }
+
+    public void setContactNumber(String contactNumber) {
+        this.contactNumber = contactNumber;
     }
 
     public String getFirstName() {
@@ -87,12 +110,36 @@ public class User {
         this.lastName = lastName;
     }
 
-    public String getPhone() {
-        return phone;
+    public String getGender() {
+        return gender;
     }
 
-    public void setPhone(String phone) {
-        this.phone = phone;
+    public void setGender(String gender) {
+        this.gender = gender;
+    }
+
+    public String getRace() {
+        return race;
+    }
+
+    public void setRace(String race) {
+        this.race = race;
+    }
+
+    public String getDisability() {
+        return disability;
+    }
+
+    public void setDisability(String disability) {
+        this.disability = disability;
+    }
+
+    public String getAlternateContactNumber() {
+        return alternateContactNumber;
+    }
+
+    public void setAlternateContactNumber(String alternateContactNumber) {
+        this.alternateContactNumber = alternateContactNumber;
     }
 
     public String getSummary() {
@@ -111,12 +158,44 @@ public class User {
         this.profileImageUrl = profileImageUrl;
     }
 
+    public String getCompanyName() {
+        return companyName;
+    }
+
+    public void setCompanyName(String companyName) {
+        this.companyName = companyName;
+    }
+
+    public String getIndustry() {
+        return industry;
+    }
+
+    public void setIndustry(String industry) {
+        this.industry = industry;
+    }
+
+    public String getContactPerson() {
+        return contactPerson;
+    }
+
+    public void setContactPerson(String contactPerson) {
+        this.contactPerson = contactPerson;
+    }
+
     public boolean isProfileComplete() {
         return profileComplete;
     }
 
     public void setProfileComplete(boolean profileComplete) {
         this.profileComplete = profileComplete;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
+    }
+
+    public void setEmailVerified(boolean emailVerified) {
+        this.emailVerified = emailVerified;
     }
 
     public LocalDateTime getCreatedAt() {
