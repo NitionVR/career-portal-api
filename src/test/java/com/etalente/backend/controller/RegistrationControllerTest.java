@@ -211,8 +211,9 @@ class RegistrationControllerTest extends BaseIntegrationTest {
                 "Male",
                 "Asian",
                 "None",
-                "+" + faker.number().digits(11),
-                "+" + faker.number().digits(11)
+                // Generate a number that is guaranteed to be valid
+                String.valueOf(faker.number().numberBetween(1, 9)) + faker.number().digits(10),
+                String.valueOf(faker.number().numberBetween(1, 9)) + faker.number().digits(10)
         );
     }
 
@@ -222,7 +223,8 @@ class RegistrationControllerTest extends BaseIntegrationTest {
                 faker.company().name(),
                 faker.company().industry(),
                 faker.name().fullName(),
-                "+" + faker.number().digits(11)
+                // Generate a number that is guaranteed to be valid
+                String.valueOf(faker.number().numberBetween(1, 9)) + faker.number().digits(10)
         );
     }
 

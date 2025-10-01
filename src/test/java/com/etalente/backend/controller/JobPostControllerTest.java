@@ -271,10 +271,10 @@ class JobPostControllerTest extends BaseIntegrationTest {
 
     private JobPost createJobPost(User user) {
         JobPost jobPost = new JobPost();
-        jobPost.setTitle(faker.job().title());
+        jobPost.setTitle(faker.lorem().characters(50));
         jobPost.setCompany(faker.company().name());
         jobPost.setJobType(faker.options().option("Full-time", "Part-time", "Contract"));
-        jobPost.setDescription(faker.lorem().paragraph(2)); // Shorter description
+        jobPost.setDescription(faker.lorem().characters(250));
         jobPost.setRemote(faker.options().option("On-site", "Remote", "Hybrid"));
         jobPost.setExperienceLevel(faker.options().option("Entry-level", "Mid-level", "Senior-level"));
         jobPost.setStatus(JobPostStatus.DRAFT);
@@ -288,10 +288,10 @@ class JobPostControllerTest extends BaseIntegrationTest {
 
     private JobPostRequest createFakeJobPostRequest() {
         return new JobPostRequest(
-                faker.job().title(),
+                faker.lorem().characters(50), // Shorter title
                 faker.company().name(),
                 faker.options().option("Full-time", "Part-time", "Contract"),
-                faker.lorem().paragraph(5), // Shorter description
+                faker.lorem().characters(250), // Shorter description
                 new LocationDto(
                         faker.address().streetAddress(),
                         faker.address().zipCode(),
@@ -300,10 +300,10 @@ class JobPostControllerTest extends BaseIntegrationTest {
                         faker.address().stateAbbr()
                 ),
                 faker.options().option("On-site", "Remote", "Hybrid"),
-                String.format("%d-%d", faker.number().numberBetween(80, 100), faker.number().numberBetween(101, 150)), // Shorter salary
+                String.format("%d-%d", faker.number().numberBetween(80000, 100000), faker.number().numberBetween(101000, 150000)),
                 faker.options().option("Entry-level", "Mid-level", "Senior-level"),
-                generateFakeList(3, () -> faker.lorem().sentence(3)), // Shorter sentences
-                generateFakeList(3, () -> faker.lorem().sentence(3)), // Shorter sentences
+                generateFakeList(3, () -> faker.lorem().sentence(5)),
+                generateFakeList(3, () -> faker.lorem().sentence(5)),
                 Collections.emptyList()
         );
     }
