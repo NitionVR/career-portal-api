@@ -1,13 +1,12 @@
 package com.etalente.backend.controller;
 
+import com.etalente.backend.dto.*;
+import com.etalente.backend.model.User;
 import com.etalente.backend.service.AuthenticationService;
+import com.etalente.backend.service.RegistrationService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
@@ -16,9 +15,12 @@ import java.util.Map;
 public class AuthenticationController {
 
     private final AuthenticationService authenticationService;
+    private final RegistrationService registrationService;
 
-    public AuthenticationController(AuthenticationService authenticationService) {
+    public AuthenticationController(AuthenticationService authenticationService,
+                                  RegistrationService registrationService) {
         this.authenticationService = authenticationService;
+        this.registrationService = registrationService;
     }
 
     @PostMapping("/login")
@@ -29,8 +31,38 @@ public class AuthenticationController {
     }
 
     @GetMapping("/verify")
-    public ResponseEntity<String> verify(@RequestParam String token) {
+    public ResponseEntity<Map<String, String>> verify(@RequestParam String token) {
         String jwt = authenticationService.verifyMagicLinkAndIssueJwt(token);
-        return ResponseEntity.ok(jwt);
+        return ResponseEntity.ok(Map.of("token", jwt));
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<Map<String, String>> initiateRegistration(@Valid @RequestBody RegistrationRequest request) {
+        registrationService.initiateRegistration(request);
+        return ResponseEntity.ok(Map.of("message", "Registration link sent to your email"));
+    }
+
+    @PostMapping("/register/candidate")
+    public ResponseEntity<Map<String, String>> completeCandiateRegistration(
+            @RequestParam String token,
+            @Valid @RequestBody CandidateRegistrationDto dto) {
+        User user = registrationService.completeRegistration(token, dto);
+        String jwt = authenticationService.generateJwtForUser(user);
+        return ResponseEntity.ok(Map.of("token", jwt));
+    }
+
+    @PostMapping("/register/hiring-manager")
+    public ResponseEntity<Map<String, String>> completeHiringManagerRegistration(
+            @RequestParam String token,
+            @Valid @RequestBody HiringManagerRegistrationDto dto) {
+        User user = registrationService.completeRegistration(token, dto);
+        String jwt = authenticationService.generateJwtForUser(user);
+        return ResponseEntity.ok(Map.of("token", jwt));
+    }
+
+    @GetMapping("/validate-registration-token")
+    public ResponseEntity<Map<String, Object>> validateRegistrationToken(@RequestParam String token) {
+        Map<String, Object> tokenInfo = registrationService.validateToken(token);
+        return ResponseEntity.ok(tokenInfo);
     }
 }

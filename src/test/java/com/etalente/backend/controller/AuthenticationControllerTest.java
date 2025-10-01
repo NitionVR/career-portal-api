@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class AuthenticationControllerTest extends BaseIntegrationTest {
@@ -49,6 +50,6 @@ class AuthenticationControllerTest extends BaseIntegrationTest {
         mockMvc.perform(get("/api/auth/verify")
                         .param("token", magicToken))
                 .andExpect(status().isOk())
-                .andExpect(content().string(sessionJwt));
+                .andExpect(jsonPath("$.token").value(sessionJwt));
     }
 }
