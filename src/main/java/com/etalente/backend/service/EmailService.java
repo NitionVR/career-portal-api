@@ -42,11 +42,24 @@ public class EmailService {
         sendEmail(to, subject, htmlBody);
     }
 
+    public void sendRecruiterInvitation(String to, String inviterName, String organizationName,
+                                   String invitationLink, String personalMessage) {
+        String subject = inviterName + " invited you to join " + organizationName + " as a Recruiter";
+        Context context = new Context();
+        context.setVariable("organizationName", organizationName);
+        context.setVariable("inviterName", inviterName);
+        context.setVariable("personalMessage", personalMessage);
+        context.setVariable("invitationLink", invitationLink);
+        String htmlBody = templateEngine.process("recruiter-invitation-email", context);
+        sendEmail(to, subject, htmlBody);
+    }
+
     private void sendEmail(String to, String subject, String htmlBody) {
         try {
             Destination destination = Destination.builder().toAddresses(to).build();
             Content subjectContent = Content.builder().data(subject).build();
             Content htmlContent = Content.builder().data(htmlBody).build();
+
             Body body = Body.builder().html(htmlContent).build();
             Message message = Message.builder().subject(subjectContent).body(body).build();
 

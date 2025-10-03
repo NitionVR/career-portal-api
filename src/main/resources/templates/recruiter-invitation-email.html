@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2196F3;">You've been invited to join <span th:text="${organizationName}"></span>!</h2>
+
+        <p>Hi there,</p>
+
+        <p><strong th:text="${inviterName}"></strong> has invited you to join <strong th:text="${organizationName}"></strong> as a Recruiter on Etalente.</p>
+
+        <div th:if="${personalMessage}" style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p style="font-style: italic; margin: 0;">Personal message from <span th:text="${inviterName}"></span>:</p>
+            <p style="margin: 10px 0 0 0;" th:text="${personalMessage}"></p>
+        </div>
+
+        <p>As a Recruiter, you'll be able to:</p>
+        <ul>
+            <li>Manage job postings</li>
+            <li>Review and evaluate candidates</li>
+            <li>Advance candidates through the hiring pipeline</li>
+            <li>Collaborate with hiring managers</li>
+        </ul>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a th:href="${invitationLink}" style="background-color: #2196F3; color: white; padding: 14px 28px; text-decoration: none; display: inline-block; border-radius: 4px; font-weight: bold;">Accept Invitation</a>
+        </div>
+
+        <p style="color: #666; font-size: 14px;">This invitation will expire in 72 hours.</p>
+
+        <p style="color: #666; font-size: 14px;">If you don't want to accept this invitation, you can safely ignore this email.</p>
+
+        <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+
+        <p style="color: #999; font-size: 12px;">This email was sent by Etalente on behalf of <span th:text="${inviterName}"></span>.</p>
+    </div>
+</body>
+</html>
