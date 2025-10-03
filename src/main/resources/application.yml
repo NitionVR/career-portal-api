@@ -27,7 +27,9 @@ application:
     jwt:
       secret-key: ${JWT_SECRET}
       expiration: 86400000 # 24 hours in milliseconds
-  magic-link-url: ${MAGIC_LINK_URL:http://localhost:4200/auth/callback}
+  magic-link-url: ${MAGIC_LINK_URL:http://localhost:4200/auth/magic-link}
+  invitation-link-url: ${INVITATION_LINK_URL:http://localhost:4200/auth/accept-invitation}
+  invitation-expiry-hours: ${INVITATION_EXPIRY_HOURS:72}
   cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
 
 cloud:
