@@ -41,11 +41,12 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/actuator/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/job-posts", "/api/job-posts/**").permitAll() // Public can view job posts
-                        .anyRequest().authenticated()
-                )
+            .authorizeHttpRequests(auth -> auth
+                    .requestMatchers("/api/auth/**", "/actuator/**", "/api/invitations/validate/**",
+                            "/api/invitations/accept/**").permitAll() // All auth endpoints are public
+                    .requestMatchers(HttpMethod.GET, "/api/job-posts", "/api/job-posts/**").permitAll()
+                    .anyRequest().authenticated()
+            )
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
