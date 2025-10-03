@@ -12,6 +12,8 @@ import com.etalente.backend.service.EmailService;
 import com.etalente.backend.service.RegistrationService;
 import com.etalente.backend.service.TokenStore;
 import io.jsonwebtoken.Claims;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -26,6 +28,8 @@ import java.util.Optional;
 @Service
 @Transactional
 public class RegistrationServiceImpl implements RegistrationService {
+
+    private static final Logger logger = LoggerFactory.getLogger(RegistrationServiceImpl.class);
 
     private final UserRepository userRepository;
     private final EmailService emailService;
@@ -63,7 +67,10 @@ public class RegistrationServiceImpl implements RegistrationService {
         String token = jwtService.generateToken(claims, userDetails);
 
         // Store token for test purposes if the store is present
-        tokenStore.ifPresent(store -> store.addToken(request.email(), token));
+        tokenStore.ifPresent(store -> {
+            logger.info("Storing registration token for email: {}", request.email());
+            store.addToken(request.email(), token);
+        });
 
         // Send magic link
         String magicLink = magicLinkUrl + "?token=" + token + "&action=register";
