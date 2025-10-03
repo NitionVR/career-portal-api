@@ -53,7 +53,19 @@ public class User {
     @LastModifiedDate
     private LocalDateTime updatedAt;
 
+    @ManyToOne
+    @JoinColumn(name = "organization_id")
+    private Organization organization;
+
+    // For tracking who invited them
+    @ManyToOne
+    @JoinColumn(name = "invited_by_id")
+    private User invitedBy;
+
+    private LocalDateTime invitedAt;
+
     // Getters and setters...
+
     public UUID getId() {
         return id;
     }
@@ -212,5 +224,29 @@ public class User {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public Organization getOrganization() {
+        return organization;
+    }
+
+    public void setOrganization(Organization organization) {
+        this.organization = organization;
+    }
+
+    public User getInvitedBy() {
+        return invitedBy;
+    }
+
+    public void setInvitedBy(User invitedBy) {
+        this.invitedBy = invitedBy;
+    }
+
+    public LocalDateTime getInvitedAt() {
+        return invitedAt;
+    }
+
+    public void setInvitedAt(LocalDateTime invitedAt) {
+        this.invitedAt = invitedAt;
     }
 }
