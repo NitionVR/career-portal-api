@@ -2,7 +2,7 @@
 Feature: User Registration
 
   Background:
-    * url 'http://localhost:' + karate.properties['local.server.port']
+    * url baseUrl
     * def randomEmail = 'testuser-' + java.util.UUID.randomUUID() + '@example.com'
     * def randomUsername = 'user-' + java.util.UUID.randomUUID()
 
@@ -15,13 +15,13 @@ Feature: User Registration
     And match response.message == "Registration link sent to your email"
 
     # Step 2: Retrieve the registration token using the test endpoint
-    Given path '/test/latest-registration-token'
+    Given path '/api/test/token'
     And param email = randomEmail
     When method get
     Then status 200
     And def registrationToken = response.token
 
-    # Step 3: Validate the token (optional, but good practice)
+    # Step 3: Validate the token
     Given path '/api/auth/validate-registration-token'
     And param token = registrationToken
     When method get
@@ -46,9 +46,10 @@ Feature: User Registration
     Then status 200
     And match response.token != null
 
-    # Step 5: Verify the token is a valid JWT (optional)
-    * def claims = karate.read('classpath:com/etalente/backend/acceptance/jwt-claims.js')
-    * def payload = claims(response.token)
+    # Step 5: Verify the token is a valid JWT
+    * def jwtClaims = read('classpath:com/etalente/backend/acceptance/jwt-claims.js')
+    * print 'JWT Token:', response.token
+    * def payload = call jwtClaims response.token
     * match payload.username == randomUsername
     * match payload.role == 'CANDIDATE'
     * match payload.sub == randomEmail
