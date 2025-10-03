@@ -6,10 +6,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
+import com.etalente.backend.config.TestTokenStore;
+import org.springframework.context.annotation.Import;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 @Tag("acceptance")
+@Import(TestTokenStore.class) // Import the test-only bean
 @TestPropertySource(properties = {
         "spring.datasource.url=jdbc:tc:postgresql:15-alpine:///etalente",
         "spring.datasource.driver-class-name=org.testcontainers.jdbc.ContainerDatabaseDriver",
@@ -23,7 +26,16 @@ class AcceptanceTest {
     @Karate.Test
     Karate runRegistration() {
         return Karate.run("registration")
-                .systemProperty("local.server.port", "" + serverPort)
+                .karateEnv("test")  // Set karate environment
+                .systemProperty("karate.server.port", String.valueOf(serverPort))
+                .relativeTo(getClass());
+    }
+
+    @Karate.Test
+    Karate runInvitation() {
+        return Karate.run("invitation")
+                .karateEnv("test")
+                .systemProperty("karate.server.port", String.valueOf(serverPort))
                 .relativeTo(getClass());
     }
 }
