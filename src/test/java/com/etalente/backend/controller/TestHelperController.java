@@ -2,16 +2,12 @@ package com.etalente.backend.controller;
 
 import com.etalente.backend.config.TestTokenStore;
 import org.springframework.context.annotation.Profile;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
 @RestController
-@RequestMapping("/test")
+@RequestMapping("/api/test")
 @Profile("test")
 public class TestHelperController {
 
@@ -21,12 +17,13 @@ public class TestHelperController {
         this.tokenStore = tokenStore;
     }
 
-    @GetMapping("/latest-registration-token")
-    public ResponseEntity<Map<String, String>> getLatestRegistrationToken(@RequestParam String email) {
+    @GetMapping("/token")
+    public Map<String, String> getToken(@RequestParam String email) {
         String token = tokenStore.getToken(email);
-        if (token == null) {
-            return ResponseEntity.notFound().build();
+        if (token != null) {
+            return Map.of("token", token);
         }
-        return ResponseEntity.ok(Map.of("token", token));
+        // Return a 404 or a more specific error in a real app
+        throw new RuntimeException("No token found for email: " + email);
     }
 }
