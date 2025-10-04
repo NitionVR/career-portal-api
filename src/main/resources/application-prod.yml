@@ -30,4 +30,8 @@ logging:
     org.springframework.web: WARN
 
 application:
-  cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:https://etalente.com,https://www.etalente.com}
+  security:
+    magic-link-url: ${MAGIC_LINK_URL}
+    invitation-link-url: ${INVITATION_LINK_URL}
+    invitation-expiry-hours: ${INVITATION_EXPIRY_HOURS}
+    cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:https://etalente.com,https://www.etalente.com}

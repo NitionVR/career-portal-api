@@ -26,6 +26,15 @@ Parameters:
     Default: "true"
     AllowedValues: ["true", "false"]
     Description: Whether to attach the service to the Application Load Balancer.
+  MagicLinkUrl:
+    Type: String
+    Description: The base URL for magic links.
+  InvitationLinkUrl:
+    Type: String
+    Description: The base URL for invitation links.
+  InvitationExpiryHours:
+    Type: String
+    Description: The expiry time in hours for invitations.
 
 Conditions:
   ShouldAttachLoadBalancer: !Equals [!Ref AttachLoadBalancer, "true"]
@@ -112,6 +121,12 @@ Resources:
               Value: !Ref DBMasterUserPassword
             - Name: JWT_SECRET
               Value: !Ref JwtSecret
+            - Name: MAGIC_LINK_URL
+              Value: !Ref MagicLinkUrl
+            - Name: INVITATION_LINK_URL
+              Value: !Ref InvitationLinkUrl
+            - Name: INVITATION_EXPIRY_HOURS
+              Value: !Ref InvitationExpiryHours
             - Name: SPRING_PROFILES_ACTIVE
               Value: production
           LogConfiguration:
