@@ -10,8 +10,8 @@ spring:
         format_sql: true
         jdbc:
           batch_size: 25
-        order_inserts: true
-        order_updates: true
+        order-inserts: true
+        order-updates: true
     show-sql: false
     open-in-view: false
   jackson:
@@ -25,12 +25,12 @@ spring:
 application:
   security:
     jwt:
-      secret-key: ${JWT_SECRET}
+      secret-key: ${JWT_SECRET:bXktc2VjcmV0LWtleS1mb3ItandrLXRlc3RpbmctYXV0aGVudGljYXRpb24=}
       expiration: 86400000 # 24 hours in milliseconds
-  magic-link-url: ${MAGIC_LINK_URL:http://localhost:4200/auth/magic-link}
-  invitation-link-url: ${INVITATION_LINK_URL:http://localhost:4200/auth/accept-invitation}
-  invitation-expiry-hours: ${INVITATION_EXPIRY_HOURS:72}
-  cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
+    magic-link-url: ${MAGIC_LINK_URL:http://localhost:4200/auth/magic-link}
+    invitation-link-url: ${INVITATION_LINK_URL:http://localhost:4200/auth/accept-invitation}
+    invitation-expiry-hours: ${INVITATION_EXPIRY_HOURS:72}
+    cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
 
 cloud:
   aws:
