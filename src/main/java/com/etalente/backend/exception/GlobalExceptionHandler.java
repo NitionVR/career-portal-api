@@ -7,6 +7,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -73,6 +74,32 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 "Validation Failed",
                 errors
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        String message = "Data integrity violation";
+
+        if (ex.getMessage() != null) {
+            if (ex.getMessage().contains("check_contact_number")) {
+                message = "Contact number must be in international format starting with +" +
+                        " followed by country code (e.g., +1234567890)";
+            } else if (ex.getMessage().contains("unique_pending_invitation")) {
+                message = "An invitation is already pending for this email address";
+            } else if (ex.getMessage().contains("users_email_key")) {
+                message = "This email address is already registered";
+            } else if (ex.getMessage().contains("users_username_key")) {
+                message = "This username is already taken";
+            }
+        }
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                "Bad Request",
+                message
         );
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }

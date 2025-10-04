@@ -42,7 +42,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                    .requestMatchers("/api/auth/**", "/actuator/**", "/api/invitations/validate/**",
+                    .requestMatchers("/api/auth/**", "/actuator/**", "/error", "/api/invitations/validate/**",
                             "/api/invitations/accept/**").permitAll() // All auth endpoints are public
                     .requestMatchers(HttpMethod.GET, "/api/job-posts", "/api/job-posts/**").permitAll()
                     .anyRequest().authenticated()
