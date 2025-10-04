@@ -10,6 +10,21 @@ spring:
   flyway:
     enabled: true
     clean-disabled: false
+  mail:
+    host: maildev
+    port: 1025
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
+      mail.debug: true
+  autoconfigure:
+    exclude:
+      - io.awspring.cloud.autoconfigure.ses.SesAutoConfiguration
+  cloud:
+    aws:
+      ses:
+        mail:
+          enabled: false # Disable SES JavaMailSender when test profile is active
 
 logging:
   level:
@@ -22,4 +37,6 @@ application:
       secret-key: test-secret-key-for-testing-only-do-not-use-in-production
       expiration: 3600000 # 1 hour for tests
   magic-link-url: http://localhost:4200/auth/callback
+  invitation-link-url: http://localhost:4200/auth/accept-invitation
+  invitation-expiry-hours: 72
   cors-allowed-origins: http://localhost:4200
