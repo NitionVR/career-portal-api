@@ -9,8 +9,13 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/etalente
       SPRING_DATASOURCE_USERNAME: user
       SPRING_DATASOURCE_PASSWORD: password
+      SPRING_MAIL_HOST: maildev
+      SPRING_MAIL_PORT: 1025
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: false
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: false
     depends_on:
       - db
+      - maildev
     networks:
       - etalente-network
 
@@ -24,6 +29,14 @@ services:
       - db_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    networks:
+      - etalente-network
+
+  maildev:
+    image: maildev/maildev
+    ports:
+      - "1080:1080" # Web UI
+      - "1025:1025" # SMTP port
     networks:
       - etalente-network
 
