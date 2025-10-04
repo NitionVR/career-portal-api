@@ -40,7 +40,7 @@ Resources:
           ToPort: 8080
           SourceSecurityGroupId: !GetAtt AlbSecurityGroup.GroupId
         - IpProtocol: tcp
-          FromPort: 80 # Angular frontend port (if served by Nginx in container)
+          FromPort: 80 # Angular frontend port
           ToPort: 80
           SourceSecurityGroupId: !GetAtt AlbSecurityGroup.GroupId
       Tags:
