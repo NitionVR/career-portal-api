@@ -9,6 +9,21 @@ spring:
       maximum-pool-size: 10
   jpa:
     show-sql: false
+  mail:
+    host: maildev
+    port: 1025
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
+      mail.debug: true
+  autoconfigure:
+    exclude:
+      - io.awspring.cloud.autoconfigure.ses.SesAutoConfiguration
+  cloud:
+    aws:
+      ses:
+        mail:
+          enabled: false # Disable SES JavaMailSender when dev profile is active
 
 server:
   port: 8080
@@ -20,3 +35,5 @@ logging:
 
 application:
   cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:https://dev.etalente.com}
+  invitation-link-url: https://dev.etalente.com/auth/accept-invitation
+  invitation-expiry-hours: 72

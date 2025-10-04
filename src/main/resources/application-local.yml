@@ -13,6 +13,21 @@ spring:
     show-sql: true
   flyway:
     enabled: true
+  mail:
+    host: localhost
+    port: 1025
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
+      mail.debug: true
+  autoconfigure:
+    exclude:
+      - io.awspring.cloud.autoconfigure.ses.SesAutoConfiguration
+  cloud:
+    aws:
+      ses:
+        mail:
+          enabled: false # Disable SES JavaMailSender when local profile is active
 
 server:
   port: 8080
@@ -29,4 +44,6 @@ application:
     jwt:
       secret-key: 48404D635166546A576E5A7234753778214125442A472D4B6150645367566B59
   magic-link-url: http://localhost:4200/auth/callback
+  invitation-link-url: http://localhost:4200/auth/accept-invitation
+  invitation-expiry-hours: 72
   cors-allowed-origins: http://localhost:4200
