@@ -68,7 +68,7 @@ Resources:
       VPCSecurityGroups:
         - !Ref RdsSecurityGroupId
       DBSubnetGroupName: !Ref DBSubnetGroup
-      MultiAZ: false # Set to true for production for high availability
+      MultiAZ: false # Set to true for production for high availability,
       PubliclyAccessible: false # Crucial for security
       BackupRetentionPeriod: 7
       PreferredBackupWindow: 03:00-04:00

@@ -39,11 +39,9 @@ logging:
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
 
-application:
-  security:
-    jwt:
-      secret-key: 48404D635166546A576E5A7234753778214125442A472D4B6150645367566B59
-  magic-link-url: http://localhost:4200/auth/callback
-  invitation-link-url: http://localhost:4200/auth/accept-invitation
-  invitation-expiry-hours: 72
-  cors-allowed-origins: http://localhost:4200
+jwt:
+  secret-key: YW5vdGhlcmxvbmdzZWNyZXRrZXlmb3Jsb2NhbGRldjQ1Ng==
+magic-link-url: http://localhost:4200/auth/callback
+invitation-link-url: http://localhost:4200/auth/accept-invitation
+invitation-expiry-hours: 72
+cors-allowed-origins: http://localhost:4200

@@ -37,7 +37,7 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final Optional<TokenStore> tokenStore;
 
 
-    @Value("${application.magic-link-url}")
+    @Value("${magic-link-url}")
     private String magicLinkUrl;
 
     public RegistrationServiceImpl(UserRepository userRepository,

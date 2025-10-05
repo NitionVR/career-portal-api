@@ -21,7 +21,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     private final EmailService emailService;
     private final JwtService jwtService;
 
-    @Value("${application.magic-link-url}")
+    @Value("${magic-link-url}")
     private String magicLinkUrl;
 
     public AuthenticationServiceImpl(UserRepository userRepository, EmailService emailService, JwtService jwtService) {

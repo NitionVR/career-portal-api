@@ -31,12 +31,10 @@ logging:
     root: WARN
     com.etalente.backend: DEBUG
 
-application:
-  security:
-    jwt:
-      secret-key: test-secret-key-for-testing-only-do-not-use-in-production
-      expiration: 3600000 # 1 hour for tests
-  magic-link-url: http://localhost:4200/auth/callback
-  invitation-link-url: http://localhost:4200/auth/accept-invitation
-  invitation-expiry-hours: 72
-  cors-allowed-origins: http://localhost:4200
+jwt:
+  secret-key: dGhpc2lzYWxvbmdzZWNyZXRrZXlmb3Jqd3R0ZXN0aW5nMTIz
+  expiration: 3600000 # 1 hour for tests
+magic-link-url: http://localhost:4200/auth/callback
+invitation-link-url: http://localhost:4200/auth/accept-invitation
+invitation-expiry-hours: 72
+cors-allowed-origins: http://localhost:4200

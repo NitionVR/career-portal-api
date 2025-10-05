@@ -50,3 +50,5 @@ build/
 gitleakvenv/
 TESTING_GUIDE.md
 .env
+run_dev.sh
+run_prod.sh

@@ -31,10 +31,10 @@ public class InvitationServiceImpl implements InvitationService {
     private final EmailService emailService;
     private final Optional<TokenStore> tokenStore;
 
-    @Value("${application.invitation-link-url}")
+    @Value("${invitation-link-url}")
     private String invitationLinkUrl;
 
-    @Value("${application.invitation-expiry-hours:72}")
+    @Value("${invitation-expiry-hours:72}")
     private int invitationExpiryHours;
 
     public InvitationServiceImpl(UserRepository userRepository,
