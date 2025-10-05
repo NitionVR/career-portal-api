@@ -11,6 +11,7 @@ import com.etalente.backend.service.EmailService;
 import com.etalente.backend.service.InvitationService;
 import com.etalente.backend.service.TokenStore;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -106,6 +107,20 @@ public class InvitationServiceImpl implements InvitationService {
         );
 
         return savedInvitation;
+    }
+
+    @Override
+    public void bulkSendRecruiterInvitations(List<RecruiterInvitationRequest> requests, String inviterEmail) {
+        for (RecruiterInvitationRequest request : requests) {
+            try {
+                sendRecruiterInvitation(request, inviterEmail);
+            } catch (Exception e) {
+                // Log the error for individual invitation failures
+                // Depending on requirements, you might collect these errors and return them
+                // For now, we'll just log and continue
+                System.err.println("Failed to send invitation to " + request.email() + ": " + e.getMessage());
+            }
+        }
     }
 
     @Override
