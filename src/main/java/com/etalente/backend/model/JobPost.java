@@ -53,6 +53,10 @@ public class JobPost {
     @JoinColumn(name = "created_by_id")
     private User createdBy;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "organization_id")
+    private Organization organization;
+
     @CreatedDate
     private LocalDateTime createdAt;
 
@@ -194,5 +198,13 @@ public class JobPost {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public Organization getOrganization() {
+        return organization;
+    }
+
+    public void setOrganization(Organization organization) {
+        this.organization = organization;
     }
 }
