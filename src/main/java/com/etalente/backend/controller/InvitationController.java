@@ -8,6 +8,7 @@ import com.etalente.backend.model.User;
 import com.etalente.backend.service.AuthenticationService;
 import com.etalente.backend.service.InvitationService;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -48,6 +49,15 @@ public class InvitationController {
                 invitation.getExpiresAt()
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+    }
+
+    @PostMapping("/bulk-recruiter")
+    @PreAuthorize("hasRole('HIRING_MANAGER')")
+    public ResponseEntity<Map<String, String>> inviteRecruiterBulk(
+            @Valid @RequestBody List<RecruiterInvitationRequest> requests,
+            Authentication authentication) {
+        invitationService.bulkSendRecruiterInvitations(requests, authentication.getName());
+        return ResponseEntity.ok(Map.of("message", "Invitations processed"));
     }
 
     @GetMapping("/validate/{token}")
