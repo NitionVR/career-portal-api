@@ -52,3 +52,5 @@ TESTING_GUIDE.md
 .env
 run_dev.sh
 run_prod.sh
+
+Etalente_Backend_Testing.postman_collection.json

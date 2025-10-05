@@ -125,8 +125,6 @@ Resources:
               Value: !Ref MagicLinkUrl
             - Name: INVITATION_LINK_URL
               Value: !Ref InvitationLinkUrl
-            - Name: INVITATION_EXPIRY_HOURS
-              Value: !Ref InvitationExpiryHours
             - Name: SPRING_PROFILES_ACTIVE
               Value: production
           LogConfiguration:

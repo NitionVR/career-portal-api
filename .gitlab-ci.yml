@@ -239,10 +239,8 @@ deploy_app:
   needs:
     - job: acceptance_tests_e2e
   script:
-    - echo "Extracting INVITATION_EXPIRY_HOURS from workaround variable..."
-    - export INVITATION_EXPIRY_HOURS_VALUE=$(echo $INVITATION_EXPIRY_HOURS_WORKAROUND | cut -d'_' -f2)
     - echo "Updating ECS service via CloudFormation to force a new deployment..."
-    - aws cloudformation deploy --template-file aws/cloudformation/application/ecs-service.yaml --stack-name ${ProjectName}-BackendServiceStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName BackendImageUri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG}" DesiredCount=1 AttachLoadBalancer=true DBMasterUserPassword=$DB_MASTER_PASSWORD JwtSecret=$JWT_SECRET MagicLinkUrl=$MAGIC_LINK_URL InvitationLinkUrl=$INVITATION_LINK_URL InvitationExpiryHours=$INVITATION_EXPIRY_HOURS_VALUE --region $AWS_REGION
+    - aws cloudformation deploy --template-file aws/cloudformation/application/ecs-service.yaml --stack-name ${ProjectName}-BackendServiceStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName BackendImageUri="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}:${ECR_IMAGE_TAG}" DesiredCount=1 AttachLoadBalancer=true DBMasterUserPassword=$DB_MASTER_PASSWORD JwtSecret=$JWT_SECRET MagicLinkUrl=$MAGIC_LINK_URL InvitationLinkUrl=$INVITATION_LINK_URL --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
