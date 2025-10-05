@@ -6,7 +6,9 @@ import com.etalente.backend.dto.RegistrationRequest;
 import com.etalente.backend.exception.BadRequestException;
 import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
+import com.etalente.backend.model.Organization;
 import com.etalente.backend.repository.UserRepository;
+import com.etalente.backend.repository.OrganizationRepository;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.EmailService;
 import com.etalente.backend.service.TokenStore;
@@ -37,6 +39,9 @@ class RegistrationServiceImplTest {
     private UserRepository userRepository;
 
     @Mock
+    private OrganizationRepository organizationRepository;
+
+    @Mock
     private JwtService jwtService;
 
     @Mock
@@ -55,6 +60,7 @@ class RegistrationServiceImplTest {
         // Manually inject mocks to handle Optional<TokenStore> correctly
         registrationService = new RegistrationServiceImpl(
                 userRepository,
+                organizationRepository,
                 emailService,
                 jwtService,
                 Optional.of(tokenStore)
@@ -175,7 +181,7 @@ class RegistrationServiceImplTest {
 
         // Then
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(userCaptor.capture());
+        verify(userRepository, times(2)).save(userCaptor.capture());
         User savedUser = userCaptor.getValue();
 
         assertEquals(email, savedUser.getEmail());
@@ -185,6 +191,49 @@ class RegistrationServiceImplTest {
         assertEquals(Role.HIRING_MANAGER, savedUser.getRole());
         assertTrue(savedUser.isProfileComplete());
         assertTrue(savedUser.isEmailVerified());
+    }
+
+    @Test
+    void completeHiringManagerRegistration_shouldCreateOrganizationAndAssociateUser_withValidToken() {
+        // Given
+        String email = faker.internet().emailAddress();
+        String token = faker.lorem().word();
+        HiringManagerRegistrationDto dto = createFakeHiringManagerDto();
+        Claims claims = mock(Claims.class);
+        when(claims.getSubject()).thenReturn(email);
+        when(claims.get("role", String.class)).thenReturn(Role.HIRING_MANAGER.name());
+        when(claims.get("registration", Boolean.class)).thenReturn(true);
+
+        when(jwtService.extractAllClaims(token)).thenReturn(claims);
+        when(userRepository.findByUsername(dto.username())).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            if (user.getOrganization() == null) { // Simulate saving user before organization is set
+                return user;
+            }
+            return user; // Simulate saving user after organization is set
+        });
+        when(organizationRepository.save(any(Organization.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // When
+        registrationService.completeRegistration(token, dto);
+
+        // Then
+        ArgumentCaptor<Organization> organizationCaptor = ArgumentCaptor.forClass(Organization.class);
+        verify(organizationRepository, times(1)).save(organizationCaptor.capture());
+        Organization savedOrganization = organizationCaptor.getValue();
+
+        assertEquals(dto.companyName(), savedOrganization.getName());
+        assertEquals(dto.industry(), savedOrganization.getIndustry());
+        assertNotNull(savedOrganization.getCreatedBy());
+        assertEquals(email, savedOrganization.getCreatedBy().getEmail());
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository, times(2)).save(userCaptor.capture()); // Called twice: once for initial user, once for user with organization
+        User savedUser = userCaptor.getValue(); // Get the last saved user
+
+        assertNotNull(savedUser.getOrganization());
+        assertEquals(savedOrganization.getId(), savedUser.getOrganization().getId());
     }
 
     @Test

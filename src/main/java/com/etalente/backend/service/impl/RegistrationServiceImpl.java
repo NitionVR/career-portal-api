@@ -6,7 +6,9 @@ import com.etalente.backend.dto.RegistrationRequest;
 import com.etalente.backend.exception.BadRequestException;
 import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
+import com.etalente.backend.model.Organization;
 import com.etalente.backend.repository.UserRepository;
+import com.etalente.backend.repository.OrganizationRepository;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.EmailService;
 import com.etalente.backend.service.RegistrationService;
@@ -32,6 +34,7 @@ public class RegistrationServiceImpl implements RegistrationService {
     private static final Logger logger = LoggerFactory.getLogger(RegistrationServiceImpl.class);
 
     private final UserRepository userRepository;
+    private final OrganizationRepository organizationRepository;
     private final EmailService emailService;
     private final JwtService jwtService;
     private final Optional<TokenStore> tokenStore;
@@ -41,10 +44,12 @@ public class RegistrationServiceImpl implements RegistrationService {
     private String magicLinkUrl;
 
     public RegistrationServiceImpl(UserRepository userRepository,
+                                  OrganizationRepository organizationRepository,
                                   EmailService emailService,
                                   JwtService jwtService,
                                   @Autowired(required = false) Optional<TokenStore> tokenStore) {
         this.userRepository = userRepository;
+        this.organizationRepository = organizationRepository;
         this.emailService = emailService;
         this.jwtService = jwtService;
         this.tokenStore = tokenStore;
@@ -135,7 +140,18 @@ public class RegistrationServiceImpl implements RegistrationService {
         user.setEmailVerified(true);
         user.setProfileComplete(true);
 
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user); // Save user first to get an ID
+
+        // Create Organization for Hiring Manager
+        Organization organization = new Organization();
+        organization.setName(dto.companyName());
+        organization.setIndustry(dto.industry());
+        organization.setCreatedBy(savedUser); // Use the saved user as the creator
+        organizationRepository.save(organization);
+
+        savedUser.setOrganization(organization); // Associate user with the new organization
+
+        return userRepository.save(savedUser); // Save user again to update the organization
     }
 
     private Claims validateRegistrationToken(String token) {
