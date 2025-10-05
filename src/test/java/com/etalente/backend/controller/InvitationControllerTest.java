@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -84,6 +85,26 @@ class InvitationControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.status").value("PENDING"));
 
         assertEquals(1, invitationRepository.count());
+    }
+
+    @Test
+    @DisplayName("POST /api/invitations/bulk-recruiter should return 200 OK when hiring manager invites multiple recruiters")
+    void inviteRecruiterBulk_shouldReturnOk_whenHiringManagerInvitesMultipleRecruiters() throws Exception {
+        // Given
+        List<RecruiterInvitationRequest> requests = List.of(
+                new RecruiterInvitationRequest(faker.internet().emailAddress(), "Welcome to the team!"),
+                new RecruiterInvitationRequest(faker.internet().emailAddress(), "Join us!")
+        );
+
+        // When & Then
+        mockMvc.perform(post("/api/invitations/bulk-recruiter")
+                        .header("Authorization", "Bearer " + hiringManagerJwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requests)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Invitations processed"));
+
+        assertEquals(2, invitationRepository.count());
     }
 
     @Test
