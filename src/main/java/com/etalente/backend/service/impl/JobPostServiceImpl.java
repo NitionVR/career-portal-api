@@ -6,9 +6,11 @@ import com.etalente.backend.exception.ResourceNotFoundException;
 import com.etalente.backend.exception.UnauthorizedException;
 import com.etalente.backend.model.JobPost;
 import com.etalente.backend.model.JobPostStatus;
+import com.etalente.backend.model.Organization;
 import com.etalente.backend.model.User;
 import com.etalente.backend.repository.JobPostRepository;
 import com.etalente.backend.repository.UserRepository;
+import com.etalente.backend.security.OrganizationContext;
 import com.etalente.backend.service.JobPostService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -28,13 +30,16 @@ public class JobPostServiceImpl implements JobPostService {
     private final JobPostRepository jobPostRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final OrganizationContext organizationContext;
 
     public JobPostServiceImpl(JobPostRepository jobPostRepository,
                               UserRepository userRepository,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              OrganizationContext organizationContext) {
         this.jobPostRepository = jobPostRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
+        this.organizationContext = organizationContext;
     }
 
     @Override
@@ -42,9 +47,13 @@ public class JobPostServiceImpl implements JobPostService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
+        // Ensure user has an organization
+        Organization organization = organizationContext.requireOrganization();
+
         JobPost jobPost = new JobPost();
         mapRequestToJobPost(request, jobPost);
         jobPost.setCreatedBy(user);
+        jobPost.setOrganization(organization);
         jobPost.setStatus(JobPostStatus.DRAFT);
         jobPost.setDatePosted(LocalDate.now().toString());
 
@@ -56,24 +65,57 @@ public class JobPostServiceImpl implements JobPostService {
     public JobPostResponse getJobPost(UUID id) {
         JobPost jobPost = jobPostRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Job post not found"));
+
+        // If the job is not public, verify organization access
+        if (jobPost.getStatus() != JobPostStatus.OPEN) {
+            if (!organizationContext.isCandidate()) {
+                // For hiring managers and recruiters, check organization access
+                organizationContext.verifyOrganizationAccess(jobPost.getOrganization().getId());
+            } else {
+                // Candidates can't see non-public job posts
+                throw new UnauthorizedException("You don't have access to this job post");
+            }
+        }
+
         return mapToResponse(jobPost);
     }
 
     @Override
     public Page<JobPostResponse> listJobPosts(Pageable pageable) {
-        return jobPostRepository.findAll(pageable).map(this::mapToResponse);
+        // If user is a candidate, only show public jobs
+        if (organizationContext.isCandidate()) {
+            return jobPostRepository.findPublishedJobs(pageable).map(this::mapToResponse);
+        }
+
+        // For hiring managers and recruiters, show jobs from their organization
+        Organization organization = organizationContext.requireOrganization();
+        return jobPostRepository.findByOrganization(organization, pageable)
+                .map(this::mapToResponse);
     }
 
     @Override
     public Page<JobPostResponse> listJobPostsByUser(String userEmail, Pageable pageable) {
-        return jobPostRepository.findByCreatedByEmail(userEmail, pageable)
+        Organization organization = organizationContext.requireOrganization();
+
+        // Verify the user belongs to the same organization
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (user.getOrganization() == null ||
+            !user.getOrganization().getId().equals(organization.getId())) {
+            throw new UnauthorizedException("You can only view job posts from users in your organization");
+        }
+
+        return jobPostRepository.findByCreatedByEmailAndOrganization(userEmail, organization, pageable)
                 .map(this::mapToResponse);
     }
 
     @Override
     public JobPostResponse updateJobPost(UUID id, JobPostRequest request, String userEmail) {
-        JobPost jobPost = jobPostRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Job post not found"));
+        Organization organization = organizationContext.requireOrganization();
+
+        JobPost jobPost = jobPostRepository.findByIdAndOrganization(id, organization)
+                .orElseThrow(() -> new ResourceNotFoundException("Job post not found in your organization"));
 
         if (!jobPost.getCreatedBy().getEmail().equals(userEmail)) {
             throw new UnauthorizedException("You can only update your own job posts");
@@ -86,8 +128,10 @@ public class JobPostServiceImpl implements JobPostService {
 
     @Override
     public void deleteJobPost(UUID id, String userEmail) {
-        JobPost jobPost = jobPostRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Job post not found"));
+        Organization organization = organizationContext.requireOrganization();
+
+        JobPost jobPost = jobPostRepository.findByIdAndOrganization(id, organization)
+                .orElseThrow(() -> new ResourceNotFoundException("Job post not found in your organization"));
 
         if (!jobPost.getCreatedBy().getEmail().equals(userEmail)) {
             throw new UnauthorizedException("You can only delete your own job posts");
