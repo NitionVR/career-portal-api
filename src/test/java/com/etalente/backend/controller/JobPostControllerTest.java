@@ -3,11 +3,9 @@ package com.etalente.backend.controller;
 import com.etalente.backend.BaseIntegrationTest;
 import com.etalente.backend.dto.JobPostRequest;
 import com.etalente.backend.dto.LocationDto;
-import com.etalente.backend.model.JobPost;
-import com.etalente.backend.model.JobPostStatus;
-import com.etalente.backend.model.Role;
-import com.etalente.backend.model.User;
+import com.etalente.backend.model.*;
 import com.etalente.backend.repository.JobPostRepository;
+import com.etalente.backend.repository.OrganizationRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -50,16 +48,23 @@ class JobPostControllerTest extends BaseIntegrationTest {
     private JobPostRepository jobPostRepository;
 
     @Autowired
+    private OrganizationRepository organizationRepository;
+
+    @Autowired
     private JwtService jwtService;
 
     @Autowired
     private ObjectMapper objectMapper;
 
     private Faker faker;
+    private Organization organization;
 
     @BeforeEach
     void setUp() {
         faker = new Faker();
+        organization = new Organization();
+        organization.setName(faker.company().name());
+        organizationRepository.save(organization);
     }
 
     @Test
@@ -131,10 +136,12 @@ class JobPostControllerTest extends BaseIntegrationTest {
     void getJobPost_shouldReturnJobPost_whenExists() throws Exception {
         // Given
         User user = createUser(Role.HIRING_MANAGER);
+        String token = generateToken(user);
         JobPost jobPost = createJobPost(user);
 
         // When & Then
-        mockMvc.perform(get("/api/job-posts/{id}", jobPost.getId()))
+        mockMvc.perform(get("/api/job-posts/{id}", jobPost.getId())
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(jobPost.getId().toString())))
                 .andExpect(jsonPath("$.title", is(jobPost.getTitle())));
@@ -151,12 +158,14 @@ class JobPostControllerTest extends BaseIntegrationTest {
     void listJobPosts_shouldReturnPaginatedResults() throws Exception {
         // Given
         User user = createUser(Role.HIRING_MANAGER);
+        String token = generateToken(user);
         createJobPost(user);
         createJobPost(user);
         createJobPost(user);
 
         // When & Then
         mockMvc.perform(get("/api/job-posts")
+                        .header("Authorization", "Bearer " + token)
                         .param("page", "0")
                         .param("size", "2"))
                 .andExpect(status().isOk())
@@ -256,6 +265,7 @@ class JobPostControllerTest extends BaseIntegrationTest {
         user.setRole(role);
         user.setFirstName(faker.name().firstName());
         user.setLastName(faker.name().lastName());
+        user.setOrganization(organization);
         return userRepository.save(user);
     }
 
@@ -279,6 +289,7 @@ class JobPostControllerTest extends BaseIntegrationTest {
         jobPost.setExperienceLevel(faker.options().option("Entry-level", "Mid-level", "Senior-level"));
         jobPost.setStatus(JobPostStatus.DRAFT);
         jobPost.setCreatedBy(user);
+        jobPost.setOrganization(organization);
         jobPost.setDatePosted(
                 DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneId.systemDefault())
                         .format(faker.date().past(30, TimeUnit.DAYS).toInstant())
