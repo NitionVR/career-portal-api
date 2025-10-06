@@ -6,10 +6,12 @@ import com.etalente.backend.exception.UnauthorizedException;
 import com.etalente.backend.model.JobPost;
 import com.etalente.backend.model.JobPostStatus;
 import com.etalente.backend.model.Organization;
+import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
 import com.etalente.backend.repository.JobPostRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.OrganizationContext;
+import com.etalente.backend.service.JobPostPermissionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +49,9 @@ class JobPostServiceImplTest {
     @Mock
     private OrganizationContext organizationContext;
 
+    @Mock  // ADD THIS
+    private JobPostPermissionService permissionService;
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -80,17 +85,18 @@ class JobPostServiceImplTest {
         testJobPost.setCreatedBy(testUser);
         testJobPost.setOrganization(organization);
         testJobPost.setTitle(faker.job().title());
-
-
     }
 
     @Test
     void createJobPost_shouldSaveAndReturnJobPost() {
         // Given
+        when(userRepository.findByEmail(userEmail)).thenReturn(Optional.of(testUser));
         when(organizationContext.requireOrganization()).thenReturn(organization);
         JobPostRequest request = createFakeJobPostRequest();
-        when(userRepository.findByEmail(userEmail)).thenReturn(Optional.of(testUser));
         when(jobPostRepository.save(any(JobPost.class))).thenReturn(testJobPost);
+
+        // ADD THIS - mock permission check
+        doNothing().when(permissionService).verifyCanCreate(any(User.class));
 
         // When
         jobPostService.createJobPost(request, userEmail);
@@ -131,10 +137,12 @@ class JobPostServiceImplTest {
     @Test
     void updateJobPost_shouldUpdateSuccessfully_whenOwner() {
         // Given
+        when(userRepository.findByEmail(userEmail)).thenReturn(Optional.of(testUser));
         when(organizationContext.requireOrganization()).thenReturn(organization);
         JobPostRequest request = createFakeJobPostRequest();
         when(jobPostRepository.findByIdAndOrganization(jobPostId, organization)).thenReturn(Optional.of(testJobPost));
         when(jobPostRepository.save(any(JobPost.class))).thenReturn(testJobPost);
+        doNothing().when(permissionService).verifyCanUpdate(any(User.class), any(JobPost.class)); // ADD THIS
 
         // When
         jobPostService.updateJobPost(jobPostId, request, userEmail);
@@ -151,6 +159,15 @@ class JobPostServiceImplTest {
         when(jobPostRepository.findByIdAndOrganization(jobPostId, organization)).thenReturn(Optional.of(testJobPost));
         String otherUserEmail = faker.internet().emailAddress();
 
+        User otherUser = new User();
+        otherUser.setEmail(otherUserEmail);
+        otherUser.setOrganization(organization);
+        when(userRepository.findByEmail(otherUserEmail)).thenReturn(Optional.of(otherUser));
+
+        // Mock permission service to throw
+        doThrow(new UnauthorizedException("Not authorized")).when(permissionService)
+                .verifyCanUpdate(any(User.class), any(JobPost.class));
+
         // When & Then
         assertThrows(UnauthorizedException.class, () -> jobPostService.updateJobPost(jobPostId, request, otherUserEmail));
     }
@@ -158,8 +175,10 @@ class JobPostServiceImplTest {
     @Test
     void deleteJobPost_shouldDeleteSuccessfully_whenOwner() {
         // Given
+        when(userRepository.findByEmail(userEmail)).thenReturn(Optional.of(testUser));
         when(organizationContext.requireOrganization()).thenReturn(organization);
         when(jobPostRepository.findByIdAndOrganization(jobPostId, organization)).thenReturn(Optional.of(testJobPost));
+        doNothing().when(permissionService).verifyCanDelete(any(User.class), any(JobPost.class)); // ADD THIS
 
         // When
         jobPostService.deleteJobPost(jobPostId, userEmail);
@@ -175,6 +194,15 @@ class JobPostServiceImplTest {
         when(jobPostRepository.findByIdAndOrganization(jobPostId, organization)).thenReturn(Optional.of(testJobPost));
         String otherUserEmail = faker.internet().emailAddress();
 
+        User otherUser = new User();
+        otherUser.setEmail(otherUserEmail);
+        otherUser.setOrganization(organization);
+        when(userRepository.findByEmail(otherUserEmail)).thenReturn(Optional.of(otherUser));
+
+        // Mock permission service to throw
+        doThrow(new UnauthorizedException("Not authorized")).when(permissionService)
+                .verifyCanDelete(any(User.class), any(JobPost.class));
+
         // When & Then
         assertThrows(UnauthorizedException.class, () -> jobPostService.deleteJobPost(jobPostId, otherUserEmail));
     }
@@ -184,7 +212,9 @@ class JobPostServiceImplTest {
         // Given
         Pageable pageable = PageRequest.of(0, 10);
         Page<JobPost> page = new PageImpl<>(Collections.singletonList(testJobPost));
-        when(organizationContext.isCandidate()).thenReturn(true);
+        User candidateUser = new User();
+        candidateUser.setRole(Role.CANDIDATE);
+        when(organizationContext.getCurrentUserOrNull()).thenReturn(candidateUser);
         when(jobPostRepository.findPublishedJobs(pageable)).thenReturn(page);
 
         // When
