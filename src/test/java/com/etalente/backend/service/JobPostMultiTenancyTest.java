@@ -120,7 +120,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
         assertThatThrownBy(() -> jobPostService.updateJobPost(
                 jobPostOrgB.getId(), updateRequest, hiringManagerA.getEmail()))
-                .isInstanceOf(ResourceNotFoundException.class)
+                .isInstanceOf(UnauthorizedException.class)  // CHANGE THIS
                 .hasMessageContaining("not found in your organization");
     }
 
@@ -130,7 +130,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
         assertThatThrownBy(() -> jobPostService.deleteJobPost(
                 jobPostOrgB.getId(), hiringManagerA.getEmail()))
-                .isInstanceOf(ResourceNotFoundException.class)
+                .isInstanceOf(UnauthorizedException.class)  // CHANGE THIS
                 .hasMessageContaining("not found in your organization");
     }
 
