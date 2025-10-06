@@ -5,6 +5,7 @@ import com.etalente.backend.model.Organization;
 import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
 import com.etalente.backend.repository.UserRepository;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -108,7 +109,7 @@ public class OrganizationContext {
      */
     public User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()) {
+        if (authentication == null || !authentication.isAuthenticated() || authentication instanceof AnonymousAuthenticationToken) {
             throw new UnauthorizedException("No authenticated user found");
         }
 
@@ -128,5 +129,48 @@ public class OrganizationContext {
      */
     public String getCurrentUserEmail() {
         return getCurrentUser().getEmail();
+    }
+
+    /**
+     * Try to get the current user, return null if not authenticated
+     * @return User or null
+     */
+    public User getCurrentUserOrNull() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()
+                    || authentication instanceof org.springframework.security.authentication.AnonymousAuthenticationToken) {
+                return null;
+            }
+
+            Object principal = authentication.getPrincipal();
+            if (!(principal instanceof UserDetails)) {
+                return null;
+            }
+
+            String email = ((UserDetails) principal).getUsername();
+            return userRepository.findByEmail(email).orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Check if there is an authenticated user
+     */
+    public boolean isAuthenticated() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null
+                && authentication.isAuthenticated()
+                && !(authentication instanceof org.springframework.security.authentication.AnonymousAuthenticationToken);
+    }
+
+    /**
+     * Check if the current user is a candidate (safely handles unauthenticated users)
+     * @return true if user is authenticated and is a candidate or if no user is authenticated
+     */
+    public boolean isCandidateOrUnauthenticated() {
+        User user = getCurrentUserOrNull();
+        return user == null || user.getRole() == Role.CANDIDATE;
     }
 }
