@@ -2,6 +2,7 @@ package com.etalente.backend.controller;
 
 import com.etalente.backend.dto.JobPostRequest;
 import com.etalente.backend.dto.JobPostResponse;
+import com.etalente.backend.model.JobPostStatus;
 import com.etalente.backend.service.JobPostService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -47,7 +48,7 @@ public class JobPostController {
     }
 
     @GetMapping("/my-posts")
-    @PreAuthorize("hasRole('HIRING_MANAGER')")
+    @PreAuthorize("hasAnyRole('HIRING_MANAGER', 'RECRUITER')")
     public Page<JobPostResponse> listMyJobPosts(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             Authentication authentication) {
@@ -55,7 +56,7 @@ public class JobPostController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('HIRING_MANAGER')")
+    @PreAuthorize("hasAnyRole('HIRING_MANAGER', 'RECRUITER')")
     public ResponseEntity<JobPostResponse> updateJobPost(@PathVariable UUID id,
                                                          @Valid @RequestBody JobPostRequest request,
                                                          Authentication authentication) {
@@ -71,11 +72,28 @@ public class JobPostController {
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasRole('HIRING_MANAGER')")
+    @PreAuthorize("hasAnyRole('HIRING_MANAGER', 'RECRUITER')")
     public ResponseEntity<JobPostResponse> updateJobPostStatus(@PathVariable UUID id,
                                                                @RequestParam String status,
                                                                Authentication authentication) {
-        // This will be implemented in JOB-002 for state machine
-        return ResponseEntity.ok().build();
+        JobPostStatus newStatus = JobPostStatus.valueOf(status.toUpperCase());
+        JobPostResponse response = jobPostService.updateJobPostStatus(id, newStatus, authentication.getName());
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/publish")
+    @PreAuthorize("hasAnyRole('HIRING_MANAGER', 'RECRUITER')")
+    public ResponseEntity<JobPostResponse> publishJobPost(@PathVariable UUID id,
+                                                          Authentication authentication) {
+        JobPostResponse response = jobPostService.publishJobPost(id, authentication.getName());
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/close")
+    @PreAuthorize("hasAnyRole('HIRING_MANAGER', 'RECRUITER')")
+    public ResponseEntity<JobPostResponse> closeJobPost(@PathVariable UUID id,
+                                                        Authentication authentication) {
+        JobPostResponse response = jobPostService.closeJobPost(id, authentication.getName());
+        return ResponseEntity.ok(response);
     }
 }
