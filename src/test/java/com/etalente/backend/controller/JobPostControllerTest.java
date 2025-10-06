@@ -214,12 +214,22 @@ class JobPostControllerTest extends BaseIntegrationTest {
     void updateJobPost_shouldFail_whenNotOwner() throws Exception {
         // Given
         User owner = createUser(Role.HIRING_MANAGER);
-        User other = createUser(Role.HIRING_MANAGER);
+        // Create a user from a DIFFERENT organization
+        Organization otherOrg = new Organization();
+        otherOrg.setName("Other Company");
+        otherOrg = organizationRepository.save(otherOrg);
+
+        User other = new User();
+        other.setEmail(faker.internet().emailAddress());
+        other.setRole(Role.HIRING_MANAGER);
+        other.setOrganization(otherOrg);  // Different organization
+        other = userRepository.save(other);
+
         String token = generateToken(other);
         JobPost jobPost = createJobPost(owner);
         JobPostRequest updateRequest = createFakeJobPostRequest();
 
-        // When & Then
+        // When & Then - Now it should fail because different organization
         mockMvc.perform(put("/api/job-posts/{id}", jobPost.getId())
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
