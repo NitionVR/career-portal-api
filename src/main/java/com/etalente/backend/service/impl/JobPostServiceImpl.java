@@ -2,19 +2,24 @@ package com.etalente.backend.service.impl;
 
 import com.etalente.backend.dto.JobPostRequest;
 import com.etalente.backend.dto.JobPostResponse;
+import com.etalente.backend.dto.StateAuditResponse;
+import com.etalente.backend.dto.StateTransitionRequest;
 import com.etalente.backend.exception.BadRequestException;
 import com.etalente.backend.exception.ResourceNotFoundException;
 import com.etalente.backend.exception.UnauthorizedException;
 import com.etalente.backend.model.JobPost;
+import com.etalente.backend.model.JobPostStateAudit;
 import com.etalente.backend.model.JobPostStatus;
 import com.etalente.backend.model.Organization;
 import com.etalente.backend.model.Role;
+import com.etalente.backend.model.StateTransition;
 import com.etalente.backend.model.User;
 import com.etalente.backend.repository.JobPostRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.OrganizationContext;
 import com.etalente.backend.service.JobPostPermissionService;
 import com.etalente.backend.service.JobPostService;
+import com.etalente.backend.service.JobPostStateMachine;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -24,7 +29,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -35,29 +42,41 @@ public class JobPostServiceImpl implements JobPostService {
     private final ObjectMapper objectMapper;
     private final OrganizationContext organizationContext;
     private final JobPostPermissionService permissionService;
+    private final JobPostStateMachine stateMachine;
 
     public JobPostServiceImpl(JobPostRepository jobPostRepository,
                               UserRepository userRepository,
                               ObjectMapper objectMapper,
                               OrganizationContext organizationContext,
-                              JobPostPermissionService permissionService) {
+                              JobPostPermissionService permissionService,
+                              JobPostStateMachine stateMachine) {
         this.jobPostRepository = jobPostRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
         this.organizationContext = organizationContext;
         this.permissionService = permissionService;
+        this.stateMachine = stateMachine;
     }
 
     @Override
     public JobPostResponse createJobPost(JobPostRequest request, String userEmail) {
+        System.out.println("Creating job post for user: " + userEmail);
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        System.out.println("User found: " + user.getEmail() + " with org: " + (user.getOrganization() != null ? user.getOrganization().getName() : "null"));
 
         // Verify user can create job posts
-        permissionService.verifyCanCreate(user);
+        try {
+            permissionService.verifyCanCreate(user);
+            System.out.println("User has permission to create job post");
+        } catch (Exception e) {
+            System.out.println("Permission denied: " + e.getMessage());
+            throw e;
+        }
 
         // Ensure user has an organization
         Organization organization = organizationContext.requireOrganization();
+        System.out.println("Required organization: " + organization.getName());
 
         JobPost jobPost = new JobPost();
         mapRequestToJobPost(request, jobPost);
@@ -67,6 +86,7 @@ public class JobPostServiceImpl implements JobPostService {
         jobPost.setDatePosted(LocalDate.now().toString());
 
         JobPost saved = jobPostRepository.save(jobPost);
+        System.out.println("Job post saved with id: " + saved.getId());
         return mapToResponse(saved);
     }
 
@@ -96,7 +116,7 @@ public class JobPostServiceImpl implements JobPostService {
     @Override
     public Page<JobPostResponse> listJobPosts(Pageable pageable) {
         User currentUser = organizationContext.getCurrentUserOrNull();
-        
+
         // Unauthenticated users or candidates see only public jobs
         if (currentUser == null || currentUser.getRole() == Role.CANDIDATE) {
             return jobPostRepository.findPublishedJobs(pageable).map(this::mapToResponse);
@@ -107,7 +127,7 @@ public class JobPostServiceImpl implements JobPostService {
             return jobPostRepository.findByOrganization(currentUser.getOrganization(), pageable)
                     .map(this::mapToResponse);
         }
-        
+
         // Fallback: show public jobs
         return jobPostRepository.findPublishedJobs(pageable).map(this::mapToResponse);
     }
@@ -163,8 +183,10 @@ public class JobPostServiceImpl implements JobPostService {
         jobPostRepository.delete(jobPost);
     }
 
+    // ============= STATE MACHINE METHODS =============
+
     @Override
-    public JobPostResponse updateJobPostStatus(UUID id, JobPostStatus newStatus, String userEmail) {
+    public JobPostResponse transitionJobPostState(UUID id, StateTransitionRequest request, String userEmail) {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
@@ -176,35 +198,102 @@ public class JobPostServiceImpl implements JobPostService {
         // Verify user can change status
         permissionService.verifyCanChangeStatus(user, jobPost);
 
-        // Validate status transition (basic validation, JOB-002 will have full state machine)
-        validateStatusTransition(jobPost.getStatus(), newStatus);
-
-        jobPost.setStatus(newStatus);
-        JobPost updated = jobPostRepository.save(jobPost);
+        // Use state machine to transition
+        JobPost updated = stateMachine.transitionState(
+                jobPost,
+                request.targetStatus(),
+                user,
+                request.reason()
+        );
 
         return mapToResponse(updated);
     }
 
     @Override
     public JobPostResponse publishJobPost(UUID id, String userEmail) {
-        return updateJobPostStatus(id, JobPostStatus.OPEN, userEmail);
+        StateTransitionRequest request = new StateTransitionRequest(
+                JobPostStatus.OPEN,
+                "Publishing job post"
+        );
+        return transitionJobPostState(id, request, userEmail);
     }
 
     @Override
-    public JobPostResponse closeJobPost(UUID id, String userEmail) {
-        return updateJobPostStatus(id, JobPostStatus.CLOSED, userEmail);
+    public JobPostResponse closeJobPost(UUID id, String reason, String userEmail) {
+        StateTransitionRequest request = new StateTransitionRequest(
+                JobPostStatus.CLOSED,
+                reason != null ? reason : "Closing job post"
+        );
+        return transitionJobPostState(id, request, userEmail);
     }
 
-    private void validateStatusTransition(JobPostStatus currentStatus, JobPostStatus newStatus) {
-        // Basic validation - will be enhanced in JOB-002
-        if (currentStatus == JobPostStatus.ARCHIVED && newStatus != JobPostStatus.ARCHIVED) {
-            throw new BadRequestException("Cannot change status of archived job post");
+    @Override
+    public JobPostResponse reopenJobPost(UUID id, String reason, String userEmail) {
+        StateTransitionRequest request = new StateTransitionRequest(
+                JobPostStatus.OPEN,
+                reason != null ? reason : "Reopening job post"
+        );
+        return transitionJobPostState(id, request, userEmail);
+    }
+
+    @Override
+    public JobPostResponse archiveJobPost(UUID id, String reason, String userEmail) {
+        StateTransitionRequest request = new StateTransitionRequest(
+                JobPostStatus.ARCHIVED,
+                reason != null ? reason : "Archiving job post"
+        );
+        return transitionJobPostState(id, request, userEmail);
+    }
+
+    @Override
+    @Deprecated
+    public JobPostResponse updateJobPostStatus(UUID id, JobPostStatus newStatus, String userEmail) {
+        // Delegate to new state machine method
+        StateTransitionRequest request = new StateTransitionRequest(newStatus, null);
+        return transitionJobPostState(id, request, userEmail);
+    }
+
+    @Override
+    public List<StateAuditResponse> getStateHistory(UUID jobPostId, String userEmail) {
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        Organization organization = organizationContext.requireOrganization();
+
+        JobPost jobPost = jobPostRepository.findByIdAndOrganization(jobPostId, organization)
+                .orElseThrow(() -> new UnauthorizedException("Job post not found in your organization"));
+
+        // Verify user can view this job post
+        if (!permissionService.canView(user, jobPost)) {
+            throw new UnauthorizedException("You don't have access to this job post");
         }
 
-        if (currentStatus == JobPostStatus.CLOSED && newStatus == JobPostStatus.OPEN) {
-            throw new BadRequestException("Cannot reopen a closed job post");
-        }
+        List<JobPostStateAudit> auditTrail = stateMachine.getStateHistory(jobPost);
+
+        return auditTrail.stream()
+                .map(audit -> new StateAuditResponse(
+                        audit.getId(),
+                        audit.getFromStatus(),
+                        audit.getToStatus(),
+                        audit.getChangedBy().getEmail(),
+                        audit.getReason(),
+                        audit.getChangedAt()
+                ))
+                .collect(Collectors.toList());
     }
+
+    @Override
+    public List<String> getAvailableTransitions(UUID jobPostId) {
+        JobPost jobPost = jobPostRepository.findById(jobPostId)
+                .orElseThrow(() -> new ResourceNotFoundException("Job post not found"));
+
+        return StateTransition.getValidTransitionsFrom(jobPost.getStatus())
+                .stream()
+                .map(transition -> transition.getToStatus().name())
+                .collect(Collectors.toList());
+    }
+
+    // ============= PRIVATE HELPER METHODS =============
 
     private void mapRequestToJobPost(JobPostRequest request, JobPost jobPost) {
         jobPost.setTitle(request.title());
