@@ -29,6 +29,8 @@ server:
   port: 8080
 
 logging:
+  pattern:
+    exception-conversion-word: '%xEx{short}'
   level:
     com.etalente.backend: INFO
     org.springframework.web: INFO

@@ -39,6 +39,7 @@ cloud:
 logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    exception-conversion-word: '%xEx{short}'
   level:
     root: INFO
     com.etalente.backend: INFO
