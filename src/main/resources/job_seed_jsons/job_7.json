@@ -1,0 +1,142 @@
+{
+  "title": "Data Architect",
+  "company": "Crayon",
+  "type": "Full-time",
+  "date": "2024-12",
+  "description": "As the Data Architect, you'll collaborate closely with engineering, analytics, governance, and business teams to drive best practices across both on-premise and cloud environments (AWS, Azure). The ideal candidate will align data architecture strategies with business objectives, enabling advanced analytics, AI/ML initiatives, and seamless operational data use.",
+  "location": {
+    "address": "",
+    "postalCode": "",
+    "city": "Durban",
+    "countryCode": "ZA",
+    "region": "KwaZulu-Natal"
+  },
+  "remote": "On-site",
+  "salary": "70000-90000",
+  "experience": "Senior",
+  "responsibilities": [
+    "Design and implement scalable, secure, and efficient enterprise data architecture aligned with business goals",
+    "Develop and maintain comprehensive data models (conceptual, logical, physical) that support business and analytical needs",
+    "Define and enforce data governance policies, standards, lineage, and metadata management practices",
+    "Drive integration across systems via ETL/ELT pipelines, APIs, and real-time streaming solutions",
+    "Optimize data storage and retrieval for structured and unstructured data across hybrid infrastructures",
+    "Collaborate with technical and business teams to enable data-driven decision-making",
+    "Ensure compliance with data privacy and protection regulations (e.g., GDPR, POPIA)",
+    "Evaluate emerging technologies to enhance scalability maintainability, and performance",
+    "Monitor and improve data quality, consistency, and system performance",
+    "Oversee and guide project lifecycles from inception to completion",
+    "Collaborate with cross-functional teams to ensure seamless project execution",
+    "Align project activities with business goals and objectives",
+    "Develop and maintain project schedules and budgets",
+    "Identify potential risks and develop mitigation strategies"
+  ],
+  "qualifications": [
+    "Bachelor's or Master's degree in Computer Science, Data Engineering, Information Systems, or a related discipline",
+    "Minimum 5 years of experience in data architecture role"
+  ],
+  "skills": [
+    {
+      "name": "Data Architecture & Modeling",
+      "level": "Master",
+      "keywords": [
+        "Data architecture",
+        "Data modeling",
+        "Conceptual modeling",
+        "Logical modeling",
+        "Physical modeling",
+        "Enterprise data architecture"
+      ]
+    },
+    {
+      "name": "Cloud Platforms",
+      "level": "Master",
+      "keywords": [
+        "AWS",
+        "Azure",
+        "GCP",
+        "Cloud platforms",
+        "Hybrid infrastructures"
+      ]
+    },
+    {
+      "name": "Database Technologies",
+      "level": "Master",
+      "keywords": [
+        "RDBMS",
+        "Oracle",
+        "SQL Server",
+        "PostgreSQL",
+        "Redshift",
+        "Snowflake",
+        "BigQuery",
+        "DynamoDB",
+        "S3"
+      ]
+    },
+    {
+      "name": "Data Integration",
+      "level": "Master",
+      "keywords": [
+        "ETL",
+        "ELT",
+        "Data integration",
+        "API-based integration",
+        "Real-time data streaming",
+        "Event-driven architectures",
+        "Kafka",
+        "Kinesis",
+        "Pub/Sub",
+        "Glue",
+        "Athena"
+      ]
+    },
+    {
+      "name": "Data Governance",
+      "level": "Advanced",
+      "keywords": [
+        "Data governance frameworks",
+        "DAMA-DMBOK",
+        "Data lineage",
+        "Metadata management",
+        "Data cataloguing",
+        "Data quality management"
+      ]
+    },
+    {
+      "name": "Data Security & Compliance",
+      "level": "Advanced",
+      "keywords": [
+        "Data security",
+        "Encryption",
+        "IAM",
+        "GDPR",
+        "POPIA",
+        "Compliance frameworks",
+        "Data privacy",
+        "Security principles"
+      ]
+    },
+    {
+      "name": "System Performance & Optimization",
+      "level": "Advanced",
+      "keywords": [
+        "Scalability",
+        "System performance monitoring",
+        "Efficiency optimization",
+        "Performance tuning",
+        "Consistency"
+      ]
+    },
+    {
+      "name": "Project Management",
+      "level": "Intermediate",
+      "keywords": [
+        "Project management",
+        "Risk mitigation",
+        "Project scheduling",
+        "Budget management",
+        "Cross-functional collaboration"
+      ]
+    }
+  ]
+}

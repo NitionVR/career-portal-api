@@ -1,0 +1,106 @@
+{
+  "title": "Shop Assistant / Cashier X2",
+  "company": "Clicks Group Limited",
+  "type": "Permanent",
+  "date": "2024-12",
+  "description": "To deliver service excellence through efficient customer service, point of sale (POS) operational activities and merchandising in store that leads to a positive customer experience.",
+  "location": {
+    "address": "",
+    "postalCode": "",
+    "city": "Pretoria",
+    "countryCode": "ZA",
+    "region": "Gauteng"
+  },
+  "remote": "On-site",
+  "salary": "",
+  "experience": "Entry-level",
+  "responsibilities": [
+    "Efficiently execute all operational activities at the point of sale in a timely and efficient manner",
+    "Maintain high levels of accuracy when scanning merchandise and collecting payment for goods purchased, including actioning clubcard rewards",
+    "Ensure the safe handling of cash at all times",
+    "Proactively promote the Clicks' clubcard and to enroll new clubcard members in order to achieve the clubcard participation targets",
+    "Make customers aware of promotions in order to positively affect sales and to ensure customers 'feel good and pay less'",
+    "Deliver superior customer service by acting as a brand ambassador, being visible and offering a friendly and professional service",
+    "Efficiently execute and maintain all merchandising and general housekeeping duties according to store and visual merchandise standards",
+    "Support the Group's vision to be the customer's first choice health and beauty retailer by living and driving the company values",
+    "Maintain updated knowledge on products, ranges, promotions and events in order to provide the correct information to customers at all times"
+  ],
+  "qualifications": [
+    "Grade 12 (Essential)",
+    "Maths 50% and English 50% at Grade 12 level (Desirable)",
+    "Experience in a customer facing role within a retail/FMCG store operations environment (Desirable)",
+    "Basic maths calculations",
+    "Retail/FMCG background and understanding of merchandising and promotions principles",
+    "Understanding of stock management procedures",
+    "Knowledge of customer service excellence"
+  ],
+  "skills": [
+    {
+      "name": "Point of Sale Operations",
+      "level": "Intermediate",
+      "keywords": [
+        "POS",
+        "Scanning merchandise",
+        "Payment collection",
+        "Cash handling",
+        "Clubcard operations"
+      ]
+    },
+    {
+      "name": "Customer Service",
+      "level": "Intermediate",
+      "keywords": [
+        "Customer service excellence",
+        "Customer orientation",
+        "Brand ambassador",
+        "Professional service",
+        "Customer facing"
+      ]
+    },
+    {
+      "name": "Retail Operations",
+      "level": "Intermediate",
+      "keywords": [
+        "Merchandising",
+        "Promotions",
+        "Stock management",
+        "Visual merchandise standards",
+        "Housekeeping",
+        "Retail",
+        "FMCG"
+      ]
+    },
+    {
+      "name": "Sales & Promotions",
+      "level": "Intermediate",
+      "keywords": [
+        "Clubcard promotion",
+        "Sales promotion",
+        "Product knowledge",
+        "Persuading and Influencing"
+      ]
+    },
+    {
+      "name": "Technical Skills",
+      "level": "Intermediate",
+      "keywords": [
+        "Computer literacy",
+        "Numeracy skills",
+        "Basic maths calculations"
+      ]
+    },
+    {
+      "name": "Soft Skills",
+      "level": "Intermediate",
+      "keywords": [
+        "Communication",
+        "Planning and organising",
+        "Problem-solving",
+        "Relating and networking",
+        "Following instructions and procedures",
+        "Working with people",
+        "Coping with pressures and setbacks"
+      ]
+    }
+  ]
+}

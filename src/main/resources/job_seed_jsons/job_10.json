@@ -1,0 +1,125 @@
+{
+  "title": "IT Learner",
+  "company": "The Tolcon Group",
+  "type": "Learnership",
+  "date": "2024-12",
+  "description": "This learnership is a 12-month intensive development Programme. It allows individuals to gain valuable working experience and theoretical training. The Tolcon Learnership Programme will provide you with a solid foundation for a successful career in the IT field.",
+  "location": {
+    "address": "",
+    "postalCode": "",
+    "city": "Centurion",
+    "countryCode": "ZA",
+    "region": "Gauteng"
+  },
+  "remote": "On-site",
+  "salary": "",
+  "experience": "Entry-level",
+  "responsibilities": [
+    "Learn to organize and schedule upgrades and maintenance without deterring others from completing their work",
+    "Learn security and privacy compliance of networks and computer systems",
+    "Learn to install and configure appropriate hardware, software, and functions according to specifications and company standards",
+    "Learn to set-up, configure and maintain computer, user and e-mail accounts on all systems",
+    "Provide orientation and guidance to users on how to operate software and computer equipment",
+    "Learn to Manage and revise the layout of SharePoint, as well as the customization on SharePoint site for company purposes",
+    "Learn the monitoring, troubleshooting and provide technical support for SharePoint users",
+    "Learn to maintain records of SharePoint updates, maintenance, and activity",
+    "Ensuring distribution of operating system, company standard applications, and antivirus updates",
+    "Maintain and monitor communication infrastructure to remote sites",
+    "General end user hardware and software support that includes troubleshooting and successful resolution of incidents and problems",
+    "Understand service desk ticketing, successful resolution of assigned incidents and problem tickets, and meeting SLAs"
+  ],
+  "qualifications": [
+    "Grade 12",
+    "IT Qualification",
+    "Any further formal IT related studies will be advantages or studying towards IT qualification",
+    "Microsoft Office (especially Outlook, Word & Excel)",
+    "No experience needed",
+    "Applicants must be South African citizens with a valid South African ID number",
+    "Applicants must be under the age of 35",
+    "Preference will be given to disabled applicants",
+    "Good writing, documenting and communication Skills in English",
+    "Good Computer Literacy Skills",
+    "Interpersonal Relationship Skills",
+    "Good problem solving and trouble shooting skills",
+    "Backup and recovery principles",
+    "Self-management",
+    "Self-driven and Motivated"
+  ],
+  "skills": [
+    {
+      "name": "Microsoft Office",
+      "level": "Intermediate",
+      "keywords": [
+        "Outlook",
+        "Word",
+        "Excel",
+        "Microsoft Office"
+      ]
+    },
+    {
+      "name": "IT Support",
+      "level": "Beginner",
+      "keywords": [
+        "Technical support",
+        "Hardware support",
+        "Software support",
+        "Troubleshooting",
+        "Service desk ticketing",
+        "SLAs"
+      ]
+    },
+    {
+      "name": "System Administration",
+      "level": "Beginner",
+      "keywords": [
+        "Computer configuration",
+        "User accounts",
+        "E-mail accounts",
+        "System maintenance",
+        "Software installation",
+        "Hardware installation"
+      ]
+    },
+    {
+      "name": "SharePoint",
+      "level": "Beginner",
+      "keywords": [
+        "SharePoint",
+        "SharePoint customization",
+        "SharePoint maintenance"
+      ]
+    },
+    {
+      "name": "Network & Security",
+      "level": "Beginner",
+      "keywords": [
+        "Network security",
+        "Privacy compliance",
+        "Antivirus updates",
+        "Communication infrastructure"
+      ]
+    },
+    {
+      "name": "Backup & Recovery",
+      "level": "Beginner",
+      "keywords": [
+        "Backup principles",
+        "Recovery principles"
+      ]
+    },
+    {
+      "name": "Soft Skills",
+      "level": "Intermediate",
+      "keywords": [
+        "Communication",
+        "English",
+        "Problem solving",
+        "Interpersonal skills",
+        "Self-management",
+        "Self-driven",
+        "Motivated",
+        "Documentation"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "title": "Site Reliability Engineer",
+  "company": "Fintech Company",
+  "type": "Full-time",
+  "date": "2024-12",
+  "description": "A proactive and skilled Site Reliability Engineer (SRE) to be the guardian of systems' uptime, performance, and scalability, building the foundation of infrastructure excellence for a rapidly growing fintech venture in South Africa.",
+  "location": {
+    "address": "",
+    "postalCode": "",
+    "city": "Johannesburg",
+    "countryCode": "ZA",
+    "region": "Gauteng"
+  },
+  "remote": "On-site",
+  "salary": "50000-65000",
+  "experience": "Mid-Senior Level",
+  "responsibilities": [
+    "Managing and monitoring infrastructure for ERP systems, applications, APIs, and databases",
+    "Ensuring high availability and scalability of production environments",
+    "Administering cloud environments and establishing CI/CD workflows for rapid deployments",
+    "Setting up monitoring, logging, and alerting systems to track system health",
+    "Implementing backup, recovery, and failover processes to ensure data integrity",
+    "Hardening infrastructure security and enforcing access controls",
+    "Diagnosing and resolving incidents efficiently with minimal downtime"
+  ],
+  "qualifications": [
+    "A minimum of 3 years of experience in a System Administration, DevOps, or SRE role",
+    "Tertiary Qualification in Computer Science, Information Technology, or Related Field",
+    "Strong experience with Linux-based production environments (preferably Ubuntu)",
+    "Strong experience with cloud hosting platforms such as AWS or Google Cloud",
+    "Proficiency in scripting and automation using Bash, Python, or similar languages",
+    "Experience with containerization (Docker) and CI/CD tools",
+    "Familiarity with infrastructure as code tools like Terraform or Ansible",
+    "Experience with database administration (PostgreSQL), networking, DNS, and load balancing",
+    "Knowledge of web security best practices, including firewalls, SSL, and API rate limiting",
+    "Strong experience with monitoring, logging, and alerting tools (e.g., Grafana, Prometheus)",
+    "Experience with fast recovery planning and disaster mitigation",
+    "Excellent problem-solving, troubleshooting, and communication skills"
+  ],
+  "skills": [
+    {
+      "name": "Operating Systems",
+      "level": "Master",
+      "keywords": [
+        "Linux",
+        "Ubuntu",
+        "System Administration"
+      ]
+    },
+    {
+      "name": "Cloud Platforms",
+      "level": "Master",
+      "keywords": [
+        "AWS",
+        "Google Cloud"
+      ]
+    },
+    {
+      "name": "Scripting & Programming",
+      "level": "Advanced",
+      "keywords": [
+        "Bash",
+        "Python",
+        "Scripting",
+        "Automation"
+      ]
+    },
+    {
+      "name": "Containerization & Orchestration",
+      "level": "Advanced",
+      "keywords": [
+        "Docker",
+        "CI/CD",
+        "DevOps"
+      ]
+    },
+    {
+      "name": "Infrastructure as Code",
+      "level": "Advanced",
+      "keywords": [
+        "Terraform",
+        "Ansible",
+        "Infrastructure as Code"
+      ]
+    },
+    {
+      "name": "Database Management",
+      "level": "Advanced",
+      "keywords": [
+        "PostgreSQL",
+        "Database Administration"
+      ]
+    },
+    {
+      "name": "Networking",
+      "level": "Advanced",
+      "keywords": [
+        "Networking",
+        "DNS",
+        "Load Balancing"
+      ]
+    },
+    {
+      "name": "Security",
+      "level": "Advanced",
+      "keywords": [
+        "Web Security",
+        "Firewalls",
+        "SSL",
+        "API Rate Limiting"
+      ]
+    },
+    {
+      "name": "Monitoring & Observability",
+      "level": "Master",
+      "keywords": [
+        "Grafana",
+        "Prometheus",
+        "Monitoring"
+      ]
+    },
+    {
+      "name": "Site Reliability Engineering",
+      "level": "Master",
+      "keywords": [
+        "SRE",
+        "Fast Recovery Planning",
+        "Disaster Mitigation",
+        "High Availability",
+        "Scalability"
+      ]
+    },
+    {
+      "name": "Problem Resolution",
+      "level": "Advanced",
+      "keywords": [
+        "Problem-solving",
+        "Troubleshooting",
+        "Communication"
+      ]
+    }
+  ]
+}

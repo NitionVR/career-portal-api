@@ -1,0 +1,71 @@
+{
+  "title": "Senior Fullstack Java Developer (Momentum Investments - Ref MomInv005)",
+  "company": "Enviro365 I.T Solutions",
+  "type": "Fixed Term",
+  "date": "2025-05",
+  "description": "Enviro365 I.T Solutions is looking for a talented and experienced Fullstack Developer to join our dynamic team. As a Fullstack Developer, you will be responsible for designing, developing, and maintaining both front-end and back-end systems. The ideal candidate should have a strong background in web development, strong technical skills, excellent problem-solving skills, and a passion for creating innovative solutions.",
+  "location": {
+    "address": "",
+    "postalCode": "",
+    "city": "Centurion",
+    "countryCode": "ZA",
+    "region": "Gauteng"
+  },
+  "remote": "Hybrid",
+  "salary": "Market Related",
+  "experience": "Intermediate/Senior",
+  "responsibilities": [
+    "Design & develop Java Enterprise applications",
+    "Develop unit tests",
+    "Design and write application specifications",
+    "Respect for design patterns",
+    "Working closely with agile teams (developers, product owners, business analysts, etc.) to find solutions and solve business problems using software",
+    "Perform minimal manual testing",
+    "Application deployment"
+  ],
+  "qualifications": [],
+  "skills": [
+    {
+      "name": "Backend Development",
+      "level": "Advanced",
+      "keywords": [
+        "Java",
+        "Springboot",
+        "Spring Cloud",
+        "Enterprise applications"
+      ]
+    },
+    {
+      "name": "Frontend Development",
+      "level": "Intermediate",
+      "keywords": [
+        "AngularJS",
+        "Angular"
+      ]
+    },
+    {
+      "name": "Database Management",
+      "level": "Advanced",
+      "keywords": [
+        "Postgres",
+        "MongoDB",
+        "SQL"
+      ]
+    },
+    {
+      "name": "Cloud Services",
+      "level": "Intermediate",
+      "keywords": [
+        "AWS S3"
+      ]
+    },
+    {
+      "name": "Version Control",
+      "level": "Advanced",
+      "keywords": [
+        "Git",
+        "Gitflow"
+      ]
+    }
+  ]
+}

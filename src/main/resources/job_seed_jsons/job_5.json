@@ -1,0 +1,92 @@
+{
+  "title": "BI ANALYST REQUIRED - QSR INDUSTRY",
+  "company": "Silver Lake Trading",
+  "type": "Full-time",
+  "date": "2024-12",
+  "description": "We are seeking a Business Analyst with strong expertise in Microsoft BI and SQL, combined with the ability to drive ICT strategy and compliance across our store network. This is not just a back-office reporting role – it requires hands-on leadership in stores, bridging digital skills, and ensuring our teams are equipped for a 100% digital brand environment. The successful candidate will split time between analytical/reporting responsibilities and ICT operations management, including 50% store visits each month, ensuring all stores are visited within a two-month cycle.",
+  "location": {
+    "address": "",
+    "postalCode": "",
+    "city": "Ballito",
+    "countryCode": "ZA",
+    "region": "KwaZulu-Natal"
+  },
+  "remote": "On-site",
+  "salary": "",
+  "experience": "Intermediate",
+  "responsibilities": [
+    "Develop, maintain, and optimize Microsoft BI dashboards and reports for operational and financial insights",
+    "Write, manage, and optimize SQL queries and stored procedures for accurate, timely business reporting",
+    "Partner with Finance, Operations, and HR to translate business requirements into BI solutions",
+    "Perform advanced data analysis to identify risks, opportunities, and efficiency improvements",
+    "Ensure automation and integrity of reporting processes, providing 365-day visibility of KPIs",
+    "Drive ICT policies and ensure compliance across all stores and support functions",
+    "Manage ICT support contracts and relationships with technology service providers",
+    "Visit 50% of stores monthly to bridge ICT skills gaps among Store Managers and teams",
+    "Ensure correct usage of ICT dashboards and reports for operational improvement",
+    "Verify compliance with ICT policies and digital standards",
+    "Work closely with Operations to improve the store work environment, reduce inefficiencies, and enhance customer experience through digital tools"
+  ],
+  "qualifications": [
+    "Bachelor's degree in Information Systems, Computer Science, Business Analytics, or related field",
+    "3–5 years' experience as a Business Analyst, BI Developer, or ICT-focused operations role",
+    "Advanced expertise in Microsoft Power BI (dashboards, DAX, Power Query) and SQL",
+    "Strong understanding of ICT operations, compliance, and vendor management",
+    "Excellent problem-solving, communication, and training skills",
+    "Experience in the retail, QSR, or FMCG sector is an advantage"
+  ],
+  "skills": [
+    {
+      "name": "Business Intelligence",
+      "level": "Advanced",
+      "keywords": [
+        "Microsoft Power BI",
+        "Dashboards",
+        "DAX",
+        "Power Query",
+        "Data Analytics",
+        "KPI reporting"
+      ]
+    },
+    {
+      "name": "Database Management",
+      "level": "Advanced",
+      "keywords": [
+        "SQL",
+        "Stored procedures",
+        "Query optimization"
+      ]
+    },
+    {
+      "name": "ICT Operations",
+      "level": "Advanced",
+      "keywords": [
+        "ICT strategy",
+        "ICT compliance",
+        "ICT policies",
+        "Vendor management",
+        "Digital transformation"
+      ]
+    },
+    {
+      "name": "Business Analysis",
+      "level": "Advanced",
+      "keywords": [
+        "Requirements gathering",
+        "Data analysis",
+        "Reporting automation",
+        "Operational insights"
+      ]
+    },
+    {
+      "name": "Industry Knowledge",
+      "level": "Intermediate",
+      "keywords": [
+        "QSR",
+        "Retail",
+        "FMCG",
+        "KFC franchise"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,209 @@
+{
+  "title": "Infrastructure Architect",
+  "company": "Job Crystal",
+  "type": "Permanent",
+  "date": "2024-12",
+  "description": "As an Infrastructure Architect, you will play a critical role in designing and implementing robust IT infrastructure solutions for our clients. Your expertise will be instrumental in defining the technology roadmap, ensuring scalability, availability, and security of our clients' infrastructure. You will collaborate with cross-functional teams, including client stakeholders, project managers, engineers, and operations personnel, to deliver high-quality solutions that align with business objectives.",
+  "location": {
+    "address": "",
+    "postalCode": "",
+    "city": "Remote",
+    "countryCode": "ZA",
+    "region": ""
+  },
+  "remote": "Remote",
+  "salary": "83333",
+  "experience": "Senior",
+  "responsibilities": [
+    "Develop and design infrastructure solutions that align with our clients' strategic goals and objectives",
+    "Create comprehensive infrastructure designs that integrate data centers, cloud services, security measures, hardware, software, networking, and storage solutions while ensuring that each component aligns with the client's strategic goals and operational needs",
+    "Design solutions that can scale with the client's business growth and adapt to changing technological landscapes",
+    "Design infrastructure solutions that use flexible architectures that allow for easy updates and enhancements",
+    "Incorporate the latest technologies and innovations into infrastructure designs, ensuring that clients benefit from cutting-edge solutions that enhance performance and efficiency",
+    "Lead efforts to work closely with clients, business leaders, and technical teams to gather infrastructure requirements and align them with business objectives",
+    "Coordinate project activities with project managers, ensuring that infrastructure projects are delivered on time, within scope, and within budget",
+    "Perform detailed capacity planning to ensure that infrastructure can support current and future workloads",
+    "Develop strategies for efficient resource allocation to meet infrastructure demands",
+    "Create detailed roadmaps that outline the steps for infrastructure upgrades, enhancements, and migrations",
+    "Provide clear timelines and milestones to guide implementation efforts",
+    "Develop comprehensive plans for upgrading existing infrastructure and migrating to new platforms or technologies to ensure minimal disruption to business operations during transitions",
+    "Oversee the Implementation of infrastructure projects, coordinating efforts between various teams and stakeholders to ensure successful execution",
+    "Oversee the implementation of data centre architectures that meet client requirements for performance, security, and scalability",
+    "Oversee the implementation of virtualization technologies to enhance resource utilization and flexibility",
+    "Oversee the implementation of cloud solutions, including public, private, and hybrid cloud environments and ensure seamless integration with existing infrastructure and optimize for performance and cost",
+    "Develop detailed system architecture plans that address all aspects of infrastructure, including performance optimization, high availability, robust security, and cost management",
+    "Oversee that the system architecture supports optimal performance by leveraging efficient resource allocation, load balancing, and advanced caching mechanisms",
+    "Design architectures with redundancy and failover capabilities to ensure continuous operation and minimal downtime in case of component failures",
+    "Implement scalable architecture patterns that allow for seamless expansion as business needs grow, ensuring that the infrastructure can handle increased demand without compromising performance",
+    "Assist in troubleshooting and resolving complex infrastructure issues that require advanced technical expertise",
+    "Conduct root cause analysis to identify underlying issues and prevent recurrence",
+    "Develop and implement corrective actions to address root causes",
+    "Analyse infrastructure performance and implement optimization strategies to enhance efficiency and reduce bottlenecks",
+    "Provide guidance and support to IT operations teams during incident response. Help resolve escalated issues and ensure timely resolution",
+    "Identify opportunities for continuous improvement in infrastructure management processes. Implement best practices to enhance overall system reliability and performance",
+    "Develop and maintain comprehensive documentation for all infrastructure designs, configurations, and standards and ensure that documentation is clear, accurate, and up-to-date",
+    "Create detailed architectural diagrams that visually represent infrastructure designs, including network topologies, server configurations, and data flow diagrams",
+    "Design technical specifications for infrastructure components, including hardware, software, and network configurations and provide detailed instructions for deployment and configuration",
+    "Establish and document procedures and standards for infrastructure management, including best practices for maintenance, monitoring, and troubleshooting",
+    "Maintain accessible and up-to-date documentation for team members and stakeholders",
+    "Oversee that infrastructure solutions meet security and compliance requirements, including data protection, access controls, high-availability, disaster recovery, and business continuity",
+    "Oversee that all infrastructure solutions comply with relevant industry standards and regulatory requirements",
+    "Implement industry best practices and stay updated with evolving security threats and technologies",
+    "Collaborate with various teams to gather requirements, provide technical guidance, and ensure successful implementation of infrastructure projects",
+    "Mentor project engineers and the PMD team, providing guidance, training, and support to foster professional development and technical growth",
+    "Foster a culture of continuous learning and knowledge sharing within the team",
+    "Organise and facilitate training sessions, workshops, and knowledge-sharing initiatives to enhance team capabilities",
+    "Implement industry best practices in all aspects of infrastructure design, deployment, and management. Ensure that the organization remains at the forefront of technological advancements",
+    "Participate in continuous learning through training, certifications, and self-study to enhance technical skills and knowledge",
+    "Set and review personal development goals to ensure continuous improvement and growth",
+    "Evaluate and adopt new technologies and methodologies that can improve infrastructure design and implementation. Promote a culture of innovation within the team"
+  ],
+  "qualifications": [
+    "5+ years of hands-on experience in infrastructure architecture, design, and implementation",
+    "Microsoft 365 Enterprise Administrator Expert (MS-102) certification OR Microsoft Azure Solutions Architect Expert certification",
+    "Strong knowledge of infrastructure components (servers, storage systems, networking, virtualization, security, cloud technologies)",
+    "Advanced expertise in architecting, designing, and implementing complex, scalable, and high-availability infrastructure solutions",
+    "Strong experience with cloud platforms (Azure, M365, AWS, GCP) and hybrid cloud architectures",
+    "Proficiency in infrastructure design tools (e.g., Visio)",
+    "Familiarity with IT service management frameworks (e.g., ITIL)",
+    "Familiarity with project management methodologies (e.g., Waterfall)",
+    "Experience within a managed service provider environment (Preferred)",
+    "Bachelor's degree in Computer Science, Information Technology, or a related field (Preferred)",
+    "Experience with Quest Tooling (Preferred)",
+    "Other technical certifications (e.g., Microsoft, Dell, Fortinet, SonicWall, SentinelOne, HPE Aruba, Veeam, AWS, Google) (Preferred)",
+    "Preferable experience with Microsoft cloud platform (Azure/M365)"
+  ],
+  "skills": [
+    {
+      "name": "Infrastructure Architecture & Design",
+      "level": "Master",
+      "keywords": [
+        "Infrastructure Architecture",
+        "Infrastructure Design",
+        "Infrastructure Implementation",
+        "Systems Architecture",
+        "Architectural Flexibility",
+        "Scalability",
+        "High Availability"
+      ]
+    },
+    {
+      "name": "Cloud Platforms",
+      "level": "Master",
+      "keywords": [
+        "Azure",
+        "Microsoft 365",
+        "AWS",
+        "Google Cloud Platform (GCP)",
+        "Hybrid Cloud",
+        "Cloud Technologies"
+      ]
+    },
+    {
+      "name": "Infrastructure Components",
+      "level": "Master",
+      "keywords": [
+        "Servers",
+        "Storage Systems",
+        "Networking",
+        "Virtualization",
+        "Hardware",
+        "Software",
+        "Data Centers"
+      ]
+    },
+    {
+      "name": "Security & Compliance",
+      "level": "Advanced",
+      "keywords": [
+        "Security Concepts",
+        "Data Protection",
+        "Access Control",
+        "Compliance",
+        "Industry Standards",
+        "Regulatory Requirements"
+      ]
+    },
+    {
+      "name": "Infrastructure Planning",
+      "level": "Advanced",
+      "keywords": [
+        "Capacity Planning",
+        "Resource Allocation",
+        "Roadmap Development",
+        "Migration Strategies",
+        "Strategic Planning"
+      ]
+    },
+    {
+      "name": "Performance & Optimization",
+      "level": "Advanced",
+      "keywords": [
+        "Performance Optimization",
+        "Load Balancing",
+        "Redundancy",
+        "Disaster Recovery",
+        "Business Continuity"
+      ]
+    },
+    {
+      "name": "Project & Client Management",
+      "level": "Advanced",
+      "keywords": [
+        "Project Management",
+        "Client Management",
+        "Stakeholder Management",
+        "Requirements Gathering",
+        "Waterfall Methodology"
+      ]
+    },
+    {
+      "name": "Operations & Support",
+      "level": "Advanced",
+      "keywords": [
+        "Troubleshooting",
+        "Root Cause Analysis",
+        "Incident Response",
+        "Technical Support",
+        "Monitoring",
+        "ITIL",
+        "Continuous Improvement"
+      ]
+    },
+    {
+      "name": "Documentation & Tools",
+      "level": "Advanced",
+      "keywords": [
+        "Technical Documentation",
+        "Visio",
+        "Configuration Management",
+        "Quest Tooling"
+      ]
+    },
+    {
+      "name": "Vendor Technologies",
+      "level": "Intermediate",
+      "keywords": [
+        "Microsoft Technologies",
+        "Dell Technologies",
+        "Fortinet",
+        "SonicWall",
+        "SentinelOne",
+        "HPE Aruba",
+        "Veeam"
+      ]
+    },
+    {
+      "name": "Leadership & Development",
+      "level": "Advanced",
+      "keywords": [
+        "Leadership",
+        "Mentoring",
+        "Training",
+        "Coaching",
+        "Knowledge Sharing",
+        "Team Management"
+      ]
+    }
+  ]
+}

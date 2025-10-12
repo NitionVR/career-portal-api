@@ -1,0 +1,112 @@
+{
+  "title": "Intermediate Java Developer (Ref IJD002)",
+  "company": "Enviro365 It Solutions",
+  "type": "Fixed Term",
+  "date": "2025-05",
+  "description": "Enviro365 It Solutions is a dynamic software development company specializing in innovative software solutions. We pride ourselves on pushing boundaries and delivering cutting-edge products that enhance user experiences and drive business growth. Our team is dynamic, collaborative, and passionate about leveraging technology to solve complex challenges. We are looking for a talented and self-motivated Intermediate Java Software Developer to join our dynamic team. As an Intermediate Java Developer, you will be responsible for developing and maintaining high-quality software applications that meet customer needs. You will collaborate with other developers and engineers to design and deliver innovative solutions using Java technologies.",
+  "location": {
+    "address": "",
+    "postalCode": "",
+    "city": "Centurion",
+    "countryCode": "ZA",
+    "region": "Gauteng"
+  },
+  "remote": "Hybrid",
+  "salary": "Market Related",
+  "experience": "Intermediate",
+  "responsibilities": [
+    "Design, develop, and test Java-based applications",
+    "Collaborate with cross-functional teams to define, design, and ship new features",
+    "Write clean, scalable, and maintainable code",
+    "Troubleshoot and debug applications",
+    "Conduct code reviews to ensure code quality and compliance with design standards",
+    "Participate in software architecture, design discussions, and planning sessions",
+    "Stay updated with emerging technologies and apply them to the software development process",
+    "Support continuous improvement by investigating alternatives and technologies and presenting these for architectural review"
+  ],
+  "qualifications": [
+    "Minimum 4 years' experience as a Java Developer",
+    "Strong knowledge of Java core concepts and design patterns",
+    "Experience with Spring Framework (Spring Boot, Spring MVC)",
+    "Proficient in database technologies (SQL, JDBC, ORM frameworks like Hibernate)",
+    "Familiarity with web technologies (HTML, CSS, JavaScript)",
+    "Experience with version control systems (Git, SVN)",
+    "Good understanding of Agile development methodologies",
+    "Excellent problem-solving and analytical skills",
+    "Ability to work independently and in a team environment",
+    "Strong communication skills"
+  ],
+  "skills": [
+    {
+      "name": "Backend Development",
+      "level": "Advanced",
+      "keywords": [
+        "Java",
+        "Springboot",
+        "Spring MVC",
+        "Spring Cloud",
+        "Hibernate",
+        "Microservices architecture"
+      ]
+    },
+    {
+      "name": "Frontend Development",
+      "level": "Intermediate",
+      "keywords": [
+        "AngularJS",
+        "Angular",
+        "HTML",
+        "CSS",
+        "JavaScript"
+      ]
+    },
+    {
+      "name": "Database Management",
+      "level": "Advanced",
+      "keywords": [
+        "SQL",
+        "Postgres",
+        "MongoDB",
+        "NoSQL",
+        "JDBC",
+        "Cassandra"
+      ]
+    },
+    {
+      "name": "Cloud Services",
+      "level": "Intermediate",
+      "keywords": [
+        "AWS S3",
+        "AWS",
+        "Azure",
+        "Google Cloud"
+      ]
+    },
+    {
+      "name": "Version Control",
+      "level": "Advanced",
+      "keywords": [
+        "Git",
+        "Gitflow",
+        "SVN"
+      ]
+    },
+    {
+      "name": "DevOps & Containerization",
+      "level": "Intermediate",
+      "keywords": [
+        "Docker",
+        "Kubernetes"
+      ]
+    },
+    {
+      "name": "Testing",
+      "level": "Intermediate",
+      "keywords": [
+        "JUnit",
+        "Mockito",
+        "Unit testing"
+      ]
+    }
+  ]
+}
