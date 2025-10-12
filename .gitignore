@@ -54,3 +54,10 @@ run_dev.sh
 run_prod.sh
 
 Etalente_Backend_Testing.postman_collection.json
+
+# Added by Gemini
+.DS_Store
+architectural_directory_tree.txt
+job_002.log
+permission_tests_fix.log
+public_job_posts.json
