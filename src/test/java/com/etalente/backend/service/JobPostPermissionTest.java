@@ -243,7 +243,7 @@ class JobPostPermissionTest extends BaseIntegrationTest {
     void hiringManagerCanCloseJobPost() {
         authenticateAs(hiringManager.getEmail());
 
-        assertThatCode(() -> jobPostService.closeJobPost(openJobPost.getId(), hiringManager.getEmail()))
+        assertThatCode(() -> jobPostService.closeJobPost(openJobPost.getId(), null, hiringManager.getEmail()))
                 .doesNotThrowAnyException();
 
         JobPost updated = jobPostRepository.findById(openJobPost.getId()).orElseThrow();
@@ -254,7 +254,7 @@ class JobPostPermissionTest extends BaseIntegrationTest {
     void recruiterCanCloseJobPost() {
         authenticateAs(recruiter.getEmail());
 
-        assertThatCode(() -> jobPostService.closeJobPost(openJobPost.getId(), recruiter.getEmail()))
+        assertThatCode(() -> jobPostService.closeJobPost(openJobPost.getId(), null, recruiter.getEmail()))
                 .doesNotThrowAnyException();
 
         JobPost updated = jobPostRepository.findById(openJobPost.getId()).orElseThrow();

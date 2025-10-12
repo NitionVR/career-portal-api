@@ -8,15 +8,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({TestAwsConfig.class})
+@ComponentScan("com.etalente.backend")
 @Tag("integration")
 @TestPropertySource(properties = {
         "spring.datasource.url=jdbc:tc:postgresql:15-alpine:///etalente",
@@ -28,12 +30,5 @@ import org.springframework.transaction.annotation.Transactional;
 public abstract class BaseIntegrationTest {
 
     @Autowired
-    private EntityManager entityManager;
-
-    @AfterEach
-    void clearDatabase() {
-        entityManager.createNativeQuery("TRUNCATE TABLE users, organizations, recruiter_invitations, job_posts RESTART IDENTITY CASCADE").executeUpdate();
-        entityManager.flush();
-        entityManager.clear();
-    }
+    protected EntityManager entityManager;
 }

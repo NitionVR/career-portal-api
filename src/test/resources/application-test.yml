@@ -25,11 +25,19 @@ spring:
       ses:
         mail:
           enabled: false # Disable SES JavaMailSender when test profile is active
+  security:
+    enabled: true
+  mvc:
+    static-path-pattern: /static/**
 
 logging:
+  pattern:
+  
+    exception-conversion-word: '%xEx{short}'
   level:
     root: WARN
     com.etalente.backend: DEBUG
+    org.springframework.web: TRACE
 
 jwt:
   secret-key: dGhpc2lzYWxvbmdzZWNyZXRrZXlmb3Jqd3R0ZXN0aW5nMTIz

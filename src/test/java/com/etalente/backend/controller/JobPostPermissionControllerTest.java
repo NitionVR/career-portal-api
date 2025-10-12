@@ -10,23 +10,29 @@ import com.etalente.backend.repository.OrganizationRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @AutoConfigureMockMvc
 class JobPostPermissionControllerTest extends BaseIntegrationTest {
+
+
 
     @Autowired
     private MockMvc mockMvc;
@@ -46,6 +52,12 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private EntityManager entityManager;
+
+    @Autowired
+    private UserDetailsService userDetailsService;
+
     private Organization organization;
     private User hiringManager;
     private User recruiter;
@@ -59,29 +71,54 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
     void setUp() {
         // Create organization
         organization = new Organization();
-        organization.setName("Test Company");
+        organization.setName("Test Company " + UUID.randomUUID());
         organization.setIndustry("Tech");
         organization = organizationRepository.save(organization);
 
-        // Create users
-        hiringManager = createUser("hm@test.com", "hm1", Role.HIRING_MANAGER, organization);
-        recruiter = createUser("recruiter@test.com", "rec1", Role.RECRUITER, organization);
-        candidate = createUser("candidate@test.com", "cand1", Role.CANDIDATE, null);
+        // Create users with unique emails
+        hiringManager = createUser("hm-" + UUID.randomUUID() + "@test.com", "hm1", Role.HIRING_MANAGER, organization);
+        recruiter = createUser("recruiter-" + UUID.randomUUID() + "@test.com", "rec1", Role.RECRUITER, organization);
+        candidate = createUser("candidate-" + UUID.randomUUID() + "@test.com", "cand1", Role.CANDIDATE, null);
 
-        // Generate tokens
-        hmToken = generateToken(hiringManager);
-        recruiterToken = generateToken(recruiter);
-        candidateToken = generateToken(candidate);
-
-        // Create job post
+        // Create job post with ALL required fields for publishing
         jobPost = new JobPost();
         jobPost.setTitle("Test Job");
         jobPost.setDescription("This is a test description for a job post. It needs to be at least 50 characters long to pass validation.");
+        jobPost.setJobType("Full-time");
+        jobPost.setExperienceLevel("Mid-level");
+        jobPost.setCompany(organization.getName());
+
+        ObjectNode location = objectMapper.createObjectNode();
+        location.put("city", "San Francisco");
+        location.put("countryCode", "US");
+        jobPost.setLocation(location);
+
         jobPost.setCreatedBy(hiringManager);
         jobPost.setOrganization(organization);
         jobPost.setStatus(JobPostStatus.DRAFT);
         jobPost = jobPostRepository.save(jobPost);
+
+        // Flush to ensure everything is persisted
+        entityManager.flush();
+        entityManager.clear();
+
+        // Reload entities to ensure they're managed and have proper IDs
+        organization = organizationRepository.findById(organization.getId()).orElseThrow();
+        hiringManager = userRepository.findById(hiringManager.getId()).orElseThrow();
+        recruiter = userRepository.findById(recruiter.getId()).orElseThrow();
+        candidate = userRepository.findById(candidate.getId()).orElseThrow();
+        jobPost = jobPostRepository.findById(jobPost.getId()).orElseThrow();
+
+        // Generate tokens AFTER flushing and reloading
+        UserDetails hmDetails = userDetailsService.loadUserByUsername(hiringManager.getEmail());
+        hmToken = jwtService.generateToken(hmDetails);
+        UserDetails recruiterDetails = userDetailsService.loadUserByUsername(recruiter.getEmail());
+        recruiterToken = jwtService.generateToken(recruiterDetails);
+        UserDetails candidateDetails = userDetailsService.loadUserByUsername(candidate.getEmail());
+        candidateToken = jwtService.generateToken(candidateDetails);
     }
+
+
 
     // === CREATE ENDPOINT TESTS ===
 
@@ -313,16 +350,6 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
         user.setEmailVerified(true);
         user.setProfileComplete(true);
         return userRepository.save(user);
-    }
-
-    private String generateToken(User user) {
-        UserDetails userDetails = org.springframework.security.core.userdetails.User
-                .withUsername(user.getEmail())
-                .password("")
-                .authorities(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
-                .build();
-
-        return jwtService.generateToken(Map.of("role", user.getRole().name()), userDetails);
     }
 
     private JobPostRequest createJobPostRequest() {
