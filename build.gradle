@@ -28,6 +28,7 @@ dependencies {
 	implementation 'org.flywaydb:flyway-database-postgresql'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.13'
 	implementation 'io.awspring.cloud:spring-cloud-aws-starter-ses:3.1.1'
 	implementation 'io.hypersistence:hypersistence-utils-hibernate-63:3.7.0'
 	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
@@ -39,6 +40,8 @@ dependencies {
 	runtimeOnly 'org.postgresql:postgresql'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.security:spring-security-test'
+	testImplementation 'org.springframework.security:spring-security-oauth2-jose'
 	testImplementation 'org.testcontainers:postgresql:1.19.3'
 	testImplementation 'org.testcontainers:junit-jupiter:1.19.3'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -60,21 +63,25 @@ sourceSets {
 
 tasks.named('test') {
 	useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+        showStandardStreams = true
+    }
 }
 
-task unitTest(type: Test) {
+tasks.register('unitTest', Test) {
 	useJUnitPlatform {
 		includeTags 'unit'
 	}
 }
 
-task integrationTest(type: Test) {
+tasks.register('integrationTest', Test) {
 	useJUnitPlatform {
 		includeTags 'integration'
 	}
 }
 
-task acceptanceTest(type: Test) {
+tasks.register('acceptanceTest', Test) {
 	useJUnitPlatform {
 		includeTags 'acceptance'
 	}

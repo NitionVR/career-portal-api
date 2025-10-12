@@ -43,7 +43,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                     .requestMatchers("/api/auth/**", "/actuator/**", "/error", "/api/invitations/validate/**",
-                            "/api/invitations/accept/**").permitAll() // All auth endpoints are public
+                            "/api/invitations/accept/**", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll() // All auth endpoints are public and OpenAPI docs
                     .requestMatchers(HttpMethod.GET, "/api/job-posts", "/api/job-posts/**").permitAll()
                     .anyRequest().authenticated()
             )
