@@ -26,8 +26,9 @@ public class JobApplicationController {
     @PreAuthorize("hasRole('CANDIDATE')")
     public Page<ApplicationSummaryDto> getMyApplications(
             Pageable pageable,
-            @RequestParam(required = false) String search) {
-        return jobApplicationService.getMyApplications(pageable, search);
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String sort) {
+        return jobApplicationService.getMyApplications(pageable, search, sort);
     }
 
     @GetMapping("/applications/{id}")

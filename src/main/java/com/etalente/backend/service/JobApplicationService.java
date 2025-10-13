@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public interface JobApplicationService {
 
-    Page<ApplicationSummaryDto> getMyApplications(Pageable pageable, String search);
+    Page<ApplicationSummaryDto> getMyApplications(Pageable pageable, String search, String sort);
 
     ApplicationDetailsDto getApplicationDetails(UUID applicationId);
 
