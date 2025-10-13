@@ -15,6 +15,7 @@ import com.etalente.backend.model.Role;
 import com.etalente.backend.model.StateTransition;
 import com.etalente.backend.model.User;
 import com.etalente.backend.repository.JobPostRepository;
+import com.etalente.backend.repository.JobPostSpecification;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.OrganizationContext;
 import com.etalente.backend.service.JobPostPermissionService;
@@ -25,6 +26,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -114,22 +116,34 @@ public class JobPostServiceImpl implements JobPostService {
     }
 
     @Override
-    public Page<JobPostResponse> listJobPosts(Pageable pageable) {
+    public Page<JobPostResponse> listJobPosts(Pageable pageable,
+                                              String search,
+                                              String skillSearch,
+                                              List<String> experienceLevels,
+                                              List<String> jobTypes,
+                                              List<String> workTypes) {
         User currentUser = organizationContext.getCurrentUserOrNull();
 
         // Unauthenticated users or candidates see only public jobs
         if (currentUser == null || currentUser.getRole() == Role.CANDIDATE) {
-            return jobPostRepository.findPublishedJobs(pageable).map(this::mapToResponse);
-        }
-
-        // For hiring managers and recruiters with organization, show org jobs
-        if (currentUser.getOrganization() != null) {
-            return jobPostRepository.findByOrganization(currentUser.getOrganization(), pageable)
+            return jobPostRepository.findAll(JobPostSpecification.withFilters(search, skillSearch, experienceLevels, jobTypes, workTypes)
+                            .and(JobPostSpecification.isPublic()), pageable)
                     .map(this::mapToResponse);
         }
 
-        // Fallback: show public jobs
-        return jobPostRepository.findPublishedJobs(pageable).map(this::mapToResponse);
+        // For hiring managers and recruiters with organization, show all org jobs, applying filters if present
+        if (currentUser.getOrganization() != null) {
+            Specification<JobPost> orgSpec = (root, query, criteriaBuilder) -> criteriaBuilder.equal(root.get("organization").get("id"), currentUser.getOrganization().getId());
+            Specification<JobPost> filterSpec = JobPostSpecification.withFilters(search, skillSearch, experienceLevels, jobTypes, workTypes);
+            Specification<JobPost> combinedSpec = orgSpec.and(filterSpec);
+            return jobPostRepository.findAll(combinedSpec, pageable)
+                    .map(this::mapToResponse);
+        }
+
+        // Fallback: show public jobs (should not be reached for authenticated users with organization)
+        return jobPostRepository.findAll(JobPostSpecification.withFilters(search, skillSearch, experienceLevels, jobTypes, workTypes)
+                        .and(JobPostSpecification.isPublic()), pageable)
+                .map(this::mapToResponse);
     }
 
     @Override

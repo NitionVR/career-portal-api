@@ -95,7 +95,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
     void hiringManagerCanOnlySeeOwnOrganizationJobPosts() {
         authenticateAs(hiringManagerA.getEmail());
 
-        Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10));
+        Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10), null, null, null, null, null);
 
         assertThat(jobs.getContent()).hasSize(1);
         assertThat(jobs.getContent().get(0).title()).contains("Company A");
@@ -137,8 +137,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
     @Test
     void recruiterCanSeeJobPostsFromSameOrganization() {
         authenticateAs(recruiterA.getEmail());
-
-        Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10));
+        Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10), null, null, null, null, null);
 
         assertThat(jobs.getContent()).hasSize(1);
         assertThat(jobs.getContent().get(0).title()).contains("Company A");
@@ -157,7 +156,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
     void candidateCanOnlySeePublicJobPosts() {
         authenticateAs(candidate.getEmail());
 
-        Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10));
+        Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10), null, null, null, null, null);
 
         // Should only see OPEN job posts
         assertThat(jobs.getContent()).hasSize(1);
@@ -239,7 +238,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
         // Candidate searches
         authenticateAs(candidate.getEmail());
-        Page<JobPostResponse> results = jobPostService.listJobPosts(PageRequest.of(0, 10));
+        Page<JobPostResponse> results = jobPostService.listJobPosts(PageRequest.of(0, 10), null, null, null, null, null);
 
         // Should only see OPEN jobs
         assertThat(results.getContent())
@@ -293,10 +292,4 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
         );
     }
 
-    private void authenticateAs(String email) {
-        UserDetails userDetails = userDetailsService.loadUserByUsername(email);
-        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                userDetails, null, userDetails.getAuthorities());
-        SecurityContextHolder.getContext().setAuthentication(auth);
-    }
 }

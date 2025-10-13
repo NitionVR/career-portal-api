@@ -172,7 +172,7 @@ public class JobPostSeeder implements CommandLineRunner {
 
                 try {
                     // Check if job post already exists to prevent duplicates
-                    boolean exists = jobPostService.listJobPosts(null) // Fetch all job posts (or a more targeted query)
+                    boolean exists = jobPostService.listJobPosts(null, null, null, null, null, null) // Fetch all job posts (or a more targeted query)
                             .stream()
                             .anyMatch(jp -> jp.title().equals(request.title()) && jp.company().equals(request.company()));
 

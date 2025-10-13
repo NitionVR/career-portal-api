@@ -14,7 +14,12 @@ import java.util.UUID;
 public interface JobPostService {
     JobPostResponse createJobPost(JobPostRequest request, String userEmail);
     JobPostResponse getJobPost(UUID id);
-    Page<JobPostResponse> listJobPosts(Pageable pageable);
+    Page<JobPostResponse> listJobPosts(Pageable pageable,
+                                       String search,
+                                       String skillSearch,
+                                       List<String> experienceLevels,
+                                       List<String> jobTypes,
+                                       List<String> workTypes);
     Page<JobPostResponse> listJobPostsByUser(String userEmail, Pageable pageable);
     JobPostResponse updateJobPost(UUID id, JobPostRequest request, String userEmail);
     void deleteJobPost(UUID id, String userEmail);

@@ -27,6 +27,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import com.etalente.backend.repository.JobPostSpecification;
 
 import java.util.Collections;
 import java.util.Optional;
@@ -215,10 +217,10 @@ class JobPostServiceImplTest {
         User candidateUser = new User();
         candidateUser.setRole(Role.CANDIDATE);
         when(organizationContext.getCurrentUserOrNull()).thenReturn(candidateUser);
-        when(jobPostRepository.findPublishedJobs(pageable)).thenReturn(page);
+        when(jobPostRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
 
         // When
-        var result = jobPostService.listJobPosts(pageable);
+        var result = jobPostService.listJobPosts(pageable, null, null, null, null, null);
 
         // Then
         assertEquals(1, result.getTotalElements());

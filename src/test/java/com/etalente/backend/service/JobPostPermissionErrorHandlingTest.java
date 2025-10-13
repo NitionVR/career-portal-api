@@ -147,10 +147,4 @@ class JobPostPermissionErrorHandlingTest extends BaseIntegrationTest {
         );
     }
 
-    private void authenticateAs(String email) {
-        UserDetails userDetails = userDetailsService.loadUserByUsername(email);
-        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                userDetails, null, userDetails.getAuthorities());
-        SecurityContextHolder.getContext().setAuthentication(auth);
-    }
 }

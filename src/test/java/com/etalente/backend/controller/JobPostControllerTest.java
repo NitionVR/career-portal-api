@@ -8,14 +8,19 @@ import com.etalente.backend.repository.JobPostRepository;
 import com.etalente.backend.repository.OrganizationRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
+import com.etalente.backend.service.JobPostService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.javafaker.Faker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,7 +59,13 @@ class JobPostControllerTest extends BaseIntegrationTest {
     private JwtService jwtService;
 
     @Autowired
+    private UserDetailsService userDetailsService;
+
+    @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JobPostService jobPostService;
 
     private Faker faker;
     private Organization organization;
@@ -159,9 +170,20 @@ class JobPostControllerTest extends BaseIntegrationTest {
         // Given
         User user = createUser(Role.HIRING_MANAGER);
         String token = generateToken(user);
-        createJobPost(user);
-        createJobPost(user);
-        createJobPost(user);
+        JobPost jobPost1 = createJobPost(user);
+        this.authenticateAs(user.getEmail()); // Authenticate before publishing
+        jobPostService.publishJobPost(jobPost1.getId(), user.getEmail());
+        SecurityContextHolder.clearContext(); // Clear context after use
+
+        JobPost jobPost2 = createJobPost(user);
+        this.authenticateAs(user.getEmail()); // Authenticate before publishing
+        jobPostService.publishJobPost(jobPost2.getId(), user.getEmail());
+        SecurityContextHolder.clearContext(); // Clear context after use
+
+        JobPost jobPost3 = createJobPost(user);
+        this.authenticateAs(user.getEmail()); // Authenticate before publishing
+        jobPostService.publishJobPost(jobPost3.getId(), user.getEmail());
+        SecurityContextHolder.clearContext(); // Clear context after use
 
         // When & Then
         mockMvc.perform(get("/api/job-posts")
@@ -297,6 +319,11 @@ class JobPostControllerTest extends BaseIntegrationTest {
         jobPost.setDescription(faker.lorem().characters(250));
         jobPost.setRemote(faker.options().option("On-site", "Remote", "Hybrid"));
         jobPost.setExperienceLevel(faker.options().option("Entry-level", "Mid-level", "Senior-level"));
+        // Add a valid location for publishing
+        ObjectNode location = objectMapper.createObjectNode();
+        location.put("city", faker.address().city());
+        location.put("countryCode", faker.address().countryCode());
+        jobPost.setLocation(location);
         jobPost.setStatus(JobPostStatus.DRAFT);
         jobPost.setCreatedBy(user);
         jobPost.setOrganization(organization);
@@ -332,4 +359,6 @@ class JobPostControllerTest extends BaseIntegrationTest {
     private <T> List<T> generateFakeList(int count, java.util.function.Supplier<T> supplier) {
         return IntStream.range(0, count).mapToObj(i -> supplier.get()).collect(Collectors.toList());
     }
+
+
 }

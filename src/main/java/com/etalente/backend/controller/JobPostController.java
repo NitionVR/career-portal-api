@@ -46,8 +46,13 @@ public class JobPostController {
 
     @GetMapping
     public Page<JobPostResponse> listJobPosts(
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return jobPostService.listJobPosts(pageable);
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String skillSearch,
+            @RequestParam(required = false) List<String> experienceLevels,
+            @RequestParam(required = false) List<String> jobTypes,
+            @RequestParam(required = false) List<String> workTypes) {
+        return jobPostService.listJobPosts(pageable, search, skillSearch, experienceLevels, jobTypes, workTypes);
     }
 
     @GetMapping("/my-posts")
