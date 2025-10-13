@@ -2,6 +2,7 @@ package com.etalente.backend.service.impl;
 
 import com.etalente.backend.dto.ApplicationDetailsDto;
 import com.etalente.backend.dto.ApplicationSummaryDto;
+import com.etalente.backend.dto.JobPostDto;
 import com.etalente.backend.dto.JobPostResponse;
 import com.etalente.backend.exception.BadRequestException;
 import com.etalente.backend.exception.ResourceNotFoundException;
@@ -20,7 +21,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
+import com.etalente.backend.model.JobApplicationAudit;
+import com.etalente.backend.repository.JobApplicationAuditRepository;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -29,13 +34,16 @@ public class JobApplicationServiceImpl implements JobApplicationService {
     private final JobApplicationRepository jobApplicationRepository;
     private final JobPostRepository jobPostRepository;
     private final OrganizationContext organizationContext;
+    private final JobApplicationAuditRepository jobApplicationAuditRepository;
 
     public JobApplicationServiceImpl(JobApplicationRepository jobApplicationRepository,
                                      JobPostRepository jobPostRepository,
-                                     OrganizationContext organizationContext) {
+                                     OrganizationContext organizationContext,
+                                     JobApplicationAuditRepository jobApplicationAuditRepository) {
         this.jobApplicationRepository = jobApplicationRepository;
         this.jobPostRepository = jobPostRepository;
         this.organizationContext = organizationContext;
+        this.jobApplicationAuditRepository = jobApplicationAuditRepository;
     }
 
     @Override
@@ -74,6 +82,9 @@ public class JobApplicationServiceImpl implements JobApplicationService {
         application.setStatus(JobApplicationStatus.APPLIED);
 
         JobApplication savedApplication = jobApplicationRepository.save(application);
+
+        jobApplicationAuditRepository.save(new JobApplicationAudit(savedApplication, JobApplicationStatus.APPLIED, "Application submitted."));
+
         return toSummaryDto(savedApplication);
     }
 
@@ -106,12 +117,20 @@ public class JobApplicationServiceImpl implements JobApplicationService {
     }
 
     private ApplicationDetailsDto toDetailsDto(JobApplication application) {
-        // TODO: Implement communication history
+        List<JobApplicationAudit> auditHistory = jobApplicationAuditRepository.findByJobApplicationId(application.getId());
+        List<ApplicationDetailsDto.CommunicationHistoryDto> communicationHistory = auditHistory.stream()
+                .map(audit -> new ApplicationDetailsDto.CommunicationHistoryDto(
+                        audit.getStatus().name(),
+                        audit.getDate(),
+                        audit.getMessage()
+                ))
+                .collect(Collectors.toList());
+
         return new ApplicationDetailsDto(
                 application.getId(),
                 application.getApplicationDate(),
                 application.getStatus().name(),
-                new JobPostResponse( // This is not ideal, we should have a proper JobPostDto
+                new JobPostDto(
                         application.getJobPost().getId(),
                         application.getJobPost().getTitle(),
                         application.getJobPost().getCompany(),
@@ -130,7 +149,7 @@ public class JobApplicationServiceImpl implements JobApplicationService {
                         application.getJobPost().getCreatedAt(),
                         application.getJobPost().getUpdatedAt()
                 ),
-                Collections.emptyList()
+                communicationHistory
         );
     }
 }

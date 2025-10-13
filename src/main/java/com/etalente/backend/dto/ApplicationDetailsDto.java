@@ -8,7 +8,7 @@ public record ApplicationDetailsDto(
         UUID id,
         LocalDateTime applicationDate,
         String status,
-        JobPostResponse job,
+        JobPostDto job,
         List<CommunicationHistoryDto> communicationHistory
 ) {
     public record CommunicationHistoryDto(
