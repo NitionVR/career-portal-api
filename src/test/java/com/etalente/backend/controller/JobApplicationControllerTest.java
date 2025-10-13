@@ -11,9 +11,12 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.hamcrest.Matchers.is;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class JobApplicationControllerTest extends BaseIntegrationTest {
 
@@ -174,5 +177,68 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()", is(2)))
                 .andExpect(jsonPath("$.content[0].status", is("APPLIED")));
+    }
+    @Test
+    void applyForJob_shouldFail_whenJobPostIsNotOpen() throws Exception {
+        // Given
+        JobPost jobPost = new JobPost();
+        jobPost.setTitle("Closed Job");
+        jobPost.setCompany("Closed Corp.");
+        jobPost.setCreatedBy(hiringManager);
+        jobPost.setStatus(JobPostStatus.CLOSED); // Set status to CLOSED
+        jobPostRepository.save(jobPost);
+
+        // When & Then
+        mockMvc.perform(post("/api/job-posts/{id}/apply", jobPost.getId())
+                        .header("Authorization", "Bearer " + candidateToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("Cannot apply for a job that is not OPEN.")));
+
+    }
+
+    @Test
+    void withdrawApplication_shouldWithdrawSuccessfully_whenStatusIsApplied() throws Exception {
+        // Given
+        JobPost jobPost = new JobPost();
+        jobPost.setTitle("Test Job");
+        jobPost.setCompany("Test Company");
+        jobPost.setCreatedBy(hiringManager);
+        jobPostRepository.save(jobPost);
+
+        JobApplication application = new JobApplication();
+        application.setCandidate(candidate);
+        application.setJobPost(jobPost);
+        application.setStatus(JobApplicationStatus.APPLIED);
+        jobApplicationRepository.save(application);
+
+        // When & Then
+        mockMvc.perform(delete("/api/applications/{id}", application.getId())
+                        .header("Authorization", "Bearer " + candidateToken))
+                .andExpect(status().isNoContent());
+
+        JobApplication updatedApplication = jobApplicationRepository.findById(application.getId()).orElseThrow();
+        assertThat(updatedApplication.getStatus()).isEqualTo(JobApplicationStatus.WITHDRAWN);
+    }
+
+    @Test
+    void withdrawApplication_shouldFail_whenStatusIsNotAppliedOrUnderReview() throws Exception {
+        // Given
+        JobPost jobPost = new JobPost();
+        jobPost.setTitle("Test Job");
+        jobPost.setCompany("Test Company");
+        jobPost.setCreatedBy(hiringManager);
+        jobPostRepository.save(jobPost);
+
+        JobApplication application = new JobApplication();
+        application.setCandidate(candidate);
+        application.setJobPost(jobPost);
+        application.setStatus(JobApplicationStatus.HIRED); // Invalid status for withdrawal
+        jobApplicationRepository.save(application);
+
+        // When & Then
+        mockMvc.perform(delete("/api/applications/{id}", application.getId())
+                        .header("Authorization", "Bearer " + candidateToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("Application can only be withdrawn if its status is APPLIED or UNDER_REVIEW.")));
     }
 }

@@ -6,10 +6,7 @@ import com.etalente.backend.dto.JobPostDto;
 import com.etalente.backend.dto.JobPostResponse;
 import com.etalente.backend.exception.BadRequestException;
 import com.etalente.backend.exception.ResourceNotFoundException;
-import com.etalente.backend.model.JobApplication;
-import com.etalente.backend.model.JobApplicationStatus;
-import com.etalente.backend.model.JobPost;
-import com.etalente.backend.model.User;
+import com.etalente.backend.model.*;
 import com.etalente.backend.repository.JobApplicationRepository;
 import com.etalente.backend.repository.JobApplicationSpecification;
 import com.etalente.backend.repository.JobPostRepository;
@@ -21,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
-import com.etalente.backend.model.JobApplicationAudit;
+
 import com.etalente.backend.repository.JobApplicationAuditRepository;
 import java.util.List;
 import java.util.UUID;
@@ -73,6 +70,10 @@ public class JobApplicationServiceImpl implements JobApplicationService {
         JobPost jobPost = jobPostRepository.findById(jobPostId)
                 .orElseThrow(() -> new ResourceNotFoundException("Job post not found"));
 
+        if (jobPost.getStatus() != JobPostStatus.OPEN) {
+            throw new BadRequestException("Cannot apply for a job that is not OPEN.");
+        }
+
         if (jobApplicationRepository.existsByCandidateIdAndJobPostId(currentUser.getId(), jobPostId)) {
             throw new BadRequestException("You have already applied for this job.");
         }
@@ -99,8 +100,12 @@ public class JobApplicationServiceImpl implements JobApplicationService {
             throw new ResourceNotFoundException("Application not found");
         }
 
+        if (application.getStatus() != JobApplicationStatus.APPLIED && application.getStatus() != JobApplicationStatus.UNDER_REVIEW) {
+            throw new BadRequestException("Application can only be withdrawn if its status is APPLIED or UNDER_REVIEW.");
+        }
         application.setStatus(JobApplicationStatus.WITHDRAWN);
         jobApplicationRepository.save(application);
+        jobApplicationAuditRepository.save(new JobApplicationAudit(application, JobApplicationStatus.WITHDRAWN, "Application withdrawn by candidate."));
     }
 
     private ApplicationSummaryDto toSummaryDto(JobApplication application) {
