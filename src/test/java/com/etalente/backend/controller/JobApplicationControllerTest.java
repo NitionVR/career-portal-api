@@ -137,5 +137,42 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.communicationHistory.length()", is(1)))
                 .andExpect(jsonPath("$.communicationHistory[0].status", is("APPLIED")));
+
+    }
+
+    @Test
+    void getMyApplications_shouldReturnSortedResults_whenSortQueryIsProvided() throws Exception {
+        // Given
+        JobPost jobPost1 = new JobPost();
+        jobPost1.setTitle("Java Developer");
+        jobPost1.setCompany("Acme Inc.");
+        jobPost1.setCreatedBy(hiringManager);
+        jobPostRepository.save(jobPost1);
+
+        JobPost jobPost2 = new JobPost();
+        jobPost2.setTitle("Python Developer");
+        jobPost2.setCompany("Beta Corp.");
+        jobPost2.setCreatedBy(hiringManager);
+        jobPostRepository.save(jobPost2);
+
+        JobApplication application1 = new JobApplication();
+        application1.setCandidate(candidate);
+        application1.setJobPost(jobPost1);
+        application1.setStatus(JobApplicationStatus.APPLIED);
+        jobApplicationRepository.save(application1);
+
+        JobApplication application2 = new JobApplication();
+        application2.setCandidate(candidate);
+        application2.setJobPost(jobPost2);
+        application2.setStatus(JobApplicationStatus.INTERVIEW_SCHEDULED);
+        jobApplicationRepository.save(application2);
+
+        // When & Then
+        mockMvc.perform(get("/api/applications/me")
+                        .header("Authorization", "Bearer " + candidateToken)
+                        .param("sort", "status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()", is(2)))
+                .andExpect(jsonPath("$.content[0].status", is("APPLIED")));
     }
 }
