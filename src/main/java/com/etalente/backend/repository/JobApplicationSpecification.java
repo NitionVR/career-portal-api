@@ -11,7 +11,7 @@ import java.util.UUID;
 
 public class JobApplicationSpecification {
 
-    public static Specification<JobApplication> withFilters(UUID candidateId, String search) {
+    public static Specification<JobApplication> withFilters(UUID candidateId, String search, String sort) {
         return (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -25,6 +25,20 @@ public class JobApplicationSpecification {
                         Predicate companyMatch = criteriaBuilder.like(criteriaBuilder.lower(root.get("jobPost").get("company")), likePattern);
                         predicates.add(criteriaBuilder.or(titleMatch, companyMatch));
                     });
+
+            if (sort != null && !sort.trim().isEmpty()) {
+                switch (sort) {
+                    case "date":
+                        query.orderBy(criteriaBuilder.desc(root.get("applicationDate")));
+                        break;
+                    case "company":
+                        query.orderBy(criteriaBuilder.asc(root.get("jobPost").get("company")));
+                        break;
+                    case "status":
+                        query.orderBy(criteriaBuilder.asc(root.get("status")));
+                        break;
+                }
+            }
 
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
         };

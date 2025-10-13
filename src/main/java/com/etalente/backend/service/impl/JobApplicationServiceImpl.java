@@ -47,9 +47,10 @@ public class JobApplicationServiceImpl implements JobApplicationService {
     }
 
     @Override
-    public Page<ApplicationSummaryDto> getMyApplications(Pageable pageable, String search) {
+    public Page<ApplicationSummaryDto> getMyApplications(Pageable pageable, String search, String sort) {
         User currentUser = organizationContext.getCurrentUser();
-        return jobApplicationRepository.findAll(JobApplicationSpecification.withFilters(currentUser.getId(), search), pageable)
+        // TODO: Implement sort logic
+        return jobApplicationRepository.findAll(JobApplicationSpecification.withFilters(currentUser.getId(), search, sort), pageable)
                 .map(this::toSummaryDto);
     }
 
