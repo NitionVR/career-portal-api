@@ -1,0 +1,790 @@
+{
+	"info": {
+		"_postman_id": "YOUR_NEW_COLLECTION_ID",
+		"name": "Etalente Backend Testing with Novu",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "YOUR_EXPORTER_ID"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "1. Initiate Registration (Candidate)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"pm.environment.set(\"candidate_email\", \"test-candidate-\" + Date.now() + \"@example.com\");",
+									"var requestBody = JSON.parse(pm.request.body.raw);",
+									"requestBody.email = pm.environment.get(\"candidate_email\");",
+									"pm.request.body.raw = JSON.stringify(requestBody);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+								"});"
+							],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{candidate_email}}\",\n    \"role\": \"CANDIDATE\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Validate Registration Token (Candidate)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+								"});",
+								"pm.test(\"Token is valid\", function () {",
+								"    pm.expect(pm.response.json().valid).to.be.true;",
+							"});"
+						],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/validate-registration-token?token={{registration_token}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"validate-registration-token"
+							],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{registration_token}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3. Complete Candidate Registration",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"pm.environment.set(\"candidate_username\", \"candidate-\" + Date.now());",
+									"var requestBody = JSON.parse(pm.request.body.raw);",
+									"requestBody.username = pm.environment.get(\"candidate_username\");",
+									"pm.request.body.raw = JSON.stringify(requestBody);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+								"});",
+								"pm.test(\"Token is present\", function () {",
+								"    pm.expect(pm.response.json().token).to.be.a('string');",
+							"});",
+								"pm.environment.set(\"candidate_jwt\", pm.response.json().token);"
+							],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{candidate_username}}\",\n    \"firstName\": \"Test\",\n    \"lastName\": \"Candidate\",\n    \"gender\": \"Male\",\n    \"race\": \"Asian\",\n    \"disability\": \"None\",\n    \"contactNumber\": \"+1234567890\",\n    \"alternateContactNumber\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register/candidate?token={{registration_token}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"register",
+								"candidate"
+							],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{registration_token}}"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Invitations",
+			"item": [
+				{
+					"name": "1. Initiate Registration (Hiring Manager)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"pm.environment.set(\"hm_email\", \"test-hm-\" + Date.now() + \"@example.com\");",
+									"var requestBody = JSON.parse(pm.request.body.raw);",
+									"requestBody.email = pm.environment.get(\"hm_email\");",
+									"pm.request.body.raw = JSON.stringify(requestBody);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+								"});"
+							],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{hm_email}}\",\n    \"role\": \"HIRING_MANAGER\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Validate HM Registration Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+								"});",
+								"pm.test(\"Token is valid\", function () {",
+								"    pm.expect(pm.response.json().valid).to.be.true;",
+							"});"
+						],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/validate-registration-token?token={{hm_registration_token}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"validate-registration-token"
+							],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{hm_registration_token}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3. Complete Hiring Manager Registration",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"pm.environment.set(\"hm_username\", \"hm-\" + Date.now());",
+									"var requestBody = JSON.parse(pm.request.body.raw);",
+									"requestBody.username = pm.environment.get(\"hm_username\");",
+									"pm.request.body.raw = JSON.stringify(requestBody);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+								"});",
+								"pm.test(\"Token is present\", function () {",
+								"    pm.expect(pm.response.json().token).to.be.a('string');",
+							"});",
+								"pm.environment.set(\"hm_jwt\", pm.response.json().token);"
+							],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{hm_username}}\",\n    \"companyName\": \"Acme Corp\",\n    \"industry\": \"Software\",\n    \"contactPerson\": \"John Doe\",\n    \"contactNumber\": \"+1987654321\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register/hiring-manager?token={{hm_registration_token}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"register",
+								"hiring-manager"
+							],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{hm_registration_token}}"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Invitations",
+			"item": [
+				{
+					"name": "1. Invite Recruiter",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"pm.environment.set(\"recruiter_email\", \"test-recruiter-\" + Date.now() + \"@example.com\");",
+									"var requestBody = JSON.parse(pm.request.body.raw);",
+									"requestBody.email = pm.environment.get(\"recruiter_email\");",
+									"pm.request.body.raw = JSON.stringify(requestBody);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+								"});",
+								"pm.test(\"Email matches\", function () {",
+								"    pm.expect(pm.response.json().email).to.eql(pm.environment.get(\"recruiter_email\"));",
+							"});",
+								"pm.test(\"Status is PENDING\", function () {",
+								"    pm.expect(pm.response.json().status).to.eql(\"PENDING\");",
+							"});"
+						],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{hm_jwt}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{recruiter_email}}\",\n    \"personalMessage\": \"Welcome to the team!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/invitations/recruiter",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"invitations",
+								"recruiter"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "5. Validate Invitation Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+								"});",
+								"pm.test(\"Token is valid\", function () {",
+								"    pm.expect(pm.response.json().valid).to.be.true;",
+							"});"
+						],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/invitations/validate/{{invitation_token}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"invitations",
+								"validate",
+								"{{invitation_token}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "6. Accept Invitation",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"pm.environment.set(\"recruiter_username\", \"recruiter-\" + Date.now());",
+									"var requestBody = JSON.parse(pm.request.body.raw);",
+									"requestBody.username = pm.environment.get(\"recruiter_username\");",
+									"pm.request.body.raw = JSON.stringify(requestBody);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+								"});",
+								"pm.test(\"Token is present\", function () {",
+								"    pm.expect(pm.response.json().token).to.be.a('string');",
+							"});",
+								"pm.environment.set(\"recruiter_jwt\", pm.response.json().token);"
+							],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{recruiter_username}}\",\n    \"firstName\": \"Test\",\n    \"lastName\": \"Recruiter\",\n    \"contactNumber\": \"+1122334455\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/invitations/accept/{{invitation_token}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"invitations",
+								"accept",
+								"{{invitation_token}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Job Posts",
+			"item": [
+				{
+					"name": "1. Create Job Post (Hiring Manager)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"pm.environment.set(\"job_title\", \"Software Engineer - \" + Date.now());",
+									"var requestBody = JSON.parse(pm.request.body.raw);",
+									"requestBody.title = pm.environment.get(\"job_title\");",
+									"pm.request.body.raw = JSON.stringify(requestBody);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201 Created\", function () {",
+									"    pm.response.to.have.status(201);",
+								"});",
+								"pm.test(\"Job ID is present\", function () {",
+								"    pm.expect(pm.response.json().id).to.be.a('string');",
+							"});",
+								"pm.environment.set(\"job_post_id\", pm.response.json().id);"
+							],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{hm_jwt}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"{{job_title}}\",\n    \"company\": \"Acme Corp\",\n    \"jobType\": \"Full-time\",\n    \"description\": \"We are looking for a talented software engineer to join our dynamic team.\",\n    \"location\": {\n        \"city\": \"New York\",\n        \"countryCode\": \"US\"\n    },\n    \"remote\": \"On-site\",\n    \"salary\": \"$100k-$150k\",\n    \"experienceLevel\": \"Senior-level\",\n    \"responsibilities\": [\"Develop software\", \"Code review\"],\n    \"qualifications\": [\"5+ years experience\", \"Java expertise\"],\n    \"skills\": [\n        {\n            \"name\": \"Java\",\n            \"level\": \"Expert\",\n            \"keywords\": [\"Spring Boot\"]\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/job-posts",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"job-posts"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Publish Job Post",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+								"});",
+								"pm.test(\"Status is OPEN\", function () {",
+								"    pm.expect(pm.response.json().status).to.eql(\"OPEN\");",
+							"});"
+						],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{hm_jwt}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/job-posts/{{job_post_id}}/publish",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"job-posts",
+								"{{job_post_id}}",
+								"publish"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3. Apply for Job (Candidate)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201 Created\", function () {",
+									"    pm.response.to.have.status(201);",
+								"});",
+								"pm.test(\"Application ID is present\", function () {",
+								"    pm.expect(pm.response.json().id).to.be.a('string');",
+							"});",
+								"pm.environment.set(\"application_id\", pm.response.json().id);"
+						],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{candidate_jwt}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/job-posts/{{job_post_id}}/apply",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"job-posts",
+								"{{job_post_id}}",
+								"apply"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Applications",
+			"item": [
+				{
+					"name": "1. Get My Applications (Candidate)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+								"});",
+								"pm.test(\"Content is an array\", function () {",
+								"    pm.expect(pm.response.json().content).to.be.an('array');",
+							"});"
+						],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{candidate_jwt}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/applications/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"applications",
+								"me"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Get Application Details (Candidate)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+								"});",
+								"pm.test(\"Application ID matches\", function () {",
+								"    pm.expect(pm.response.json().id).to.eql(pm.environment.get(\"application_id\"));",
+							"});",
+								"pm.test(\"Communication History is present\", function () {",
+								"    pm.expect(pm.response.json().communicationHistory).to.be.an('array');",
+							"});"
+						],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{candidate_jwt}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/applications/{{application_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"applications",
+								"{{application_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3. Withdraw Application (Candidate)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204 No Content\", function () {",
+									"    pm.response.to.have.status(204);",
+								"});"
+						],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{candidate_jwt}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/applications/{{application_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"applications",
+								"{{application_id}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		}
+	]
+}
