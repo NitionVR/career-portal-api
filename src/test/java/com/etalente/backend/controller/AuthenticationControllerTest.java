@@ -52,55 +52,16 @@ class AuthenticationControllerTest extends BaseIntegrationTest {
     }
 
     @Test
-    void verify_shouldReturnJwt_whenTokenIsValid() throws Exception {
-        String magicToken = "valid-magic-token";
+    void exchangeOtt_shouldReturnJwt_whenOttIsValid() throws Exception {
+        String ott = "valid-ott";
         String sessionJwt = "new-session-jwt";
 
-        // Mock the service layer to return a session JWT when the magic token is valid
-        when(authenticationService.verifyMagicLinkAndIssueJwt(magicToken)).thenReturn(sessionJwt);
+        when(authenticationService.exchangeOneTimeTokenForJwt(ott)).thenReturn(sessionJwt);
 
-        mockMvc.perform(get("/api/auth/verify")
-                        .param("token", magicToken))
+        mockMvc.perform(post("/api/auth/exchange-ott")
+                        .contentType(MediaType.TEXT_PLAIN) // OTT is sent as plain text in body
+                        .content(ott))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").value(sessionJwt));
-    }
-
-    @Test
-    void verify_shouldReturnJwtWithClaims_whenTokenIsValid() throws Exception {
-        String magicToken = "valid-magic-token";
-        // Create a mock UserDetails for generating the JWT
-        UserDetails userDetails = new org.springframework.security.core.userdetails.User("test@example.com", "", new ArrayList<>());
-
-        // Prepare claims for the mock JWT
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("is_new_user", true);
-        claims.put("role", "CANDIDATE");
-
-        // Generate a JWT with the desired claims
-        String sessionJwtWithClaims = jwtService.generateToken(claims, userDetails);
-
-        // Mock the service layer to return this JWT
-        when(authenticationService.verifyMagicLinkAndIssueJwt(magicToken)).thenReturn(sessionJwtWithClaims);
-
-        mockMvc.perform(get("/api/auth/verify")
-                        .param("token", magicToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").exists())
-                .andExpect(jsonPath("$.token").isString());
-
-        // Extract the token from the response and verify its claims
-        String responseContent = mockMvc.perform(get("/api/auth/verify")
-                        .param("token", magicToken))
-                .andReturn().getResponse().getContentAsString();
-
-        // Parse the JSON response to get the token string
-        String tokenString = new JSONObject(responseContent).getString("token");
-
-        // Extract claims from the token
-        Claims extractedClaims = jwtService.extractAllClaims(tokenString);
-
-        // Assert the claims
-        assertThat(extractedClaims.get("is_new_user", Boolean.class)).isEqualTo(true);
-        assertThat(extractedClaims.get("role", String.class)).isEqualTo("CANDIDATE");
     }
 }
