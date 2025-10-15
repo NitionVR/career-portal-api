@@ -31,9 +31,9 @@ public class AuthenticationController {
     }
 
     @GetMapping("/verify")
-    public ResponseEntity<Map<String, String>> verify(@RequestParam String token) {
+    public ResponseEntity<RegistrationResponse> verify(@RequestParam String token) {
         String jwt = authenticationService.verifyMagicLinkAndIssueJwt(token);
-        return ResponseEntity.ok(Map.of("token", jwt));
+        return ResponseEntity.ok(new RegistrationResponse(jwt));
     }
 
     @PostMapping("/register")
