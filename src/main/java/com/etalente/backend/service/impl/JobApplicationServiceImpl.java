@@ -1,9 +1,6 @@
 package com.etalente.backend.service.impl;
 
-import com.etalente.backend.dto.ApplicationDetailsDto;
-import com.etalente.backend.dto.ApplicationSummaryDto;
-import com.etalente.backend.dto.JobPostDto;
-import com.etalente.backend.dto.JobPostResponse;
+import com.etalente.backend.dto.*;
 import com.etalente.backend.exception.BadRequestException;
 import com.etalente.backend.exception.ResourceNotFoundException;
 import com.etalente.backend.model.*;
@@ -12,6 +9,7 @@ import com.etalente.backend.repository.JobApplicationSpecification;
 import com.etalente.backend.repository.JobPostRepository;
 import com.etalente.backend.security.OrganizationContext;
 import com.etalente.backend.service.JobApplicationService;
+import com.etalente.backend.integration.novu.NovuWorkflowService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -23,6 +21,7 @@ import com.etalente.backend.repository.JobApplicationAuditRepository;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.Map;
 
 @Service
 @Transactional
@@ -32,21 +31,23 @@ public class JobApplicationServiceImpl implements JobApplicationService {
     private final JobPostRepository jobPostRepository;
     private final OrganizationContext organizationContext;
     private final JobApplicationAuditRepository jobApplicationAuditRepository;
+    private final NovuWorkflowService novuWorkflowService;
 
     public JobApplicationServiceImpl(JobApplicationRepository jobApplicationRepository,
                                      JobPostRepository jobPostRepository,
                                      OrganizationContext organizationContext,
-                                     JobApplicationAuditRepository jobApplicationAuditRepository) {
+                                     JobApplicationAuditRepository jobApplicationAuditRepository,
+                                     NovuWorkflowService novuWorkflowService) {
         this.jobApplicationRepository = jobApplicationRepository;
         this.jobPostRepository = jobPostRepository;
         this.organizationContext = organizationContext;
         this.jobApplicationAuditRepository = jobApplicationAuditRepository;
+        this.novuWorkflowService = novuWorkflowService;
     }
 
     @Override
     public Page<ApplicationSummaryDto> getMyApplications(Pageable pageable, String search, String sort) {
         User currentUser = organizationContext.getCurrentUser();
-        // TODO: Implement sort logic
         return jobApplicationRepository.findAll(JobApplicationSpecification.withFilters(currentUser.getId(), search, sort), pageable)
                 .map(this::toSummaryDto);
     }
@@ -86,6 +87,27 @@ public class JobApplicationServiceImpl implements JobApplicationService {
         JobApplication savedApplication = jobApplicationRepository.save(application);
 
         jobApplicationAuditRepository.save(new JobApplicationAudit(savedApplication, JobApplicationStatus.APPLIED, "Application submitted."));
+
+        // Construct WorkflowTriggerRequest
+        WorkflowTriggerRequest workflowRequest = new WorkflowTriggerRequest();
+        workflowRequest.setSubscriberId(jobPost.getCreatedBy().getId().toString());
+        workflowRequest.setEmail(jobPost.getCreatedBy().getEmail());
+        workflowRequest.setFirstName(jobPost.getCreatedBy().getFirstName()); // Add first name
+        workflowRequest.setLastName(jobPost.getCreatedBy().getLastName());   // Add last name
+        workflowRequest.setPayload(Map.of(
+                "applicantName", currentUser.getFirstName() + " " + currentUser.getLastName(),
+                "applicantEmail", currentUser.getEmail(),
+                "jobTitle", jobPost.getTitle(),
+                "companyName", jobPost.getCompany(),
+                "applicationId", savedApplication.getId().toString(),
+                "applicationDate", savedApplication.getApplicationDate().toString()
+        ));
+
+        // Trigger notification workflow asynchronously (fire and forget)
+        novuWorkflowService.triggerWorkflow(
+            "application-received", // Workflow ID in Novu
+            workflowRequest
+        );
 
         return toSummaryDto(savedApplication);
     }
