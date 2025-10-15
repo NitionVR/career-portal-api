@@ -1,6 +1,8 @@
 package com.etalente.backend.service.impl;
 
+import com.etalente.backend.model.OneTimeToken;
 import com.etalente.backend.model.User;
+import com.etalente.backend.repository.OneTimeTokenRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.AuthenticationService;
@@ -9,10 +11,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class AuthenticationServiceImpl implements AuthenticationService {
@@ -20,21 +24,25 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     private final UserRepository userRepository;
     private final EmailService emailService;
     private final JwtService jwtService;
+    private final OneTimeTokenRepository oneTimeTokenRepository; // New
 
     @Value("${magic-link-url}")
     private String magicLinkUrl;
 
-    public AuthenticationServiceImpl(UserRepository userRepository, EmailService emailService, JwtService jwtService) {
+    @Value("${ott.expiration-minutes}") // New
+    private long ottExpirationMinutes;
+
+    public AuthenticationServiceImpl(UserRepository userRepository, EmailService emailService, JwtService jwtService, OneTimeTokenRepository oneTimeTokenRepository) { // Updated constructor
         this.userRepository = userRepository;
         this.emailService = emailService;
         this.jwtService = jwtService;
+        this.oneTimeTokenRepository = oneTimeTokenRepository; // New
     }
 
     @Override
     public void initiateMagicLinkLogin(String email) {
         // 1. Find the user, determining if they are new or existing
         Optional<User> userOptional = userRepository.findByEmail(email);
-        final boolean isNewUser = userOptional.isEmpty();
 
         User user = userOptional.orElseGet(() -> {
             User newUser = new User();
@@ -43,38 +51,39 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             return userRepository.save(newUser);
         });
 
-        // 2. Generate a short-lived magic link token with the is_new_user claim
-        UserDetails userDetails = new org.springframework.security.core.userdetails.User(user.getEmail(), "", new ArrayList<>());
-        Map<String, Object> extraClaims = new HashMap<>();
-        extraClaims.put("is_new_user", isNewUser);
-        String magicToken = jwtService.generateToken(extraClaims, userDetails);
+        // 2. Generate a cryptographically secure random string for the OTT
+        String ott = UUID.randomUUID().toString();
+        LocalDateTime expiryDate = LocalDateTime.now().plusMinutes(ottExpirationMinutes);
 
-        // 3. Construct the magic link URL
-        String magicLink = magicLinkUrl + "?token=" + magicToken;
+        // 3. Store the OTT in the database
+        OneTimeToken oneTimeToken = new OneTimeToken(ott, user, expiryDate);
+        oneTimeTokenRepository.save(oneTimeToken);
 
-        // 4. Send the email
+        // 4. Construct the magic link URL with the OTT
+        String magicLink = magicLinkUrl + "?ott=" + ott;
+
+        // 5. Send the email
         emailService.sendMagicLink(email, magicLink);
     }
 
     @Override
-    public String verifyMagicLinkAndIssueJwt(String token) {
-        final String email = jwtService.extractUsername(token);
-        UserDetails userDetails = new org.springframework.security.core.userdetails.User(email, "", new ArrayList<>());
+    public String exchangeOneTimeTokenForJwt(String ott) {
+        OneTimeToken oneTimeToken = oneTimeTokenRepository.findByToken(ott)
+                .orElseThrow(() -> new RuntimeException("Invalid or expired one-time token."));
 
-        if (!jwtService.isTokenValid(token, userDetails)) {
-            throw new RuntimeException("Invalid or expired magic link token.");
+        if (oneTimeToken.isUsed() || oneTimeToken.getExpiryDate().isBefore(LocalDateTime.now())) {
+            throw new RuntimeException("Invalid or expired one-time token.");
         }
 
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found for the given token."));
+        oneTimeToken.setUsed(true);
+        oneTimeTokenRepository.save(oneTimeToken);
 
-        // Token is valid and user exists, issue a new session JWT
+        User user = oneTimeToken.getUser();
+        UserDetails userDetails = new org.springframework.security.core.userdetails.User(user.getEmail(), "", new ArrayList<>());
+
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", user.getRole().name());
-        Boolean isNewUser = jwtService.extractClaim(token, claims1 -> claims1.get("is_new_user", Boolean.class));
-        if (isNewUser != null) {
-            claims.put("is_new_user", isNewUser);
-        }
+
         return jwtService.generateToken(claims, userDetails);
     }
 

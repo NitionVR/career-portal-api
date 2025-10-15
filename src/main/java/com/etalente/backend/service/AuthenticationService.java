@@ -4,6 +4,6 @@ import com.etalente.backend.model.User;
 
 public interface AuthenticationService {
     void initiateMagicLinkLogin(String email);
-    String verifyMagicLinkAndIssueJwt(String token);
+    String exchangeOneTimeTokenForJwt(String ott);
     String generateJwtForUser(User user);
 }
