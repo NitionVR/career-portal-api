@@ -36,6 +36,10 @@ cloud:
       region: ${AWS_REGION:af-south-1}
       from: ${SES_FROM_EMAIL:no-reply@example.com}
 
+novu:
+  api-key: ${NOVU_API_KEY}
+  backend-url: ${NOVU_BACKEND_URL:https://api.novu.co}
+
 logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"

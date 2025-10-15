@@ -47,3 +47,7 @@ magic-link-url: http://localhost:4200/auth/callback
 invitation-link-url: http://localhost:4200/auth/accept-invitation
 invitation-expiry-hours: 72
 cors-allowed-origins: http://localhost:4200
+
+novu:
+  api-key: ${NOVU_API_KEY:test-api-key-local}
+  backend-url: ${NOVU_BACKEND_URL:https://api.novu.co/v1/}
