@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.core.io.support.ResourcePatternResolver;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -172,7 +173,7 @@ public class JobPostSeeder implements CommandLineRunner {
 
                 try {
                     // Check if job post already exists to prevent duplicates
-                    boolean exists = jobPostService.listJobPosts(null, null, null, null, null, null) // Fetch all job posts (or a more targeted query)
+                    boolean exists = jobPostService.listJobPosts(PageRequest.of(0, 1), null, null, null, null, null) // Fetch one job post to check existence
                             .stream()
                             .anyMatch(jp -> jp.title().equals(request.title()) && jp.company().equals(request.company()));
 
