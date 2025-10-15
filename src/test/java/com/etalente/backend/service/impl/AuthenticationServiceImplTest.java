@@ -95,12 +95,13 @@ class AuthenticationServiceImplTest {
         String email = "test@example.com";
         User user = new User();
         user.setEmail(email);
+        user.setRole(Role.CANDIDATE); // Set a role for the user
         UserDetails userDetails = new org.springframework.security.core.userdetails.User(email, "", new java.util.ArrayList<>());
 
         when(jwtService.extractUsername(token)).thenReturn(email);
         when(jwtService.isTokenValid(token, userDetails)).thenReturn(true);
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
-        when(jwtService.generateToken(userDetails)).thenReturn("session-jwt");
+        when(jwtService.generateToken(any(Map.class), any(UserDetails.class))).thenReturn("session-jwt");
 
         // When
         String jwt = authenticationService.verifyMagicLinkAndIssueJwt(token);
