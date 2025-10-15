@@ -69,7 +69,13 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .orElseThrow(() -> new RuntimeException("User not found for the given token."));
 
         // Token is valid and user exists, issue a new session JWT
-        return jwtService.generateToken(userDetails);
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("role", user.getRole().name());
+        Boolean isNewUser = jwtService.extractClaim(token, claims1 -> claims1.get("is_new_user", Boolean.class));
+        if (isNewUser != null) {
+            claims.put("is_new_user", isNewUser);
+        }
+        return jwtService.generateToken(claims, userDetails);
     }
 
     @Override
