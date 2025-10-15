@@ -1,14 +1,20 @@
 package com.etalente.backend.controller;
 
 import com.etalente.backend.BaseIntegrationTest;
+import com.etalente.backend.dto.WorkflowTriggerRequest;
+import com.etalente.backend.dto.WorkflowTriggerResponse;
+import com.etalente.backend.integration.novu.NovuWorkflowService;
 import com.etalente.backend.model.*;
 import com.etalente.backend.repository.*;
 import com.etalente.backend.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.concurrent.CompletableFuture;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -18,7 +24,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.hamcrest.Matchers.is;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 public class JobApplicationControllerTest extends BaseIntegrationTest {
+
+    @MockBean
+    private NovuWorkflowService novuWorkflowService;
 
     @Autowired
     private MockMvc mockMvc;
@@ -178,6 +193,31 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.content.length()", is(2)))
                 .andExpect(jsonPath("$.content[0].status", is("APPLIED")));
     }
+    @Test
+    void applyForJob_shouldCreateApplicationAndTriggerNotification() throws Exception {
+        // Given
+        JobPost jobPost = new JobPost();
+        jobPost.setTitle("Open Job for Application");
+        jobPost.setCompany("Novu Test Corp.");
+        jobPost.setCreatedBy(hiringManager);
+        jobPost.setStatus(JobPostStatus.OPEN); // Must be OPEN to apply
+        jobPostRepository.save(jobPost);
+
+        // Mock NovuWorkflowService to return a completed future
+        when(novuWorkflowService.triggerWorkflow(any(String.class), any(WorkflowTriggerRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(new WorkflowTriggerResponse()));
+
+        // When
+        mockMvc.perform(post("/api/job-posts/{id}/apply", jobPost.getId())
+                        .header("Authorization", "Bearer " + candidateToken))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.job.title", is("Open Job for Application")));
+
+        // Then
+        assertThat(jobApplicationRepository.count()).isEqualTo(1L);
+        verify(novuWorkflowService, times(1)).triggerWorkflow(eq("application-received"), any(WorkflowTriggerRequest.class));
+    }
+
     @Test
     void applyForJob_shouldFail_whenJobPostIsNotOpen() throws Exception {
         // Given
