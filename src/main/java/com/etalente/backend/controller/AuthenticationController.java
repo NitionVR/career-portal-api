@@ -30,9 +30,9 @@ public class AuthenticationController {
         return ResponseEntity.ok("Magic link sent. Please check your email.");
     }
 
-    @GetMapping("/verify")
-    public ResponseEntity<RegistrationResponse> verify(@RequestParam String token) {
-        String jwt = authenticationService.verifyMagicLinkAndIssueJwt(token);
+    @PostMapping("/exchange-ott")
+    public ResponseEntity<RegistrationResponse> exchangeOtt(@RequestBody String ott) {
+        String jwt = authenticationService.exchangeOneTimeTokenForJwt(ott);
         return ResponseEntity.ok(new RegistrationResponse(jwt));
     }
 
