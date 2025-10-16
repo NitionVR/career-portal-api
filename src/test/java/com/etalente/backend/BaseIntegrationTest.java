@@ -18,6 +18,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 
+import java.util.UUID;
+
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -36,13 +38,9 @@ public abstract class BaseIntegrationTest {
     @Autowired
     protected EntityManager entityManager;
 
-    @Autowired
-    protected UserDetailsService userDetailsService;
-
-    protected void authenticateAs(String email) {
-        UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+    protected void authenticateAs(UUID userId) {
         UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                userDetails, null, userDetails.getAuthorities());
+                userId.toString(), null, null);
         SecurityContextHolder.getContext().setAuthentication(auth);
     }
 }
