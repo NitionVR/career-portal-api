@@ -61,24 +61,15 @@ public class JobPostServiceImpl implements JobPostService {
     }
 
     @Override
-    public JobPostResponse createJobPost(JobPostRequest request, String userEmail) {
-        System.out.println("Creating job post for user: " + userEmail);
-        User user = userRepository.findByEmail(userEmail)
+    public JobPostResponse createJobPost(JobPostRequest request, UUID userId) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        System.out.println("User found: " + user.getEmail() + " with org: " + (user.getOrganization() != null ? user.getOrganization().getName() : "null"));
 
         // Verify user can create job posts
-        try {
-            permissionService.verifyCanCreate(user);
-            System.out.println("User has permission to create job post");
-        } catch (Exception e) {
-            System.out.println("Permission denied: " + e.getMessage());
-            throw e;
-        }
+        permissionService.verifyCanCreate(user);
 
         // Ensure user has an organization
         Organization organization = organizationContext.requireOrganization();
-        System.out.println("Required organization: " + organization.getName());
 
         JobPost jobPost = new JobPost();
         mapRequestToJobPost(request, jobPost);
@@ -88,7 +79,6 @@ public class JobPostServiceImpl implements JobPostService {
         jobPost.setDatePosted(LocalDate.now().toString());
 
         JobPost saved = jobPostRepository.save(jobPost);
-        System.out.println("Job post saved with id: " + saved.getId());
         return mapToResponse(saved);
     }
 
@@ -147,11 +137,11 @@ public class JobPostServiceImpl implements JobPostService {
     }
 
     @Override
-    public Page<JobPostResponse> listJobPostsByUser(String userEmail, Pageable pageable) {
+    public Page<JobPostResponse> listJobPostsByUser(UUID userId, Pageable pageable) {
         Organization organization = organizationContext.requireOrganization();
 
         // Verify the user belongs to the same organization
-        User user = userRepository.findByEmail(userEmail)
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (user.getOrganization() == null ||
@@ -159,13 +149,13 @@ public class JobPostServiceImpl implements JobPostService {
             throw new UnauthorizedException("You can only view job posts from users in your organization");
         }
 
-        return jobPostRepository.findByCreatedByEmailAndOrganization(userEmail, organization, pageable)
+        return jobPostRepository.findByCreatedByIdAndOrganization(userId, organization, pageable)
                 .map(this::mapToResponse);
     }
 
     @Override
-    public JobPostResponse updateJobPost(UUID id, JobPostRequest request, String userEmail) {
-        User user = userRepository.findByEmail(userEmail)
+    public JobPostResponse updateJobPost(UUID id, JobPostRequest request, UUID userId) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         Organization organization = organizationContext.requireOrganization();
@@ -182,8 +172,8 @@ public class JobPostServiceImpl implements JobPostService {
     }
 
     @Override
-    public void deleteJobPost(UUID id, String userEmail) {
-        User user = userRepository.findByEmail(userEmail)
+    public void deleteJobPost(UUID id, UUID userId) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         Organization organization = organizationContext.requireOrganization();
@@ -200,8 +190,8 @@ public class JobPostServiceImpl implements JobPostService {
     // ============= STATE MACHINE METHODS =============
 
     @Override
-    public JobPostResponse transitionJobPostState(UUID id, StateTransitionRequest request, String userEmail) {
-        User user = userRepository.findByEmail(userEmail)
+    public JobPostResponse transitionJobPostState(UUID id, StateTransitionRequest request, UUID userId) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         Organization organization = organizationContext.requireOrganization();
@@ -224,52 +214,52 @@ public class JobPostServiceImpl implements JobPostService {
     }
 
     @Override
-    public JobPostResponse publishJobPost(UUID id, String userEmail) {
+    public JobPostResponse publishJobPost(UUID id, UUID userId) {
         StateTransitionRequest request = new StateTransitionRequest(
                 JobPostStatus.OPEN,
                 "Publishing job post"
         );
-        return transitionJobPostState(id, request, userEmail);
+        return transitionJobPostState(id, request, userId);
     }
 
     @Override
-    public JobPostResponse closeJobPost(UUID id, String reason, String userEmail) {
+    public JobPostResponse closeJobPost(UUID id, String reason, UUID userId) {
         StateTransitionRequest request = new StateTransitionRequest(
                 JobPostStatus.CLOSED,
                 reason != null ? reason : "Closing job post"
         );
-        return transitionJobPostState(id, request, userEmail);
+        return transitionJobPostState(id, request, userId);
     }
 
     @Override
-    public JobPostResponse reopenJobPost(UUID id, String reason, String userEmail) {
+    public JobPostResponse reopenJobPost(UUID id, String reason, UUID userId) {
         StateTransitionRequest request = new StateTransitionRequest(
                 JobPostStatus.OPEN,
                 reason != null ? reason : "Reopening job post"
         );
-        return transitionJobPostState(id, request, userEmail);
+        return transitionJobPostState(id, request, userId);
     }
 
     @Override
-    public JobPostResponse archiveJobPost(UUID id, String reason, String userEmail) {
+    public JobPostResponse archiveJobPost(UUID id, String reason, UUID userId) {
         StateTransitionRequest request = new StateTransitionRequest(
                 JobPostStatus.ARCHIVED,
                 reason != null ? reason : "Archiving job post"
         );
-        return transitionJobPostState(id, request, userEmail);
+        return transitionJobPostState(id, request, userId);
     }
 
     @Override
     @Deprecated
-    public JobPostResponse updateJobPostStatus(UUID id, JobPostStatus newStatus, String userEmail) {
+    public JobPostResponse updateJobPostStatus(UUID id, JobPostStatus newStatus, UUID userId) {
         // Delegate to new state machine method
         StateTransitionRequest request = new StateTransitionRequest(newStatus, null);
-        return transitionJobPostState(id, request, userEmail);
+        return transitionJobPostState(id, request, userId);
     }
 
     @Override
-    public List<StateAuditResponse> getStateHistory(UUID jobPostId, String userEmail) {
-        User user = userRepository.findByEmail(userEmail)
+    public List<StateAuditResponse> getStateHistory(UUID jobPostId, UUID userId) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         Organization organization = organizationContext.requireOrganization();

@@ -34,7 +34,8 @@ public class JobPostController {
     @PreAuthorize("hasRole('HIRING_MANAGER')")
     public ResponseEntity<JobPostResponse> createJobPost(@Valid @RequestBody JobPostRequest request,
                                                          Authentication authentication) {
-        JobPostResponse response = jobPostService.createJobPost(request, authentication.getName());
+        UUID userId = UUID.fromString(authentication.getName());
+        JobPostResponse response = jobPostService.createJobPost(request, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -60,7 +61,8 @@ public class JobPostController {
     public Page<JobPostResponse> listMyJobPosts(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             Authentication authentication) {
-        return jobPostService.listJobPostsByUser(authentication.getName(), pageable);
+        UUID userId = UUID.fromString(authentication.getName());
+        return jobPostService.listJobPostsByUser(userId, pageable);
     }
 
     @PutMapping("/{id}")
@@ -68,14 +70,16 @@ public class JobPostController {
     public ResponseEntity<JobPostResponse> updateJobPost(@PathVariable UUID id,
                                                          @Valid @RequestBody JobPostRequest request,
                                                          Authentication authentication) {
-        JobPostResponse response = jobPostService.updateJobPost(id, request, authentication.getName());
+        UUID userId = UUID.fromString(authentication.getName());
+        JobPostResponse response = jobPostService.updateJobPost(id, request, userId);
         return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('HIRING_MANAGER')")
     public ResponseEntity<Void> deleteJobPost(@PathVariable UUID id, Authentication authentication) {
-        jobPostService.deleteJobPost(id, authentication.getName());
+        UUID userId = UUID.fromString(authentication.getName());
+        jobPostService.deleteJobPost(id, userId);
         return ResponseEntity.noContent().build();
     }
 
@@ -90,7 +94,8 @@ public class JobPostController {
             @PathVariable UUID id,
             @Valid @RequestBody StateTransitionRequest request,
             Authentication authentication) {
-        JobPostResponse response = jobPostService.transitionJobPostState(id, request, authentication.getName());
+        UUID userId = UUID.fromString(authentication.getName());
+        JobPostResponse response = jobPostService.transitionJobPostState(id, request, userId);
         return ResponseEntity.ok(response);
     }
 
@@ -101,7 +106,8 @@ public class JobPostController {
     @PreAuthorize("hasAnyRole('HIRING_MANAGER', 'RECRUITER')")
     public ResponseEntity<JobPostResponse> publishJobPost(@PathVariable UUID id,
                                                           Authentication authentication) {
-        JobPostResponse response = jobPostService.publishJobPost(id, authentication.getName());
+        UUID userId = UUID.fromString(authentication.getName());
+        JobPostResponse response = jobPostService.publishJobPost(id, userId);
         return ResponseEntity.ok(response);
     }
 
@@ -114,7 +120,8 @@ public class JobPostController {
             @PathVariable UUID id,
             @RequestParam(required = false) String reason,
             Authentication authentication) {
-        JobPostResponse response = jobPostService.closeJobPost(id, reason, authentication.getName());
+        UUID userId = UUID.fromString(authentication.getName());
+        JobPostResponse response = jobPostService.closeJobPost(id, reason, userId);
         return ResponseEntity.ok(response);
     }
 
@@ -127,7 +134,8 @@ public class JobPostController {
             @PathVariable UUID id,
             @RequestParam(required = false) String reason,
             Authentication authentication) {
-        JobPostResponse response = jobPostService.reopenJobPost(id, reason, authentication.getName());
+        UUID userId = UUID.fromString(authentication.getName());
+        JobPostResponse response = jobPostService.reopenJobPost(id, reason, userId);
         return ResponseEntity.ok(response);
     }
 
@@ -140,7 +148,8 @@ public class JobPostController {
             @PathVariable UUID id,
             @RequestParam(required = false) String reason,
             Authentication authentication) {
-        JobPostResponse response = jobPostService.archiveJobPost(id, reason, authentication.getName());
+        UUID userId = UUID.fromString(authentication.getName());
+        JobPostResponse response = jobPostService.archiveJobPost(id, reason, userId);
         return ResponseEntity.ok(response);
     }
 
@@ -153,8 +162,9 @@ public class JobPostController {
     public ResponseEntity<JobPostResponse> updateJobPostStatus(@PathVariable UUID id,
                                                                @RequestParam String status,
                                                                Authentication authentication) {
+        UUID userId = UUID.fromString(authentication.getName());
         JobPostStatus newStatus = JobPostStatus.valueOf(status.toUpperCase());
-        JobPostResponse response = jobPostService.updateJobPostStatus(id, newStatus, authentication.getName());
+        JobPostResponse response = jobPostService.updateJobPostStatus(id, newStatus, userId);
         return ResponseEntity.ok(response);
     }
 
@@ -166,7 +176,8 @@ public class JobPostController {
     public ResponseEntity<List<StateAuditResponse>> getStateHistory(
             @PathVariable UUID id,
             Authentication authentication) {
-        List<StateAuditResponse> history = jobPostService.getStateHistory(id, authentication.getName());
+        UUID userId = UUID.fromString(authentication.getName());
+        List<StateAuditResponse> history = jobPostService.getStateHistory(id, userId);
         return ResponseEntity.ok(history);
     }
 

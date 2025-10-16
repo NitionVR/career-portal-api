@@ -25,9 +25,16 @@ public interface JobPostRepository extends JpaRepository<JobPost, UUID>, JpaSpec
     Optional<JobPost> findByIdAndOrganization(UUID id, Organization organization);
 
     // User-specific queries (within organization)
+    @Deprecated
     @Query("SELECT jp FROM JobPost jp WHERE jp.createdBy.email = :email AND jp.organization = :organization")
     Page<JobPost> findByCreatedByEmailAndOrganization(
             @Param("email") String email,
+            @Param("organization") Organization organization,
+            Pageable pageable);
+
+    @Query("SELECT jp FROM JobPost jp WHERE jp.createdBy.id = :userId AND jp.organization = :organization")
+    Page<JobPost> findByCreatedByIdAndOrganization(
+            @Param("userId") UUID userId,
             @Param("organization") Organization organization,
             Pageable pageable);
 
