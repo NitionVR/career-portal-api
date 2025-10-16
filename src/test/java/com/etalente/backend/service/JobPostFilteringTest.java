@@ -262,7 +262,7 @@ public class JobPostFilteringTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCanSeeAllOwnOrganizationJobs() {
-        authenticateAs(hmUser1.getEmail());
+        authenticateAs(hmUser1.getId());
         Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10), null, null, null, null, null);
 
         assertThat(jobs.getTotalElements()).isEqualTo(2); // job1_org1_open_java, job2_org1_draft_python
@@ -272,7 +272,7 @@ public class JobPostFilteringTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerFiltersOwnOrganizationJobsBySearchTerm() {
-        authenticateAs(hmUser1.getEmail());
+        authenticateAs(hmUser1.getId());
         Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10), "java", null, null, null, null);
 
         assertThat(jobs.getTotalElements()).isEqualTo(1);
@@ -282,7 +282,7 @@ public class JobPostFilteringTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerFiltersOwnOrganizationJobsBySkillSearch() {
-        authenticateAs(hmUser1.getEmail());
+        authenticateAs(hmUser1.getId());
         Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10), null, "spring", null, null, null);
 
         assertThat(jobs.getTotalElements()).isEqualTo(1);
@@ -292,7 +292,7 @@ public class JobPostFilteringTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCannotSeeOtherOrganizationJobs() {
-        authenticateAs(hmUser1.getEmail());
+        authenticateAs(hmUser1.getId());
         Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10), null, null, null, null, null);
 
         assertThat(jobs.getTotalElements()).isEqualTo(2);

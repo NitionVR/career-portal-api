@@ -1,15 +1,13 @@
 package com.etalente.backend.service;
 
 import com.etalente.backend.BaseIntegrationTest;
+import com.etalente.backend.TestHelper;
 import com.etalente.backend.dto.JobPostRequest;
 import com.etalente.backend.dto.JobPostResponse;
 import com.etalente.backend.dto.LocationDto;
-import com.etalente.backend.exception.ResourceNotFoundException;
 import com.etalente.backend.exception.UnauthorizedException;
 import com.etalente.backend.model.*;
 import com.etalente.backend.repository.JobPostRepository;
-import com.etalente.backend.repository.OrganizationRepository;
-import com.etalente.backend.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,12 +15,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
@@ -33,16 +30,8 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
     private JobPostRepository jobPostRepository;
 
     @Autowired
-    private UserRepository userRepository;
+    private TestHelper testHelper;
 
-    @Autowired
-    private OrganizationRepository organizationRepository;
-
-    @Autowired
-    private UserDetailsService userDetailsService;
-
-    private Organization orgA;
-    private Organization orgB;
     private User hiringManagerA;
     private User hiringManagerB;
     private User recruiterA;
@@ -52,48 +41,30 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Create Organization A
-        orgA = new Organization();
-        orgA.setName("Company A");
-        orgA.setIndustry("Technology");
-        orgA = organizationRepository.save(orgA);
-
-        // Create Organization B
-        orgB = new Organization();
-        orgB.setName("Company B");
-        orgB.setIndustry("Finance");
-        orgB = organizationRepository.save(orgB);
-
-        // Create Hiring Manager for Org A
-        hiringManagerA = createUser("hm-a@companya.com", "hmA", Role.HIRING_MANAGER, orgA);
-
-        // Create Hiring Manager for Org B
-        hiringManagerB = createUser("hm-b@companyb.com", "hmB", Role.HIRING_MANAGER, orgB);
-
-        // Create Recruiter for Org A
-        recruiterA = createUser("recruiter-a@companya.com", "recruiterA", Role.RECRUITER, orgA);
-
-        // Create Candidate (no organization)
-        candidate = createUser("candidate@example.com", "candidate1", Role.CANDIDATE, null);
+        // Create Users and Organizations
+        hiringManagerA = testHelper.createUser("hm-a@companya.com", Role.HIRING_MANAGER);
+        hiringManagerB = testHelper.createUser("hm-b@companyb.com", Role.HIRING_MANAGER);
+        recruiterA = testHelper.createUser("recruiter-a@companya.com", Role.RECRUITER);
+        candidate = testHelper.createUser("candidate@example.com", Role.CANDIDATE);
 
         // Create job post for Organization A
-        authenticateAs(hiringManagerA.getEmail());
+        authenticateAs(hiringManagerA.getId().toString());
         JobPostRequest requestA = createJobPostRequest("Senior Developer at Company A", "OPEN");
-        JobPostResponse responseA = jobPostService.createJobPost(requestA, hiringManagerA.getEmail());
+        JobPostResponse responseA = jobPostService.createJobPost(requestA, hiringManagerA.getId());
         jobPostOrgA = jobPostRepository.findById(responseA.id()).orElseThrow();
         jobPostOrgA.setStatus(JobPostStatus.OPEN); // Make it public
         jobPostOrgA = jobPostRepository.save(jobPostOrgA);
 
         // Create job post for Organization B
-        authenticateAs(hiringManagerB.getEmail());
+        authenticateAs(hiringManagerB.getId().toString());
         JobPostRequest requestB = createJobPostRequest("Data Analyst at Company B", "DRAFT");
-        JobPostResponse responseB = jobPostService.createJobPost(requestB, hiringManagerB.getEmail());
+        JobPostResponse responseB = jobPostService.createJobPost(requestB, hiringManagerB.getId());
         jobPostOrgB = jobPostRepository.findById(responseB.id()).orElseThrow();
     }
 
     @Test
     void hiringManagerCanOnlySeeOwnOrganizationJobPosts() {
-        authenticateAs(hiringManagerA.getEmail());
+        authenticateAs(hiringManagerA.getId().toString());
 
         Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10), null, null, null, null, null);
 
@@ -104,7 +75,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCannotAccessOtherOrganizationJobPost() {
-        authenticateAs(hiringManagerA.getEmail());
+        authenticateAs(hiringManagerA.getId().toString());
 
         // Try to access job post from Organization B
         assertThatThrownBy(() -> jobPostService.getJobPost(jobPostOrgB.getId()))
@@ -114,29 +85,29 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCannotUpdateOtherOrganizationJobPost() {
-        authenticateAs(hiringManagerA.getEmail());
+        authenticateAs(hiringManagerA.getId().toString());
 
         JobPostRequest updateRequest = createJobPostRequest("Hacked Title", "OPEN");
 
         assertThatThrownBy(() -> jobPostService.updateJobPost(
-                jobPostOrgB.getId(), updateRequest, hiringManagerA.getEmail()))
-                .isInstanceOf(UnauthorizedException.class)  // CHANGE THIS
+                jobPostOrgB.getId(), updateRequest, hiringManagerA.getId()))
+                .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("not found in your organization");
     }
 
     @Test
     void hiringManagerCannotDeleteOtherOrganizationJobPost() {
-        authenticateAs(hiringManagerA.getEmail());
+        authenticateAs(hiringManagerA.getId().toString());
 
         assertThatThrownBy(() -> jobPostService.deleteJobPost(
-                jobPostOrgB.getId(), hiringManagerA.getEmail()))
-                .isInstanceOf(UnauthorizedException.class)  // CHANGE THIS
+                jobPostOrgB.getId(), hiringManagerA.getId()))
+                .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("not found in your organization");
     }
 
     @Test
     void recruiterCanSeeJobPostsFromSameOrganization() {
-        authenticateAs(recruiterA.getEmail());
+        authenticateAs(recruiterA.getId().toString());
         Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10), null, null, null, null, null);
 
         assertThat(jobs.getContent()).hasSize(1);
@@ -145,7 +116,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
     @Test
     void recruiterCannotAccessOtherOrganizationJobPost() {
-        authenticateAs(recruiterA.getEmail());
+        authenticateAs(recruiterA.getId().toString());
 
         assertThatThrownBy(() -> jobPostService.getJobPost(jobPostOrgB.getId()))
                 .isInstanceOf(UnauthorizedException.class)
@@ -154,7 +125,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
     @Test
     void candidateCanOnlySeePublicJobPosts() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId().toString());
 
         Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10), null, null, null, null, null);
 
@@ -166,7 +137,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
     @Test
     void candidateCanAccessPublicJobPost() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId().toString());
 
         // Can access OPEN job post
         JobPostResponse response = jobPostService.getJobPost(jobPostOrgA.getId());
@@ -175,7 +146,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
     @Test
     void candidateCannotAccessDraftJobPost() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId().toString());
 
         // Cannot access DRAFT job post
         assertThatThrownBy(() -> jobPostService.getJobPost(jobPostOrgB.getId()))
@@ -185,39 +156,39 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
     @Test
     void listJobPostsByUserRespectsOrganizationBoundaries() {
-        authenticateAs(hiringManagerA.getEmail());
+        authenticateAs(hiringManagerA.getId().toString());
 
         // Can list own organization user's posts
         Page<JobPostResponse> ownPosts = jobPostService.listJobPostsByUser(
-                hiringManagerA.getEmail(), PageRequest.of(0, 10));
+                hiringManagerA.getId(), PageRequest.of(0, 10));
         assertThat(ownPosts.getContent()).hasSize(1);
 
         // Cannot list other organization user's posts
         assertThatThrownBy(() -> jobPostService.listJobPostsByUser(
-                hiringManagerB.getEmail(), PageRequest.of(0, 10)))
+                hiringManagerB.getId(), PageRequest.of(0, 10)))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("can only view job posts from users in your organization");
     }
 
     @Test
     void creatingJobPostAutomaticallyAssignsOrganization() {
-        authenticateAs(hiringManagerA.getEmail());
+        authenticateAs(hiringManagerA.getId().toString());
 
         JobPostRequest request = createJobPostRequest("New Job", "DRAFT");
-        JobPostResponse response = jobPostService.createJobPost(request, hiringManagerA.getEmail());
+        JobPostResponse response = jobPostService.createJobPost(request, hiringManagerA.getId());
 
         JobPost savedJobPost = jobPostRepository.findById(response.id()).orElseThrow();
         assertThat(savedJobPost.getOrganization()).isNotNull();
-        assertThat(savedJobPost.getOrganization().getId()).isEqualTo(orgA.getId());
+        assertThat(savedJobPost.getOrganization().getId()).isEqualTo(hiringManagerA.getOrganization().getId());
     }
 
     @Test
     void candidateCannotCreateJobPost() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId().toString());
 
         JobPostRequest request = createJobPostRequest("Candidate Job", "DRAFT");
 
-        assertThatThrownBy(() -> jobPostService.createJobPost(request, candidate.getEmail()))
+        assertThatThrownBy(() -> jobPostService.createJobPost(request, candidate.getId()))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("must belong to an organization");
     }
@@ -225,19 +196,19 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
     @Test
     void publicJobSearchDoesNotLeakDraftPosts() {
         // Create multiple job posts with different statuses
-        authenticateAs(hiringManagerA.getEmail());
+        authenticateAs(hiringManagerA.getId().toString());
 
         JobPostRequest draftRequest = createJobPostRequest("Draft Job A", "DRAFT");
-        jobPostService.createJobPost(draftRequest, hiringManagerA.getEmail());
+        jobPostService.createJobPost(draftRequest, hiringManagerA.getId());
 
         JobPostRequest openRequest = createJobPostRequest("Open Job A", "OPEN");
-        JobPostResponse openResponse = jobPostService.createJobPost(openRequest, hiringManagerA.getEmail());
+        JobPostResponse openResponse = jobPostService.createJobPost(openRequest, hiringManagerA.getId());
         JobPost openJob = jobPostRepository.findById(openResponse.id()).orElseThrow();
         openJob.setStatus(JobPostStatus.OPEN);
         jobPostRepository.save(openJob);
 
         // Candidate searches
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId().toString());
         Page<JobPostResponse> results = jobPostService.listJobPosts(PageRequest.of(0, 10), null, null, null, null, null);
 
         // Should only see OPEN jobs
@@ -254,9 +225,9 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
     void organizationDataIsolationInRepository() {
         // Direct repository test
         Page<JobPost> orgAJobs = jobPostRepository.findByOrganization(
-                orgA, PageRequest.of(0, 10));
+                hiringManagerA.getOrganization(), PageRequest.of(0, 10));
         Page<JobPost> orgBJobs = jobPostRepository.findByOrganization(
-                orgB, PageRequest.of(0, 10));
+                hiringManagerB.getOrganization(), PageRequest.of(0, 10));
 
         assertThat(orgAJobs.getContent()).hasSize(1);
         assertThat(orgBJobs.getContent()).hasSize(1);
@@ -265,17 +236,6 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
     }
 
     // Helper methods
-    private User createUser(String email, String username, Role role, Organization organization) {
-        User user = new User();
-        user.setEmail(email);
-        user.setUsername(username);
-        user.setRole(role);
-        user.setOrganization(organization);
-        user.setEmailVerified(true);
-        user.setProfileComplete(true);
-        return userRepository.save(user);
-    }
-
     private JobPostRequest createJobPostRequest(String title, String status) {
         return new JobPostRequest(
                 title,
@@ -292,4 +252,9 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
         );
     }
 
+    private void authenticateAs(String userId) {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(userId, null, null)
+        );
+    }
 }

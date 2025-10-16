@@ -81,7 +81,7 @@ class OrganizationContextTest extends BaseIntegrationTest {
 
     @Test
     void shouldGetCurrentOrganizationForHiringManager() {
-        authenticateAs(hiringManager1.getEmail());
+        authenticateAs(hiringManager1.getId());
 
         UUID orgId = organizationContext.getCurrentOrganizationId();
         assertThat(orgId).isEqualTo(org1.getId());
@@ -92,7 +92,7 @@ class OrganizationContextTest extends BaseIntegrationTest {
 
     @Test
     void shouldReturnNullOrganizationForCandidate() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId());
 
         UUID orgId = organizationContext.getCurrentOrganizationId();
         assertThat(orgId).isNull();
@@ -103,7 +103,7 @@ class OrganizationContextTest extends BaseIntegrationTest {
 
     @Test
     void shouldThrowExceptionWhenRequireOrganizationForCandidate() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId());
 
         assertThatThrownBy(() -> organizationContext.requireOrganizationId())
                 .isInstanceOf(UnauthorizedException.class)
@@ -112,7 +112,7 @@ class OrganizationContextTest extends BaseIntegrationTest {
 
     @Test
     void shouldVerifyOrganizationAccess() {
-        authenticateAs(hiringManager1.getEmail());
+        authenticateAs(hiringManager1.getId());
 
         // Should not throw for same organization
         assertThatCode(() -> organizationContext.verifyOrganizationAccess(org1.getId()))
@@ -126,7 +126,7 @@ class OrganizationContextTest extends BaseIntegrationTest {
 
     @Test
     void shouldCheckBelongsToOrganization() {
-        authenticateAs(hiringManager1.getEmail());
+        authenticateAs(hiringManager1.getId());
 
         assertThat(organizationContext.belongsToOrganization(org1.getId())).isTrue();
         assertThat(organizationContext.belongsToOrganization(org2.getId())).isFalse();
@@ -135,10 +135,10 @@ class OrganizationContextTest extends BaseIntegrationTest {
 
     @Test
     void shouldIdentifyCandidate() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId());
         assertThat(organizationContext.isCandidate()).isTrue();
 
-        authenticateAs(hiringManager1.getEmail());
+        authenticateAs(hiringManager1.getId());
         assertThat(organizationContext.isCandidate()).isFalse();
     }
 
