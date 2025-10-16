@@ -78,7 +78,10 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         oneTimeToken.setUsed(true);
         oneTimeTokenRepository.save(oneTimeToken);
 
-        User user = oneTimeToken.getUser();
+        // Fetch the user explicitly within the transaction to ensure it's managed
+        User user = userRepository.findById(oneTimeToken.getUser().getId())
+                .orElseThrow(() -> new RuntimeException("User not found for one-time token."));
+
         UserDetails userDetails = new org.springframework.security.core.userdetails.User(user.getEmail(), "", new ArrayList<>());
 
         Map<String, Object> claims = new HashMap<>();
