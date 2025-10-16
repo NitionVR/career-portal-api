@@ -1,24 +1,19 @@
 package com.etalente.backend.service;
 
 import com.etalente.backend.BaseIntegrationTest;
+import com.etalente.backend.TestHelper;
 import com.etalente.backend.dto.JobPostRequest;
 import com.etalente.backend.dto.LocationDto;
 import com.etalente.backend.exception.UnauthorizedException;
 import com.etalente.backend.model.*;
 import com.etalente.backend.repository.JobPostRepository;
-import com.etalente.backend.repository.OrganizationRepository;
-import com.etalente.backend.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JobPostPermissionErrorHandlingTest extends BaseIntegrationTest {
 
@@ -29,42 +24,31 @@ class JobPostPermissionErrorHandlingTest extends BaseIntegrationTest {
     private JobPostRepository jobPostRepository;
 
     @Autowired
-    private UserRepository userRepository;
+    private TestHelper testHelper;
 
-    @Autowired
-    private OrganizationRepository organizationRepository;
-
-    @Autowired
-    private UserDetailsService userDetailsService;
-
-    private Organization organization;
     private User hiringManager;
     private User recruiter;
     private JobPost jobPost;
 
     @BeforeEach
     void setUp() {
-        organization = new Organization();
-        organization.setName("Test Company");
-        organization.setIndustry("Technology");
-        organization = organizationRepository.save(organization);
+        hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
+        recruiter = testHelper.createUser("recruiter@test.com", Role.RECRUITER);
+        recruiter.setOrganization(hiringManager.getOrganization());
 
-        hiringManager = createUser("hm@test.com", "hm1", Role.HIRING_MANAGER, organization);
-        recruiter = createUser("recruiter@test.com", "rec1", Role.RECRUITER, organization);
-
-        authenticateAs(hiringManager.getEmail());
+        authenticateAs(hiringManager.getId());
         JobPostRequest request = createJobPostRequest();
-        var response = jobPostService.createJobPost(request, hiringManager.getEmail());
+        var response = jobPostService.createJobPost(request, hiringManager.getId());
         jobPost = jobPostRepository.findById(response.id()).orElseThrow();
     }
 
     @Test
     void creatingJobPostAsRecruiterGivesDescriptiveError() {
-        authenticateAs(recruiter.getEmail());
+        authenticateAs(recruiter.getId());
 
         JobPostRequest request = createJobPostRequest();
 
-        assertThatThrownBy(() -> jobPostService.createJobPost(request, recruiter.getEmail()))
+        assertThatThrownBy(() -> jobPostService.createJobPost(request, recruiter.getId()))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("Only hiring managers can create job posts")
                 .hasNoCause();
@@ -72,63 +56,44 @@ class JobPostPermissionErrorHandlingTest extends BaseIntegrationTest {
 
     @Test
     void deletingJobPostAsRecruiterGivesDescriptiveError() {
-        authenticateAs(recruiter.getEmail());
+        authenticateAs(recruiter.getId());
 
-        assertThatThrownBy(() -> jobPostService.deleteJobPost(jobPost.getId(), recruiter.getEmail()))
+        assertThatThrownBy(() -> jobPostService.deleteJobPost(jobPost.getId(), recruiter.getId()))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("Only hiring managers can delete job posts");
     }
 
     @Test
     void deletingOthersJobPostGivesDescriptiveError() {
-        User otherHM = createUser("other@test.com", "other", Role.HIRING_MANAGER, organization);
-        authenticateAs(otherHM.getEmail());
+        User otherHM = testHelper.createUser("other@test.com", Role.HIRING_MANAGER);
+        otherHM.setOrganization(hiringManager.getOrganization());
+        authenticateAs(otherHM.getId());
 
-        assertThatThrownBy(() -> jobPostService.deleteJobPost(jobPost.getId(), otherHM.getEmail()))
+        assertThatThrownBy(() -> jobPostService.deleteJobPost(jobPost.getId(), otherHM.getId()))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("You can only delete your own job posts");
     }
 
     @Test
     void updatingJobPostFromDifferentOrganizationGivesDescriptiveError() {
-        Organization otherOrg = new Organization();
-        otherOrg.setName("Other Company");
-        otherOrg.setIndustry("Finance");
-        otherOrg = organizationRepository.save(otherOrg);
-
-        User otherRecruiter = createUser("other-rec@test.com", "otherRec", Role.RECRUITER, otherOrg);
-        authenticateAs(otherRecruiter.getEmail());
+        User otherRecruiter = testHelper.createUser("other-rec@test.com", Role.RECRUITER);
+        authenticateAs(otherRecruiter.getId());
 
         JobPostRequest request = createJobPostRequest();
 
-        assertThatThrownBy(() -> jobPostService.updateJobPost(jobPost.getId(), request, otherRecruiter.getEmail()))
+        assertThatThrownBy(() -> jobPostService.updateJobPost(jobPost.getId(), request, otherRecruiter.getId()))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("not found in your organization");
     }
 
     @Test
     void statusChangeOnDifferentOrganizationJobPostGivesDescriptiveError() {
-        Organization otherOrg = new Organization();
-        otherOrg.setName("Other Company");
-        otherOrg = organizationRepository.save(otherOrg);
+        User otherRecruiter = testHelper.createUser("other-rec2@test.com", Role.RECRUITER);
+        authenticateAs(otherRecruiter.getId());
 
-        User otherRecruiter = createUser("other-rec2@test.com", "otherRec2", Role.RECRUITER, otherOrg);
-        authenticateAs(otherRecruiter.getEmail());
-
-        assertThatThrownBy(() -> jobPostService.publishJobPost(jobPost.getId(), otherRecruiter.getEmail()))
+        assertThatThrownBy(() -> jobPostService.publishJobPost(jobPost.getId(), otherRecruiter.getId()))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("not found in your organization");
-    }
-
-    private User createUser(String email, String username, Role role, Organization org) {
-        User user = new User();
-        user.setEmail(email);
-        user.setUsername(username);
-        user.setRole(role);
-        user.setOrganization(org);
-        user.setEmailVerified(true);
-        user.setProfileComplete(true);
-        return userRepository.save(user);
     }
 
     private JobPostRequest createJobPostRequest() {
@@ -146,5 +111,4 @@ class JobPostPermissionErrorHandlingTest extends BaseIntegrationTest {
                 List.of()
         );
     }
-
 }

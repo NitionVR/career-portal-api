@@ -1,25 +1,22 @@
 package com.etalente.backend.service;
 
 import com.etalente.backend.BaseIntegrationTest;
+import com.etalente.backend.TestHelper;
 import com.etalente.backend.dto.JobPostRequest;
 import com.etalente.backend.dto.JobPostResponse;
 import com.etalente.backend.dto.LocationDto;
 import com.etalente.backend.exception.UnauthorizedException;
 import com.etalente.backend.model.*;
 import com.etalente.backend.repository.JobPostRepository;
-import com.etalente.backend.repository.OrganizationRepository;
-import com.etalente.backend.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JobPostPermissionTest extends BaseIntegrationTest {
 
@@ -30,18 +27,11 @@ class JobPostPermissionTest extends BaseIntegrationTest {
     private JobPostRepository jobPostRepository;
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private OrganizationRepository organizationRepository;
-
-    @Autowired
-    private UserDetailsService userDetailsService;
+    private TestHelper testHelper;
 
     @Autowired
     private JobPostPermissionService permissionService;
 
-    private Organization organization;
     private User hiringManager;
     private User recruiter;
     private User candidate;
@@ -50,30 +40,18 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Create organization
-        organization = new Organization();
-        organization.setName("Test Company");
-        organization.setIndustry("Technology");
-        organization = organizationRepository.save(organization);
+        hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
+        recruiter = testHelper.createUser("recruiter@test.com", Role.RECRUITER);
+        recruiter.setOrganization(hiringManager.getOrganization());
+        candidate = testHelper.createUser("candidate@test.com", Role.CANDIDATE);
 
-        // Create hiring manager
-        hiringManager = createUser("hm@test.com", "hm1", Role.HIRING_MANAGER, organization);
-
-        // Create recruiter
-        recruiter = createUser("recruiter@test.com", "rec1", Role.RECRUITER, organization);
-
-        // Create candidate
-        candidate = createUser("candidate@test.com", "candidate1", Role.CANDIDATE, null);
-
-        // Create draft job post by hiring manager
-        authenticateAs(hiringManager.getEmail());
+        authenticateAs(hiringManager.getId());
         JobPostRequest request = createJobPostRequest("Software Engineer", "Draft job");
-        JobPostResponse response = jobPostService.createJobPost(request, hiringManager.getEmail());
+        JobPostResponse response = jobPostService.createJobPost(request, hiringManager.getId());
         draftJobPost = jobPostRepository.findById(response.id()).orElseThrow();
 
-        // Create open job post
         JobPostRequest openRequest = createJobPostRequest("Senior Developer", "Open job");
-        JobPostResponse openResponse = jobPostService.createJobPost(openRequest, hiringManager.getEmail());
+        JobPostResponse openResponse = jobPostService.createJobPost(openRequest, hiringManager.getId());
         openJobPost = jobPostRepository.findById(openResponse.id()).orElseThrow();
         openJobPost.setStatus(JobPostStatus.OPEN);
         openJobPost = jobPostRepository.save(openJobPost);
@@ -83,32 +61,32 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCanCreateJobPost() {
-        authenticateAs(hiringManager.getEmail());
+        authenticateAs(hiringManager.getId());
 
         JobPostRequest request = createJobPostRequest("New Position", "Description");
 
-        assertThatCode(() -> jobPostService.createJobPost(request, hiringManager.getEmail()))
+        assertThatCode(() -> jobPostService.createJobPost(request, hiringManager.getId()))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void recruiterCannotCreateJobPost() {
-        authenticateAs(recruiter.getEmail());
+        authenticateAs(recruiter.getId());
 
         JobPostRequest request = createJobPostRequest("New Position", "Description");
 
-        assertThatThrownBy(() -> jobPostService.createJobPost(request, recruiter.getEmail()))
+        assertThatThrownBy(() -> jobPostService.createJobPost(request, recruiter.getId()))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("Only hiring managers can create job posts");
     }
 
     @Test
     void candidateCannotCreateJobPost() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId());
 
         JobPostRequest request = createJobPostRequest("New Position", "Description");
 
-        assertThatThrownBy(() -> jobPostService.createJobPost(request, candidate.getEmail()))
+        assertThatThrownBy(() -> jobPostService.createJobPost(request, candidate.getId()))
                 .isInstanceOf(UnauthorizedException.class);
     }
 
@@ -116,23 +94,23 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCanUpdateOwnJobPost() {
-        authenticateAs(hiringManager.getEmail());
+        authenticateAs(hiringManager.getId());
 
         JobPostRequest updateRequest = createJobPostRequest("Updated Title", "Updated description");
 
         assertThatCode(() -> jobPostService.updateJobPost(
-                draftJobPost.getId(), updateRequest, hiringManager.getEmail()))
+                draftJobPost.getId(), updateRequest, hiringManager.getId()))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void recruiterCanUpdateJobPostInSameOrganization() {
-        authenticateAs(recruiter.getEmail());
+        authenticateAs(recruiter.getId());
 
         JobPostRequest updateRequest = createJobPostRequest("Recruiter Update", "Updated by recruiter");
 
         assertThatCode(() -> jobPostService.updateJobPost(
-                draftJobPost.getId(), updateRequest, recruiter.getEmail()))
+                draftJobPost.getId(), updateRequest, recruiter.getId()))
                 .doesNotThrowAnyException();
 
         JobPost updated = jobPostRepository.findById(draftJobPost.getId()).orElseThrow();
@@ -141,36 +119,29 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void recruiterCannotUpdateJobPostFromDifferentOrganization() {
-        // Create another organization with a job post
-        Organization otherOrg = new Organization();
-        otherOrg.setName("Other Company");
-        otherOrg.setIndustry("Finance");
-        otherOrg = organizationRepository.save(otherOrg);
+        User otherHM = testHelper.createUser("other-hm@test.com", Role.HIRING_MANAGER);
 
-        User otherHM = createUser("other-hm@test.com", "otherhm", Role.HIRING_MANAGER, otherOrg);
-
-        authenticateAs(otherHM.getEmail());
+        authenticateAs(otherHM.getId());
         JobPostRequest request = createJobPostRequest("Other Company Job", "Description");
-        JobPostResponse response = jobPostService.createJobPost(request, otherHM.getEmail());
+        JobPostResponse response = jobPostService.createJobPost(request, otherHM.getId());
 
-        // Try to update as recruiter from first organization
-        authenticateAs(recruiter.getEmail());
+        authenticateAs(recruiter.getId());
         JobPostRequest updateRequest = createJobPostRequest("Hacked", "Should not work");
 
         assertThatThrownBy(() -> jobPostService.updateJobPost(
-                response.id(), updateRequest, recruiter.getEmail()))
+                response.id(), updateRequest, recruiter.getId()))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("not found in your organization");
     }
 
     @Test
     void candidateCannotUpdateJobPost() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId());
 
         JobPostRequest updateRequest = createJobPostRequest("Hacked Title", "Hacked");
 
         assertThatThrownBy(() -> jobPostService.updateJobPost(
-                draftJobPost.getId(), updateRequest, candidate.getEmail()))
+                draftJobPost.getId(), updateRequest, candidate.getId()))
                 .isInstanceOf(UnauthorizedException.class);
     }
 
@@ -178,9 +149,9 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCanDeleteOwnJobPost() {
-        authenticateAs(hiringManager.getEmail());
+        authenticateAs(hiringManager.getId());
 
-        assertThatCode(() -> jobPostService.deleteJobPost(draftJobPost.getId(), hiringManager.getEmail()))
+        assertThatCode(() -> jobPostService.deleteJobPost(draftJobPost.getId(), hiringManager.getId()))
                 .doesNotThrowAnyException();
 
         assertThat(jobPostRepository.findById(draftJobPost.getId())).isEmpty();
@@ -188,30 +159,30 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void recruiterCannotDeleteJobPost() {
-        authenticateAs(recruiter.getEmail());
+        authenticateAs(recruiter.getId());
 
-        assertThatThrownBy(() -> jobPostService.deleteJobPost(draftJobPost.getId(), recruiter.getEmail()))
+        assertThatThrownBy(() -> jobPostService.deleteJobPost(draftJobPost.getId(), recruiter.getId()))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("Only hiring managers can delete job posts");
     }
 
     @Test
     void hiringManagerCannotDeleteOtherHiringManagerJobPost() {
-        // Create another hiring manager in same organization
-        User otherHM = createUser("other-hm@test.com", "otherhm", Role.HIRING_MANAGER, organization);
+        User otherHM = testHelper.createUser("other-hm@test.com", Role.HIRING_MANAGER);
+        otherHM.setOrganization(hiringManager.getOrganization());
 
-        authenticateAs(otherHM.getEmail());
+        authenticateAs(otherHM.getId());
 
-        assertThatThrownBy(() -> jobPostService.deleteJobPost(draftJobPost.getId(), otherHM.getEmail()))
+        assertThatThrownBy(() -> jobPostService.deleteJobPost(draftJobPost.getId(), otherHM.getId()))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("You can only delete your own job posts");
     }
 
     @Test
     void candidateCannotDeleteJobPost() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId());
 
-        assertThatThrownBy(() -> jobPostService.deleteJobPost(draftJobPost.getId(), candidate.getEmail()))
+        assertThatThrownBy(() -> jobPostService.deleteJobPost(draftJobPost.getId(), candidate.getId()))
                 .isInstanceOf(UnauthorizedException.class);
     }
 
@@ -219,9 +190,9 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCanPublishJobPost() {
-        authenticateAs(hiringManager.getEmail());
+        authenticateAs(hiringManager.getId());
 
-        assertThatCode(() -> jobPostService.publishJobPost(draftJobPost.getId(), hiringManager.getEmail()))
+        assertThatCode(() -> jobPostService.publishJobPost(draftJobPost.getId(), hiringManager.getId()))
                 .doesNotThrowAnyException();
 
         JobPost updated = jobPostRepository.findById(draftJobPost.getId()).orElseThrow();
@@ -230,9 +201,9 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void recruiterCanPublishJobPost() {
-        authenticateAs(recruiter.getEmail());
+        authenticateAs(recruiter.getId());
 
-        assertThatCode(() -> jobPostService.publishJobPost(draftJobPost.getId(), recruiter.getEmail()))
+        assertThatCode(() -> jobPostService.publishJobPost(draftJobPost.getId(), recruiter.getId()))
                 .doesNotThrowAnyException();
 
         JobPost updated = jobPostRepository.findById(draftJobPost.getId()).orElseThrow();
@@ -241,9 +212,9 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCanCloseJobPost() {
-        authenticateAs(hiringManager.getEmail());
+        authenticateAs(hiringManager.getId());
 
-        assertThatCode(() -> jobPostService.closeJobPost(openJobPost.getId(), null, hiringManager.getEmail()))
+        assertThatCode(() -> jobPostService.closeJobPost(openJobPost.getId(), null, hiringManager.getId()))
                 .doesNotThrowAnyException();
 
         JobPost updated = jobPostRepository.findById(openJobPost.getId()).orElseThrow();
@@ -252,9 +223,9 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void recruiterCanCloseJobPost() {
-        authenticateAs(recruiter.getEmail());
+        authenticateAs(recruiter.getId());
 
-        assertThatCode(() -> jobPostService.closeJobPost(openJobPost.getId(), null, recruiter.getEmail()))
+        assertThatCode(() -> jobPostService.closeJobPost(openJobPost.getId(), null, recruiter.getId()))
                 .doesNotThrowAnyException();
 
         JobPost updated = jobPostRepository.findById(openJobPost.getId()).orElseThrow();
@@ -263,30 +234,23 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void candidateCannotChangeJobPostStatus() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId());
 
-        assertThatThrownBy(() -> jobPostService.publishJobPost(draftJobPost.getId(), candidate.getEmail()))
+        assertThatThrownBy(() -> jobPostService.publishJobPost(draftJobPost.getId(), candidate.getId()))
                 .isInstanceOf(UnauthorizedException.class);
     }
 
     @Test
     void recruiterCannotChangeStatusOfJobPostFromDifferentOrganization() {
-        // Create another organization with a job post
-        Organization otherOrg = new Organization();
-        otherOrg.setName("Other Company");
-        otherOrg.setIndustry("Finance");
-        otherOrg = organizationRepository.save(otherOrg);
+        User otherHM = testHelper.createUser("other-hm2@test.com", Role.HIRING_MANAGER);
 
-        User otherHM = createUser("other-hm2@test.com", "otherhm2", Role.HIRING_MANAGER, otherOrg);
-
-        authenticateAs(otherHM.getEmail());
+        authenticateAs(otherHM.getId());
         JobPostRequest request = createJobPostRequest("Other Company Job", "Description");
-        JobPostResponse response = jobPostService.createJobPost(request, otherHM.getEmail());
+        JobPostResponse response = jobPostService.createJobPost(request, otherHM.getId());
 
-        // Try to publish as recruiter from first organization
-        authenticateAs(recruiter.getEmail());
+        authenticateAs(recruiter.getId());
 
-        assertThatThrownBy(() -> jobPostService.publishJobPost(response.id(), recruiter.getEmail()))
+        assertThatThrownBy(() -> jobPostService.publishJobPost(response.id(), recruiter.getId()))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("not found in your organization");
     }
@@ -295,7 +259,7 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCanViewOwnDraftJobPost() {
-        authenticateAs(hiringManager.getEmail());
+        authenticateAs(hiringManager.getId());
 
         assertThatCode(() -> jobPostService.getJobPost(draftJobPost.getId()))
                 .doesNotThrowAnyException();
@@ -303,7 +267,7 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void recruiterCanViewDraftJobPostInSameOrganization() {
-        authenticateAs(recruiter.getEmail());
+        authenticateAs(recruiter.getId());
 
         assertThatCode(() -> jobPostService.getJobPost(draftJobPost.getId()))
                 .doesNotThrowAnyException();
@@ -311,7 +275,7 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void candidateCannotViewDraftJobPost() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId());
 
         assertThatThrownBy(() -> jobPostService.getJobPost(draftJobPost.getId()))
                 .isInstanceOf(UnauthorizedException.class)
@@ -320,7 +284,7 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void candidateCanViewOpenJobPost() {
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId());
 
         assertThatCode(() -> jobPostService.getJobPost(openJobPost.getId()))
                 .doesNotThrowAnyException();
@@ -328,18 +292,15 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void everyoneCanViewPublicJobPost() {
-        // Hiring Manager
-        authenticateAs(hiringManager.getEmail());
+        authenticateAs(hiringManager.getId());
         assertThatCode(() -> jobPostService.getJobPost(openJobPost.getId()))
                 .doesNotThrowAnyException();
 
-        // Recruiter
-        authenticateAs(recruiter.getEmail());
+        authenticateAs(recruiter.getId());
         assertThatCode(() -> jobPostService.getJobPost(openJobPost.getId()))
                 .doesNotThrowAnyException();
 
-        // Candidate
-        authenticateAs(candidate.getEmail());
+        authenticateAs(candidate.getId());
         assertThatCode(() -> jobPostService.getJobPost(openJobPost.getId()))
                 .doesNotThrowAnyException();
     }
@@ -395,29 +356,16 @@ class JobPostPermissionTest extends BaseIntegrationTest {
 
     @Test
     void permissionServiceCanView() {
-        // Public job post - everyone can view
         assertThat(permissionService.canView(hiringManager, openJobPost)).isTrue();
         assertThat(permissionService.canView(recruiter, openJobPost)).isTrue();
         assertThat(permissionService.canView(candidate, openJobPost)).isTrue();
 
-        // Draft job post - only organization members can view
         assertThat(permissionService.canView(hiringManager, draftJobPost)).isTrue();
         assertThat(permissionService.canView(recruiter, draftJobPost)).isTrue();
         assertThat(permissionService.canView(candidate, draftJobPost)).isFalse();
     }
 
     // Helper methods
-    private User createUser(String email, String username, Role role, Organization organization) {
-        User user = new User();
-        user.setEmail(email);
-        user.setUsername(username);
-        user.setRole(role);
-        user.setOrganization(organization);
-        user.setEmailVerified(true);
-        user.setProfileComplete(true);
-        return userRepository.save(user);
-    }
-
     private JobPostRequest createJobPostRequest(String title, String description) {
         return new JobPostRequest(
                 title,
@@ -433,6 +381,4 @@ class JobPostPermissionTest extends BaseIntegrationTest {
                 List.of()
         );
     }
-
-
 }
