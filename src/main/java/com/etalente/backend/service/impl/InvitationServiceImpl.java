@@ -51,8 +51,8 @@ public class InvitationServiceImpl implements InvitationService {
     }
 
     @Override
-    public RecruiterInvitation sendRecruiterInvitation(RecruiterInvitationRequest request, String inviterEmail) {
-        User inviter = userRepository.findByEmail(inviterEmail)
+    public RecruiterInvitation sendRecruiterInvitation(RecruiterInvitationRequest request, UUID inviterId) {
+        User inviter = userRepository.findById(inviterId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         // Verify the inviter is a hiring manager
@@ -110,10 +110,10 @@ public class InvitationServiceImpl implements InvitationService {
     }
 
     @Override
-    public void bulkSendRecruiterInvitations(List<RecruiterInvitationRequest> requests, String inviterEmail) {
+    public void bulkSendRecruiterInvitations(List<RecruiterInvitationRequest> requests, UUID inviterId) {
         for (RecruiterInvitationRequest request : requests) {
             try {
-                sendRecruiterInvitation(request, inviterEmail);
+                sendRecruiterInvitation(request, inviterId);
             } catch (Exception e) {
                 // Log the error for individual invitation failures
                 // Depending on requirements, you might collect these errors and return them
@@ -171,8 +171,8 @@ public class InvitationServiceImpl implements InvitationService {
     }
 
     @Override
-    public void revokeInvitation(UUID invitationId, String inviterEmail) {
-        User inviter = userRepository.findByEmail(inviterEmail)
+    public void revokeInvitation(UUID invitationId, UUID inviterId) {
+        User inviter = userRepository.findById(inviterId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         RecruiterInvitation invitation = invitationRepository.findById(invitationId)
@@ -193,8 +193,8 @@ public class InvitationServiceImpl implements InvitationService {
     }
 
     @Override
-    public Page<RecruiterInvitation> getOrganizationInvitations(String userEmail, Pageable pageable) {
-        User user = userRepository.findByEmail(userEmail)
+    public Page<RecruiterInvitation> getOrganizationInvitations(UUID userId, Pageable pageable) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (user.getOrganization() == null) {

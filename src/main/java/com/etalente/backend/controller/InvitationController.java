@@ -1,16 +1,13 @@
 package com.etalente.backend.controller;
 
 import com.etalente.backend.dto.AcceptInvitationRequest;
-import com.etalente.backend.dto.RecruiterInvitationRequest;
 import com.etalente.backend.dto.RecruiterInvitationDto;
+import com.etalente.backend.dto.RecruiterInvitationRequest;
 import com.etalente.backend.model.RecruiterInvitation;
 import com.etalente.backend.model.User;
 import com.etalente.backend.service.AuthenticationService;
 import com.etalente.backend.service.InvitationService;
 import jakarta.validation.Valid;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -20,6 +17,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/invitations")
@@ -39,8 +40,8 @@ public class InvitationController {
     public ResponseEntity<RecruiterInvitationDto> inviteRecruiter(
             @Valid @RequestBody RecruiterInvitationRequest request,
             Authentication authentication) {
-        RecruiterInvitation invitation = invitationService.sendRecruiterInvitation(
-                request, authentication.getName());
+        UUID inviterId = UUID.fromString(authentication.getName());
+        RecruiterInvitation invitation = invitationService.sendRecruiterInvitation(request, inviterId);
         RecruiterInvitationDto dto = new RecruiterInvitationDto(
                 invitation.getId(),
                 invitation.getEmail(),
@@ -56,7 +57,8 @@ public class InvitationController {
     public ResponseEntity<Map<String, String>> inviteRecruiterBulk(
             @Valid @RequestBody List<RecruiterInvitationRequest> requests,
             Authentication authentication) {
-        invitationService.bulkSendRecruiterInvitations(requests, authentication.getName());
+        UUID inviterId = UUID.fromString(authentication.getName());
+        invitationService.bulkSendRecruiterInvitations(requests, inviterId);
         return ResponseEntity.ok(Map.of("message", "Invitations processed"));
     }
 
@@ -80,7 +82,8 @@ public class InvitationController {
     public ResponseEntity<Void> revokeInvitation(
             @PathVariable UUID invitationId,
             Authentication authentication) {
-        invitationService.revokeInvitation(invitationId, authentication.getName());
+        UUID inviterId = UUID.fromString(authentication.getName());
+        invitationService.revokeInvitation(invitationId, inviterId);
         return ResponseEntity.noContent().build();
     }
 
@@ -89,7 +92,8 @@ public class InvitationController {
     public Page<RecruiterInvitationDto> listOrganizationInvitations(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             Authentication authentication) {
-        return invitationService.getOrganizationInvitations(authentication.getName(), pageable)
+        UUID userId = UUID.fromString(authentication.getName());
+        return invitationService.getOrganizationInvitations(userId, pageable)
                 .map(invitation -> new RecruiterInvitationDto(
                         invitation.getId(),
                         invitation.getEmail(),
