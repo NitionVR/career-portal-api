@@ -32,6 +32,8 @@ dependencies {
 	implementation 'io.awspring.cloud:spring-cloud-aws-starter-ses:3.1.1'
 	implementation 'io.hypersistence:hypersistence-utils-hibernate-63:3.7.0'
 	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+	compileOnly 'org.projectlombok:lombok:1.18.42'
+	annotationProcessor 'org.projectlombok:lombok:1.18.42'
 	implementation 'co.novu:novu-java:1.6.0'
 	implementation 'com.fasterxml.jackson.core:jackson-databind'
 	implementation 'org.springframework.boot:spring-boot-configuration-processor'
