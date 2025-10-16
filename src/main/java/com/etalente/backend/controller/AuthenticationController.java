@@ -100,9 +100,11 @@ public class AuthenticationController {
         String email = jwtService.extractEmail(token);
         String role = jwtService.extractRole(token);
         Boolean isNewUser = jwtService.extractIsNewUser(token);
+        String username = jwtService.extractClaim(token, claims -> claims.get("username", String.class));
+
 
         // Generate new token with same claims
-        String newToken = jwtService.generateToken(userId, email, role, isNewUser);
+        String newToken = jwtService.generateToken(userId, email, role, isNewUser, username);
 
         return ResponseEntity.ok(Map.of(
             "token", newToken,

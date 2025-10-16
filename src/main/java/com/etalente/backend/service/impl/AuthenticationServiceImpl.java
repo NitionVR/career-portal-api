@@ -26,7 +26,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     private final JwtService jwtService;
     private final OneTimeTokenRepository oneTimeTokenRepository;
 
-    @Value("${magic-link-url}")
+    @Value("${magic-link.url}")
     private String magicLinkUrl;
 
     @Value("${ott.expiration-minutes}")
@@ -92,7 +92,8 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 user.getId().toString(),
                 user.getEmail(),
                 user.getRole().name(),
-                isNewUser
+                isNewUser,
+                user.getUsername()
         );
 
         VerifyTokenResponse.UserDto userDto = new VerifyTokenResponse.UserDto(
@@ -111,13 +112,12 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
     @Override
     public String generateJwtForUser(User user) {
-        // This method might need re-evaluation or could be deprecated in favor of the new flow.
-        // For now, it generates a token without the isNewUser flag.
         return jwtService.generateToken(
                 user.getId().toString(),
                 user.getEmail(),
                 user.getRole().name(),
-                false // Assume not a new user when generating token directly
+                false, // Assume not a new user when generating token directly
+                user.getUsername()
         );
     }
 }
