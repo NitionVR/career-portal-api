@@ -114,7 +114,7 @@ class AuthenticationServiceImplTest {
         OneTimeToken oneTimeToken = new OneTimeToken(ott, user, LocalDateTime.now().plusMinutes(10));
 
         when(oneTimeTokenRepository.findByToken(ott)).thenReturn(Optional.of(oneTimeToken));
-        when(jwtService.generateToken(anyString(), anyString(), anyString(), any(boolean.class))).thenReturn("session-jwt");
+        when(jwtService.generateToken(anyString(), anyString(), anyString(), any(boolean.class), anyString())).thenReturn("session-jwt");
         when(jwtService.getTimeUntilExpiration("session-jwt")).thenReturn(3600000L);
 
         // When

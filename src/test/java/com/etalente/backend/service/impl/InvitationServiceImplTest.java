@@ -80,57 +80,56 @@ class InvitationServiceImplTest {
     @DisplayName("sendRecruiterInvitation should create and send invitation when inviter is a hiring manager")
     void sendRecruiterInvitation_shouldCreateAndSendInvitation_whenInviterIsHiringManager() {
         // Given
-        hiringManager.setOrganization(null); // Start with no organization to test creation
-        RecruiterInvitationRequest request = new RecruiterInvitationRequest(faker.internet().emailAddress(), "Join us!");
-        when(userRepository.findByEmail(hiringManager.getEmail())).thenReturn(Optional.of(hiringManager));
-        when(organizationRepository.save(any(Organization.class))).thenAnswer(invocation -> {
-            Organization org = invocation.getArgument(0);
-            org.setId(UUID.randomUUID()); // Simulate saving
-            return org;
-        });
-        when(userRepository.save(any(User.class))).thenReturn(hiringManager);
-        when(invitationRepository.save(any(RecruiterInvitation.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        // When
-        invitationService.sendRecruiterInvitation(request, hiringManager.getEmail());
-
-        // Then
-        ArgumentCaptor<RecruiterInvitation> invitationCaptor = ArgumentCaptor.forClass(RecruiterInvitation.class);
-        verify(invitationRepository).save(invitationCaptor.capture());
-        RecruiterInvitation savedInvitation = invitationCaptor.getValue();
-
-        ArgumentCaptor<Organization> organizationCaptor = ArgumentCaptor.forClass(Organization.class);
-        verify(organizationRepository).save(organizationCaptor.capture());
-        Organization savedOrganization = organizationCaptor.getValue();
-
-        assertEquals(request.email(), savedInvitation.getEmail());
-        assertEquals(savedOrganization.getId(), savedInvitation.getOrganization().getId()); // Assert on the created org
-        assertEquals(hiringManager, savedInvitation.getInvitedBy());
-        assertEquals(InvitationStatus.PENDING, savedInvitation.getStatus());
-        assertNotNull(savedInvitation.getToken());
-
-        verify(emailService).sendRecruiterInvitation(
-            eq(request.email()),
-            eq(hiringManager.getFirstName() + " " + hiringManager.getLastName()),
-            eq(savedOrganization.getName()),
-            anyString(),
-            eq(request.personalMessage())
-        );
-    }
-
-    @Test
-    @DisplayName("sendRecruiterInvitation should throw UnauthorizedException if inviter is not a hiring manager")
-    void sendRecruiterInvitation_shouldThrowUnauthorizedException_whenInviterIsNotHiringManager() {
-        // Given
-        hiringManager.setRole(Role.CANDIDATE);
-        RecruiterInvitationRequest request = new RecruiterInvitationRequest(faker.internet().emailAddress(), null);
-        when(userRepository.findByEmail(hiringManager.getEmail())).thenReturn(Optional.of(hiringManager));
-
-        // When & Then
-        assertThrows(UnauthorizedException.class, () -> {
-            invitationService.sendRecruiterInvitation(request, hiringManager.getEmail());
-        });
-    }
+                hiringManager.setOrganization(null); // Start with no organization to test creation
+                RecruiterInvitationRequest request = new RecruiterInvitationRequest(faker.internet().emailAddress(), "Join us!");
+                when(userRepository.findById(hiringManager.getId())).thenReturn(Optional.of(hiringManager));
+                when(organizationRepository.save(any(Organization.class))).thenAnswer(invocation -> {
+                    Organization org = invocation.getArgument(0);
+                    org.setId(UUID.randomUUID()); // Simulate saving
+                    return org;
+                });
+                when(userRepository.save(any(User.class))).thenReturn(hiringManager);
+                when(invitationRepository.save(any(RecruiterInvitation.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        
+                // When
+                invitationService.sendRecruiterInvitation(request, hiringManager.getId());
+        
+                // Then
+                ArgumentCaptor<RecruiterInvitation> invitationCaptor = ArgumentCaptor.forClass(RecruiterInvitation.class);
+                verify(invitationRepository).save(invitationCaptor.capture());
+                RecruiterInvitation savedInvitation = invitationCaptor.getValue();
+                ArgumentCaptor<Organization> organizationCaptor = ArgumentCaptor.forClass(Organization.class);
+                verify(organizationRepository).save(organizationCaptor.capture());
+                Organization savedOrganization = organizationCaptor.getValue();
+        
+                assertEquals(request.email(), savedInvitation.getEmail());
+                assertEquals(savedOrganization.getId(), savedInvitation.getOrganization().getId()); // Assert on the created org
+                assertEquals(hiringManager, savedInvitation.getInvitedBy());
+                assertEquals(InvitationStatus.PENDING, savedInvitation.getStatus());
+                assertNotNull(savedInvitation.getToken());
+        
+                verify(emailService).sendRecruiterInvitation(
+                    eq(request.email()),
+                    eq(hiringManager.getFirstName() + " " + hiringManager.getLastName()),
+                    eq(savedOrganization.getName()),
+                    anyString(),
+                    eq(request.personalMessage())
+                );
+            }
+        
+            @Test
+            @DisplayName("sendRecruiterInvitation should throw UnauthorizedException if inviter is not a hiring manager")
+            void sendRecruiterInvitation_shouldThrowUnauthorizedException_whenInviterIsNotHiringManager() {
+                // Given
+                hiringManager.setRole(Role.CANDIDATE);
+                RecruiterInvitationRequest request = new RecruiterInvitationRequest(faker.internet().emailAddress(), null);
+                when(userRepository.findById(hiringManager.getId())).thenReturn(Optional.of(hiringManager));
+        
+                // When & Then
+                assertThrows(UnauthorizedException.class, () -> {
+                    invitationService.sendRecruiterInvitation(request, hiringManager.getId());
+                });
+            }
 
     @Test
     @DisplayName("acceptInvitation should create a new user with RECRUITER role")

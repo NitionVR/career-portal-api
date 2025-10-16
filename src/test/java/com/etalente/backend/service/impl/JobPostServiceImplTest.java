@@ -15,8 +15,8 @@ import com.etalente.backend.service.JobPostPermissionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -28,7 +28,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
-import com.etalente.backend.repository.JobPostSpecification;
 
 import java.util.Collections;
 import java.util.Optional;
@@ -63,14 +62,14 @@ class JobPostServiceImplTest {
     private Faker faker;
     private User testUser;
     private Organization organization;
-    private String userEmail;
+    private UUID userId;
     private JobPost testJobPost;
     private UUID jobPostId;
 
     @BeforeEach
     void setUp() {
         faker = new Faker();
-        userEmail = faker.internet().emailAddress();
+        userId = UUID.randomUUID();
         jobPostId = UUID.randomUUID();
 
         organization = new Organization();
@@ -78,8 +77,7 @@ class JobPostServiceImplTest {
         organization.setName(faker.company().name());
 
         testUser = new User();
-        testUser.setId(UUID.randomUUID());
-        testUser.setEmail(userEmail);
+        testUser.setId(userId);
         testUser.setOrganization(organization);
 
         testJobPost = new JobPost();
@@ -92,7 +90,7 @@ class JobPostServiceImplTest {
     @Test
     void createJobPost_shouldSaveAndReturnJobPost() {
         // Given
-        when(userRepository.findByEmail(userEmail)).thenReturn(Optional.of(testUser));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
         when(organizationContext.requireOrganization()).thenReturn(organization);
         JobPostRequest request = createFakeJobPostRequest();
         when(jobPostRepository.save(any(JobPost.class))).thenReturn(testJobPost);
@@ -101,7 +99,7 @@ class JobPostServiceImplTest {
         doNothing().when(permissionService).verifyCanCreate(any(User.class));
 
         // When
-        jobPostService.createJobPost(request, userEmail);
+        jobPostService.createJobPost(request, userId);
 
         // Then
         ArgumentCaptor<JobPost> jobPostCaptor = ArgumentCaptor.forClass(JobPost.class);
@@ -139,7 +137,7 @@ class JobPostServiceImplTest {
     @Test
     void updateJobPost_shouldUpdateSuccessfully_whenOwner() {
         // Given
-        when(userRepository.findByEmail(userEmail)).thenReturn(Optional.of(testUser));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
         when(organizationContext.requireOrganization()).thenReturn(organization);
         JobPostRequest request = createFakeJobPostRequest();
         when(jobPostRepository.findByIdAndOrganization(jobPostId, organization)).thenReturn(Optional.of(testJobPost));
@@ -147,7 +145,7 @@ class JobPostServiceImplTest {
         doNothing().when(permissionService).verifyCanUpdate(any(User.class), any(JobPost.class)); // ADD THIS
 
         // When
-        jobPostService.updateJobPost(jobPostId, request, userEmail);
+        jobPostService.updateJobPost(jobPostId, request, userId);
 
         // Then
         verify(jobPostRepository).save(any(JobPost.class));
@@ -159,31 +157,31 @@ class JobPostServiceImplTest {
         when(organizationContext.requireOrganization()).thenReturn(organization);
         JobPostRequest request = createFakeJobPostRequest();
         when(jobPostRepository.findByIdAndOrganization(jobPostId, organization)).thenReturn(Optional.of(testJobPost));
-        String otherUserEmail = faker.internet().emailAddress();
+        UUID otherUserId = UUID.randomUUID();
 
         User otherUser = new User();
-        otherUser.setEmail(otherUserEmail);
+        otherUser.setId(otherUserId);
         otherUser.setOrganization(organization);
-        when(userRepository.findByEmail(otherUserEmail)).thenReturn(Optional.of(otherUser));
+        when(userRepository.findById(otherUserId)).thenReturn(Optional.of(otherUser));
 
         // Mock permission service to throw
         doThrow(new UnauthorizedException("Not authorized")).when(permissionService)
                 .verifyCanUpdate(any(User.class), any(JobPost.class));
 
         // When & Then
-        assertThrows(UnauthorizedException.class, () -> jobPostService.updateJobPost(jobPostId, request, otherUserEmail));
+        assertThrows(UnauthorizedException.class, () -> jobPostService.updateJobPost(jobPostId, request, otherUserId));
     }
 
     @Test
     void deleteJobPost_shouldDeleteSuccessfully_whenOwner() {
         // Given
-        when(userRepository.findByEmail(userEmail)).thenReturn(Optional.of(testUser));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
         when(organizationContext.requireOrganization()).thenReturn(organization);
         when(jobPostRepository.findByIdAndOrganization(jobPostId, organization)).thenReturn(Optional.of(testJobPost));
         doNothing().when(permissionService).verifyCanDelete(any(User.class), any(JobPost.class)); // ADD THIS
 
         // When
-        jobPostService.deleteJobPost(jobPostId, userEmail);
+        jobPostService.deleteJobPost(jobPostId, userId);
 
         // Then
         verify(jobPostRepository).delete(testJobPost);
@@ -194,19 +192,19 @@ class JobPostServiceImplTest {
         // Given
         when(organizationContext.requireOrganization()).thenReturn(organization);
         when(jobPostRepository.findByIdAndOrganization(jobPostId, organization)).thenReturn(Optional.of(testJobPost));
-        String otherUserEmail = faker.internet().emailAddress();
+        UUID otherUserId = UUID.randomUUID();
 
         User otherUser = new User();
-        otherUser.setEmail(otherUserEmail);
+        otherUser.setId(otherUserId);
         otherUser.setOrganization(organization);
-        when(userRepository.findByEmail(otherUserEmail)).thenReturn(Optional.of(otherUser));
+        when(userRepository.findById(otherUserId)).thenReturn(Optional.of(otherUser));
 
         // Mock permission service to throw
         doThrow(new UnauthorizedException("Not authorized")).when(permissionService)
                 .verifyCanDelete(any(User.class), any(JobPost.class));
 
         // When & Then
-        assertThrows(UnauthorizedException.class, () -> jobPostService.deleteJobPost(jobPostId, otherUserEmail));
+        assertThrows(UnauthorizedException.class, () -> jobPostService.deleteJobPost(jobPostId, otherUserId));
     }
 
     @Test
@@ -233,15 +231,15 @@ class JobPostServiceImplTest {
         Pageable pageable = PageRequest.of(0, 10);
         Page<JobPost> page = new PageImpl<>(Collections.singletonList(testJobPost));
         when(organizationContext.requireOrganization()).thenReturn(organization);
-        when(userRepository.findByEmail(userEmail)).thenReturn(Optional.of(testUser));
-        when(jobPostRepository.findByCreatedByEmailAndOrganization(userEmail, organization, pageable)).thenReturn(page);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
+        when(jobPostRepository.findByCreatedByIdAndOrganization(userId, organization, pageable)).thenReturn(page);
 
         // When
-        var result = jobPostService.listJobPostsByUser(userEmail, pageable);
+        var result = jobPostService.listJobPostsByUser(userId, pageable);
 
         // Then
         assertEquals(1, result.getTotalElements());
-        assertEquals(userEmail, result.getContent().get(0).createdByEmail());
+        assertEquals(testUser.getEmail(), result.getContent().get(0).createdByEmail());
     }
 
     private JobPostRequest createFakeJobPostRequest() {
