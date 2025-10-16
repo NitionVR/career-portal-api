@@ -1,0 +1,317 @@
+openapi: 3.0.3
+info:
+  title: Novu API
+  version: "1.0.0"
+  description: |
+    Partial spec for Novu REST API (core endpoints).
+servers:
+  - url: https://api.novu.co/v1
+    description: US region (default)
+  - url: https://eu.api.novu.co/v1
+    description: EU region
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Use `Authorization: ApiKey <YOUR_SECRET_KEY>`
+  schemas:
+    IntegrationCredentials:
+      type: object
+      additionalProperties: true
+      description: Provider credentials (API key, secret, etc.)
+    Integration:
+      type: object
+      properties:
+        _id:
+          type: string
+        _environmentId:
+          type: string
+        _organizationId:
+          type: string
+        name:
+          type: string
+        identifier:
+          type: string
+        providerId:
+          type: string
+        channel:
+          type: string
+          enum: [in_app, email, sms, chat, push]
+        credentials:
+          $ref: '#/components/schemas/IntegrationCredentials'
+        active:
+          type: boolean
+        deleted:
+          type: boolean
+        primary:
+          type: boolean
+    WorkflowStep:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [in_app, email, sms, chat, push, delay, digest, custom]
+        controlValues:
+          type: object
+          additionalProperties: true
+    Workflow:
+      type: object
+      properties:
+        _id:
+          type: string
+        workflowId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        active:
+          type: boolean
+        validatePayload:
+          type: boolean
+        payloadSchema:
+          type: object
+          additionalProperties: true
+        isTranslationEnabled:
+          type: boolean
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowStep'
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, ERROR]
+        issues:
+          type: object
+          additionalProperties: true
+    Topic:
+      type: object
+      properties:
+        _id:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+    TriggerRequest:
+      type: object
+      required:
+        - name
+        - to
+        - payload
+      properties:
+        name:
+          type: string
+        to:
+          type: array
+          items:
+            type: object
+            properties:
+              subscriberId:
+                type: string
+              email:
+                type: string
+              phone:
+                type: string
+              // you may expand with more fields
+        payload:
+          type: object
+          additionalProperties: true
+        overrides:
+          type: object
+          additionalProperties: true
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /integrations:
+    post:
+      summary: Create an integration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, identifier, _environmentId, providerId, channel, credentials]
+              properties:
+                name:
+                  type: string
+                identifier:
+                  type: string
+                _environmentId:
+                  type: string
+                providerId:
+                  type: string
+                channel:
+                  type: string
+                  enum: [in_app, email, sms, chat, push]
+                credentials:
+                  $ref: '#/components/schemas/IntegrationCredentials'
+                active:
+                  type: boolean
+                check:
+                  type: boolean
+                conditions:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Integration'
+    get:
+      summary: List all integrations
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Integration'
+
+  /integrations/{integrationId}:
+    put:
+      summary: Update an integration
+      parameters:
+        - name: integrationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                identifier:
+                  type: string
+                _environmentId:
+                  type: string
+                active:
+                  type: boolean
+                credentials:
+                  $ref: '#/components/schemas/IntegrationCredentials'
+                check:
+                  type: boolean
+                conditions:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Integration'
+
+  /workflows:
+    post:
+      summary: Create a workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, workflowId, steps]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                active:
+                  type: boolean
+                validatePayload:
+                  type: boolean
+                payloadSchema:
+                  type: object
+                  additionalProperties: true
+                isTranslationEnabled:
+                  type: boolean
+                workflowId:
+                  type: string
+                steps:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/WorkflowStep'
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+
+  /events/trigger:
+    post:
+      summary: Trigger a workflow / send event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerRequest'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactionId:
+                    type: string
+
+  /topics:
+    post:
+      summary: Create or update a topic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key]
+              properties:
+                key:
+                  type: string
+                name:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topic'

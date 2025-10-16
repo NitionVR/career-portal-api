@@ -1,0 +1,4666 @@
+Alright can you show me or give a guide on robust implementation on Angular TypeScript frontend and Java Spring Boot backend?
+
+I also want automatic redirection when you go homepage and your session is still active. I will serve this to my backend and frontend agents to implement.
+
+Note that we use passwordless magic link only and we already have OTT and exchange it for JWT session token
+
+
+Thought Process
+expand
+🔐 Production-Ready Authentication Implementation Guide
+Passwordless Magic Link: Angular + Spring Boot
+Document Version: 1.0
+Last Updated: 2024
+For: Frontend & Backend Development Teams
+
+📋 Quick Overview
+Authentication Flow:
+text
+1. User enters email → Backend sends magic link
+2. User clicks link → Frontend captures OTT token
+3. Frontend exchanges OTT → Backend returns JWT session token
+4. Frontend stores JWT → All requests include JWT
+5. On app load → Check if session is valid → Auto-redirect
+Key Features:
+✅ Passwordless authentication
+✅ JWT session management
+✅ Automatic session detection & redirection
+✅ Token refresh
+✅ Role-based routing
+✅ Secure token storage
+✅ Session expiry handling
+🔧 PART 1: BACKEND (Spring Boot)
+1.1 JWT Service (Complete)
+File: JwtService.java
+java
+package com.etalente.backend.security;
+
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import javax.crypto.SecretKey;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
+
+@Service
+public class JwtService {
+
+    private static final Logger logger = LoggerFactory.getLogger(JwtService.class);
+
+    @Value("${jwt.secret-key}")
+    private String secretKey;
+
+    @Value("${jwt.expiration}")
+    private long jwtExpiration;
+
+    /**
+     * Generate session JWT with user details
+     *
+     * @param userId - User's unique identifier
+     * @param email - User's email
+     * @param role - User's role (CANDIDATE, RECRUITER, HIRING_MANAGER)
+     * @param isNewUser - Whether this is first login
+     * @return JWT token string
+     */
+    public String generateToken(String userId, String email, String role, boolean isNewUser) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("email", email);
+        claims.put("role", role);
+        claims.put("is_new_user", isNewUser);
+
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + jwtExpiration);
+
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject(userId)
+                .setIssuedAt(now)
+                .setExpiration(expiryDate)
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    /**
+     * Extract user ID from token
+     */
+    public String extractUserId(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+
+    /**
+     * Extract email from token
+     */
+    public String extractEmail(String token) {
+        return extractClaim(token, claims -> claims.get("email", String.class));
+    }
+
+    /**
+     * Extract role from token
+     */
+    public String extractRole(String token) {
+        return extractClaim(token, claims -> claims.get("role", String.class));
+    }
+
+    /**
+     * Extract is_new_user claim
+     */
+    public Boolean extractIsNewUser(String token) {
+        return extractClaim(token, claims -> claims.get("is_new_user", Boolean.class));
+    }
+
+    /**
+     * Extract expiration date
+     */
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+
+    /**
+     * Generic claim extractor
+     */
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+
+    /**
+     * Extract all claims from token
+     */
+    private Claims extractAllClaims(String token) {
+        try {
+            return Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+        } catch (ExpiredJwtException e) {
+            logger.warn("JWT token is expired: {}", e.getMessage());
+            throw e;
+        } catch (UnsupportedJwtException e) {
+            logger.error("JWT token is unsupported: {}", e.getMessage());
+            throw e;
+        } catch (MalformedJwtException e) {
+            logger.error("Invalid JWT token: {}", e.getMessage());
+            throw e;
+        } catch (SignatureException e) {
+            logger.error("Invalid JWT signature: {}", e.getMessage());
+            throw e;
+        } catch (IllegalArgumentException e) {
+            logger.error("JWT claims string is empty: {}", e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * Validate token against user ID
+     */
+    public boolean isTokenValid(String token, String userId) {
+        try {
+            final String extractedUserId = extractUserId(token);
+            return (extractedUserId.equals(userId) && !isTokenExpired(token));
+        } catch (Exception e) {
+            logger.error("Token validation failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Check if token is expired
+     */
+    public boolean isTokenExpired(String token) {
+        try {
+            return extractExpiration(token).before(new Date());
+        } catch (ExpiredJwtException e) {
+            return true;
+        }
+    }
+
+    /**
+     * Get time until token expires (in milliseconds)
+     */
+    public long getTimeUntilExpiration(String token) {
+        Date expiration = extractExpiration(token);
+        return expiration.getTime() - System.currentTimeMillis();
+    }
+
+    /**
+     * Get signing key from secret
+     */
+    private SecretKey getSigningKey() {
+        byte[] keyBytes = Decoders.BASE64.decode(secretKey);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+}
+1.2 JWT Authentication Filter
+File: JwtAuthenticationFilter.java
+java
+package com.etalente.backend.security;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.lang.NonNull;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.Collections;
+
+@Component
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+    private static final String AUTHORIZATION_HEADER = "Authorization";
+    private static final String BEARER_PREFIX = "Bearer ";
+
+    private final JwtService jwtService;
+
+    public JwtAuthenticationFilter(JwtService jwtService) {
+        this.jwtService = jwtService;
+    }
+
+    @Override
+    protected void doFilterInternal(
+            @NonNull HttpServletRequest request,
+            @NonNull HttpServletResponse response,
+            @NonNull FilterChain filterChain
+    ) throws ServletException, IOException {
+
+        // Skip authentication for public endpoints
+        String path = request.getRequestURI();
+        if (isPublicEndpoint(path)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        try {
+            String jwt = extractJwtFromRequest(request);
+
+            if (jwt != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                authenticateUser(jwt, request);
+            }
+        } catch (Exception e) {
+            logger.error("Cannot set user authentication: {}", e.getMessage());
+        }
+
+        filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Extract JWT from Authorization header
+     */
+    private String extractJwtFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader(AUTHORIZATION_HEADER);
+
+        if (bearerToken != null && bearerToken.startsWith(BEARER_PREFIX)) {
+            return bearerToken.substring(BEARER_PREFIX.length());
+        }
+
+        return null;
+    }
+
+    /**
+     * Authenticate user from JWT
+     */
+    private void authenticateUser(String jwt, HttpServletRequest request) {
+        String userId = jwtService.extractUserId(jwt);
+        String email = jwtService.extractEmail(jwt);
+        String role = jwtService.extractRole(jwt);
+
+        if (userId != null && jwtService.isTokenValid(jwt, userId)) {
+            // Create authentication with role
+            SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + role);
+
+            UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                    userId,
+                    null,
+                    Collections.singletonList(authority)
+            );
+
+            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(authToken);
+
+            logger.debug("Authenticated user: {} with role: {}", email, role);
+        }
+    }
+
+    /**
+     * Check if endpoint is public (doesn't require authentication)
+     */
+    private boolean isPublicEndpoint(String path) {
+        return path.startsWith("/api/auth/") ||
+               path.startsWith("/api/job-posts") && !path.contains("/my-posts") ||
+               path.startsWith("/actuator/health") ||
+               path.startsWith("/swagger-ui") ||
+               path.startsWith("/v3/api-docs");
+    }
+}
+1.3 Authentication Controller
+File: AuthenticationController.java
+java
+package com.etalente.backend.controller;
+
+import com.etalente.backend.dto.LoginRequest;
+import com.etalente.backend.dto.SessionResponse;
+import com.etalente.backend.dto.VerifyTokenResponse;
+import com.etalente.backend.security.JwtService;
+import com.etalente.backend.service.AuthenticationService;
+import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/auth")
+public class AuthenticationController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AuthenticationController.class);
+
+    private final AuthenticationService authenticationService;
+    private final JwtService jwtService;
+
+    public AuthenticationController(AuthenticationService authenticationService,
+                                   JwtService jwtService) {
+        this.authenticationService = authenticationService;
+        this.jwtService = jwtService;
+    }
+
+    /**
+     * Step 1: Request magic link
+     * POST /api/auth/login
+     *
+     * Request Body:
+     * {
+     *   "email": "user@example.com"
+     * }
+     *
+     * Response:
+     * {
+     *   "message": "Magic link sent to your email",
+     *   "email": "user@example.com"
+     * }
+     */
+    @PostMapping("/login")
+    public ResponseEntity<Map<String, String>> login(@Valid @RequestBody LoginRequest request) {
+        logger.info("Magic link requested for email: {}", request.getEmail());
+
+        authenticationService.sendMagicLink(request.getEmail());
+
+        return ResponseEntity.ok(Map.of(
+            "message", "Magic link sent to your email",
+            "email", request.getEmail()
+        ));
+    }
+
+    /**
+     * Step 2: Verify OTT and return session JWT
+     * GET /api/auth/verify?token=xxx
+     *
+     * Response:
+     * {
+     *   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+     *   "user": {
+     *     "id": "123",
+     *     "email": "user@example.com",
+     *     "role": "CANDIDATE",
+     *     "firstName": "John",
+     *     "lastName": "Doe",
+     *     "isNewUser": false
+     *   },
+     *   "expiresIn": 3600000
+     * }
+     */
+    @GetMapping("/verify")
+    public ResponseEntity<VerifyTokenResponse> verifyToken(@RequestParam String token) {
+        logger.info("Verifying OTT token");
+
+        VerifyTokenResponse response = authenticationService.verifyOttAndGenerateSession(token);
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Check if current session is valid
+     * GET /api/auth/session
+     * Header: Authorization: Bearer <jwt>
+     *
+     * Response:
+     * {
+     *   "authenticated": true,
+     *   "userId": "123",
+     *   "email": "user@example.com",
+     *   "role": "CANDIDATE",
+     *   "isNewUser": false,
+     *   "expiresIn": 3456000
+     * }
+     */
+    @GetMapping("/session")
+    public ResponseEntity<SessionResponse> checkSession(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.ok(SessionResponse.unauthenticated());
+        }
+
+        String token = authHeader.substring(7);
+
+        try {
+            String userId = jwtService.extractUserId(token);
+
+            if (jwtService.isTokenValid(token, userId)) {
+                String email = jwtService.extractEmail(token);
+                String role = jwtService.extractRole(token);
+                Boolean isNewUser = jwtService.extractIsNewUser(token);
+                long expiresIn = jwtService.getTimeUntilExpiration(token);
+
+                return ResponseEntity.ok(SessionResponse.authenticated(
+                    userId, email, role, isNewUser, expiresIn
+                ));
+            }
+        } catch (Exception e) {
+            logger.warn("Session check failed: {}", e.getMessage());
+        }
+
+        return ResponseEntity.ok(SessionResponse.unauthenticated());
+    }
+
+    /**
+     * Refresh session (extend expiration)
+     * POST /api/auth/refresh
+     * Header: Authorization: Bearer <jwt>
+     *
+     * Response:
+     * {
+     *   "token": "new_jwt_token...",
+     *   "expiresIn": 3600000
+     * }
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<Map<String, Object>> refreshToken(
+            @RequestHeader("Authorization") String authHeader) {
+
+        String token = authHeader.substring(7);
+        String userId = jwtService.extractUserId(token);
+        String email = jwtService.extractEmail(token);
+        String role = jwtService.extractRole(token);
+        Boolean isNewUser = jwtService.extractIsNewUser(token);
+
+        // Generate new token with same claims
+        String newToken = jwtService.generateToken(userId, email, role, isNewUser);
+
+        return ResponseEntity.ok(Map.of(
+            "token", newToken,
+            "expiresIn", jwtService.getTimeUntilExpiration(newToken)
+        ));
+    }
+
+    /**
+     * Logout (client-side token deletion)
+     * POST /api/auth/logout
+     *
+     * Note: In stateless JWT, logout is primarily client-side.
+     * Server can implement token blacklisting if needed.
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, String>> logout() {
+        logger.info("User logged out");
+
+        return ResponseEntity.ok(Map.of(
+            "message", "Logged out successfully"
+        ));
+    }
+}
+1.4 DTOs
+File: LoginRequest.java
+java
+package com.etalente.backend.dto;
+
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+
+public class LoginRequest {
+
+    @Email(message = "Invalid email format")
+    @NotBlank(message = "Email is required")
+    private String email;
+
+    public LoginRequest() {}
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+}
+File: VerifyTokenResponse.java
+java
+package com.etalente.backend.dto;
+
+public class VerifyTokenResponse {
+
+    private String token;
+    private UserDto user;
+    private long expiresIn;
+
+    public static class UserDto {
+        private String id;
+        private String email;
+        private String role;
+        private String firstName;
+        private String lastName;
+        private boolean isNewUser;
+
+        public UserDto(String id, String email, String role, String firstName,
+                      String lastName, boolean isNewUser) {
+            this.id = id;
+            this.email = email;
+            this.role = role;
+            this.firstName = firstName;
+            this.lastName = lastName;
+            this.isNewUser = isNewUser;
+        }
+
+        // Getters and setters
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+
+        public String getRole() { return role; }
+        public void setRole(String role) { this.role = role; }
+
+        public String getFirstName() { return firstName; }
+        public void setFirstName(String firstName) { this.firstName = firstName; }
+
+        public String getLastName() { return lastName; }
+        public void setLastName(String lastName) { this.lastName = lastName; }
+
+        public boolean isNewUser() { return isNewUser; }
+        public void setNewUser(boolean newUser) { isNewUser = newUser; }
+    }
+
+    public VerifyTokenResponse(String token, UserDto user, long expiresIn) {
+        this.token = token;
+        this.user = user;
+        this.expiresIn = expiresIn;
+    }
+
+    public String getToken() { return token; }
+    public void setToken(String token) { this.token = token; }
+
+    public UserDto getUser() { return user; }
+    public void setUser(UserDto user) { this.user = user; }
+
+    public long getExpiresIn() { return expiresIn; }
+    public void setExpiresIn(long expiresIn) { this.expiresIn = expiresIn; }
+}
+File: SessionResponse.java
+java
+package com.etalente.backend.dto;
+
+public class SessionResponse {
+
+    private boolean authenticated;
+    private String userId;
+    private String email;
+    private String role;
+    private Boolean isNewUser;
+    private Long expiresIn;
+
+    // Static factory methods
+    public static SessionResponse authenticated(String userId, String email,
+                                               String role, Boolean isNewUser,
+                                               long expiresIn) {
+        SessionResponse response = new SessionResponse();
+        response.authenticated = true;
+        response.userId = userId;
+        response.email = email;
+        response.role = role;
+        response.isNewUser = isNewUser;
+        response.expiresIn = expiresIn;
+        return response;
+    }
+
+    public static SessionResponse unauthenticated() {
+        SessionResponse response = new SessionResponse();
+        response.authenticated = false;
+        return response;
+    }
+
+    // Getters and setters
+    public boolean isAuthenticated() { return authenticated; }
+    public void setAuthenticated(boolean authenticated) { this.authenticated = authenticated; }
+
+    public String getUserId() { return userId; }
+    public void setUserId(String userId) { this.userId = userId; }
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+
+    public Boolean getIsNewUser() { return isNewUser; }
+    public void setIsNewUser(Boolean isNewUser) { this.isNewUser = isNewUser; }
+
+    public Long getExpiresIn() { return expiresIn; }
+    public void setExpiresIn(Long expiresIn) { this.expiresIn = expiresIn; }
+}
+1.5 Security Configuration
+File: SecurityConfig.java
+java
+package com.etalente.backend.config;
+
+import com.etalente.backend.security.JwtAuthenticationFilter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthFilter;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter) {
+        this.jwtAuthFilter = jwtAuthFilter;
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable())
+            .cors(cors -> cors.config
+Claude Sonnet 4.5
+continue
+
+
+Thought Process
+expand
+The user wants me to continue from where I left off in the SecurityConfig.java file. I was in the middle of the security filter chain configuration.
+
+java
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                // Public endpoints
+                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/job-posts/**").permitAll()
+                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                // Protected endpoints
+                .requestMatchers("/api/job-posts/my-posts").authenticated()
+                .requestMatchers("/api/applications/**").authenticated()
+                .requestMatchers("/api/profile/**").authenticated()
+                .anyRequest().authenticated()
+            )
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOriginPatterns(Arrays.asList("http://localhost:4200", "https://yourdomain.com"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setAllowCredentials(true);
+        configuration.setExposedHeaders(Arrays.asList("Authorization"));
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+}
+1.6 Application Configuration
+File: application.yml
+yaml
+# Core Configuration
+server:
+  port: 8080
+
+spring:
+  application:
+    name: etalente-backend
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/etalente
+    username: postgres
+    password: ${DB_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+  flyway:
+    enabled: true
+
+# JWT Configuration
+jwt:
+  secret-key: ${JWT_SECRET_KEY}  # Must be 256+ bits, Base64 encoded
+  expiration: 3600000  # 1 hour (in milliseconds)
+
+# Magic Link Configuration
+magic-link:
+  url: ${FRONTEND_URL:http://localhost:4200}/auth/callback
+  expiration-minutes: 15
+
+# CORS Configuration
+cors:
+  allowed-origins: ${FRONTEND_URL:http://localhost:4200}
+
+# Logging
+logging:
+  level:
+    com.etalente.backend: DEBUG
+    org.springframework.security: DEBUG
+
+---
+# Production Profile
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+jwt:
+  expiration: 1800000  # 30 minutes in production
+
+magic-link:
+  expiration-minutes: 10
+
+logging:
+  level:
+    com.etalente.backend: INFO
+    org.springframework.security: WARN
+🎨 PART 2: FRONTEND (Angular + TypeScript)
+2.1 Auth Service (Complete)
+File: src/app/core/services/auth.service.ts
+typescript
+import { Injectable } from '@angular/core';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { Router } from '@angular/router';
+import { BehaviorSubject, Observable, throwError, timer } from 'rxjs';
+import { tap, catchError, switchMap } from 'rxjs/operators';
+import { environment } from '../../../environments/environment';
+
+// ============= INTERFACES =============
+
+export interface User {
+  id: string;
+  email: string;
+  role: 'CANDIDATE' | 'RECRUITER' | 'HIRING_MANAGER';
+  firstName: string;
+  lastName: string;
+  isNewUser: boolean;
+}
+
+export interface LoginRequest {
+  email: string;
+}
+
+export interface LoginResponse {
+  message: string;
+  email: string;
+}
+
+export interface VerifyTokenResponse {
+  token: string;
+  user: User;
+  expiresIn: number;
+}
+
+export interface SessionResponse {
+  authenticated: boolean;
+  userId?: string;
+  email?: string;
+  role?: string;
+  isNewUser?: boolean;
+  expiresIn?: number;
+}
+
+export interface RefreshTokenResponse {
+  token: string;
+  expiresIn: number;
+}
+
+// ============= SERVICE =============
+
+@Injectable({
+  providedIn: 'root'
+})
+export class AuthService {
+  private readonly TOKEN_KEY = 'auth_token';
+  private readonly USER_KEY = 'user_data';
+  private readonly API_URL = environment.apiUrl;
+
+  // Observable streams
+  private currentUserSubject = new BehaviorSubject<User | null>(this.getUserFromStorage());
+  public currentUser$ = this.currentUserSubject.asObservable();
+
+  private isAuthenticatedSubject = new BehaviorSubject<boolean>(this.hasValidToken());
+  public isAuthenticated$ = this.isAuthenticatedSubject.asObservable();
+
+  // Token refresh timer
+  private refreshTokenTimer?: any;
+
+  constructor(
+    private http: HttpClient,
+    private router: Router
+  ) {
+    // Start token refresh mechanism if user is logged in
+    if (this.hasValidToken()) {
+      this.scheduleTokenRefresh();
+    }
+  }
+
+  // ============= PUBLIC METHODS =============
+
+  /**
+   * Step 1: Request magic link
+   * POST /api/auth/login
+   */
+  requestMagicLink(email: string): Observable<LoginResponse> {
+    return this.http.post<LoginResponse>(`${this.API_URL}/auth/login`, { email })
+      .pipe(
+        tap(response => {
+          console.log('Magic link sent to:', response.email);
+        }),
+        catchError(this.handleError)
+      );
+  }
+
+  /**
+   * Step 2: Verify OTT and get session JWT
+   * GET /api/auth/verify?token=xxx
+   */
+  verifyMagicLink(token: string): Observable<VerifyTokenResponse> {
+    return this.http.get<VerifyTokenResponse>(`${this.API_URL}/auth/verify`, {
+      params: { token }
+    }).pipe(
+      tap(response => {
+        this.handleSuccessfulAuth(response);
+      }),
+      catchError(this.handleError)
+    );
+  }
+
+  /**
+   * Check if current session is valid
+   * GET /api/auth/session
+   */
+  checkSession(): Observable<SessionResponse> {
+    return this.http.get<SessionResponse>(`${this.API_URL}/auth/session`)
+      .pipe(
+        tap(response => {
+          if (response.authenticated && response.userId) {
+            // Update user data if session is valid
+            const user: User = {
+              id: response.userId,
+              email: response.email!,
+              role: response.role as any,
+              firstName: '',
+              lastName: '',
+              isNewUser: response.isNewUser || false
+            };
+            this.currentUserSubject.next(user);
+            this.isAuthenticatedSubject.next(true);
+          } else {
+            this.clearAuthData();
+          }
+        }),
+        catchError(error => {
+          this.clearAuthData();
+          return throwError(() => error);
+        })
+      );
+  }
+
+  /**
+   * Refresh JWT token
+   * POST /api/auth/refresh
+   */
+  refreshToken(): Observable<RefreshTokenResponse> {
+    return this.http.post<RefreshTokenResponse>(`${this.API_URL}/auth/refresh`, {})
+      .pipe(
+        tap(response => {
+          this.storeToken(response.token);
+          this.scheduleTokenRefresh();
+          console.log('Token refreshed successfully');
+        }),
+        catchError(error => {
+          console.error('Token refresh failed:', error);
+          this.logout();
+          return throwError(() => error);
+        })
+      );
+  }
+
+  /**
+   * Logout user
+   * POST /api/auth/logout
+   */
+  logout(): void {
+    // Call backend logout endpoint (optional, for logging purposes)
+    this.http.post(`${this.API_URL}/auth/logout`, {})
+      .subscribe({
+        next: () => console.log('Logout successful'),
+        error: (err) => console.error('Logout error:', err)
+      });
+
+    // Clear local data
+    this.clearAuthData();
+
+    // Cancel token refresh
+    if (this.refreshTokenTimer) {
+      clearTimeout(this.refreshTokenTimer);
+    }
+
+    // Redirect to login
+    this.router.navigate(['/login']);
+  }
+
+  /**
+   * Get current JWT token
+   */
+  getToken(): string | null {
+    return localStorage.getItem(this.TOKEN_KEY);
+  }
+
+  /**
+   * Get current user
+   */
+  getCurrentUser(): User | null {
+    return this.currentUserSubject.value;
+  }
+
+  /**
+   * Check if user is authenticated
+   */
+  isAuthenticated(): boolean {
+    return this.hasValidToken();
+  }
+
+  /**
+   * Get user role
+   */
+  getUserRole(): string | null {
+    const user = this.getCurrentUser();
+    return user ? user.role : null;
+  }
+
+  /**
+   * Check if user has specific role
+   */
+  hasRole(role: string): boolean {
+    return this.getUserRole() === role;
+  }
+
+  // ============= PRIVATE METHODS =============
+
+  /**
+   * Handle successful authentication
+   */
+  private handleSuccessfulAuth(response: VerifyTokenResponse): void {
+    // Store token
+    this.storeToken(response.token);
+
+    // Store user data
+    this.storeUser(response.user);
+
+    // Update observables
+    this.currentUserSubject.next(response.user);
+    this.isAuthenticatedSubject.next(true);
+
+    // Schedule token refresh
+    this.scheduleTokenRefresh();
+
+    console.log('Authentication successful:', response.user.email);
+  }
+
+  /**
+   * Store JWT token
+   */
+  private storeToken(token: string): void {
+    localStorage.setItem(this.TOKEN_KEY, token);
+  }
+
+  /**
+   * Store user data
+   */
+  private storeUser(user: User): void {
+    localStorage.setItem(this.USER_KEY, JSON.stringify(user));
+  }
+
+  /**
+   * Get user from storage
+   */
+  private getUserFromStorage(): User | null {
+    const userData = localStorage.getItem(this.USER_KEY);
+    if (!userData) return null;
+
+    try {
+      return JSON.parse(userData);
+    } catch (e) {
+      console.error('Failed to parse user data:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Check if token exists and is not expired
+   */
+  private hasValidToken(): boolean {
+    const token = this.getToken();
+    if (!token) return false;
+
+    try {
+      const payload = this.decodeToken(token);
+      const expirationDate = new Date(payload.exp * 1000);
+      return expirationDate > new Date();
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Decode JWT token
+   */
+  private decodeToken(token: string): any {
+    try {
+      const payload = token.split('.')[1];
+      const decoded = atob(payload);
+      return JSON.parse(decoded);
+    } catch (e) {
+      console.error('Failed to decode token:', e);
+      throw e;
+    }
+  }
+
+  /**
+   * Schedule automatic token refresh
+   * Refreshes 5 minutes before expiration
+   */
+  private scheduleTokenRefresh(): void {
+    // Clear existing timer
+    if (this.refreshTokenTimer) {
+      clearTimeout(this.refreshTokenTimer);
+    }
+
+    const token = this.getToken();
+    if (!token) return;
+
+    try {
+      const payload = this.decodeToken(token);
+      const expiresIn = (payload.exp * 1000) - Date.now();
+
+      // Refresh 5 minutes before expiration
+      const refreshIn = expiresIn - (5 * 60 * 1000);
+
+      if (refreshIn > 0) {
+        console.log(`Token refresh scheduled in ${Math.round(refreshIn / 1000 / 60)} minutes`);
+
+        this.refreshTokenTimer = setTimeout(() => {
+          this.refreshToken().subscribe();
+        }, refreshIn);
+      } else {
+        // Token expires in less than 5 minutes, refresh immediately
+        this.refreshToken().subscribe();
+      }
+    } catch (e) {
+      console.error('Failed to schedule token refresh:', e);
+    }
+  }
+
+  /**
+   * Clear all authentication data
+   */
+  private clearAuthData(): void {
+    localStorage.removeItem(this.TOKEN_KEY);
+    localStorage.removeItem(this.USER_KEY);
+    this.currentUserSubject.next(null);
+    this.isAuthenticatedSubject.next(false);
+  }
+
+  /**
+   * Handle HTTP errors
+   */
+  private handleError(error: HttpErrorResponse) {
+    let errorMessage = 'An error occurred';
+
+    if (error.error instanceof ErrorEvent) {
+      // Client-side error
+      errorMessage = `Error: ${error.error.message}`;
+    } else {
+      // Server-side error
+      errorMessage = error.error?.message || `Error Code: ${error.status}`;
+    }
+
+    console.error('Auth error:', errorMessage);
+    return throwError(() => new Error(errorMessage));
+  }
+}
+2.2 HTTP Interceptor
+File: src/app/core/interceptors/auth.interceptor.ts
+typescript
+import { Injectable } from '@angular/core';
+import {
+  HttpRequest,
+  HttpHandler,
+  HttpEvent,
+  HttpInterceptor,
+  HttpErrorResponse
+} from '@angular/common/http';
+import { Observable, throwError } from 'rxjs';
+import { catchError } from 'rxjs/operators';
+import { AuthService } from '../services/auth.service';
+import { Router } from '@angular/router';
+
+@Injectable()
+export class AuthInterceptor implements HttpInterceptor {
+
+  constructor(
+    private authService: AuthService,
+    private router: Router
+  ) {}
+
+  intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    // Get token from auth service
+    const token = this.authService.getToken();
+
+    // Clone request and add Authorization header if token exists
+    if (token) {
+      request = request.clone({
+        setHeaders: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+    }
+
+    // Handle the request
+    return next.handle(request).pipe(
+      catchError((error: HttpErrorResponse) => {
+        if (error.status === 401) {
+          // Unauthorized - token expired or invalid
+          console.warn('Unauthorized request - logging out');
+          this.authService.logout();
+        } else if (error.status === 403) {
+          // Forbidden - user doesn't have permission
+          console.warn('Forbidden request - insufficient permissions');
+          this.router.navigate(['/unauthorized']);
+        }
+
+        return throwError(() => error);
+      })
+    );
+  }
+}
+2.3 Auth Guard (Route Protection)
+File: src/app/core/guards/auth.guard.ts
+typescript
+import { Injectable } from '@angular/core';
+import {
+  ActivatedRouteSnapshot,
+  CanActivate,
+  Router,
+  RouterStateSnapshot,
+  UrlTree
+} from '@angular/router';
+import { Observable } from 'rxjs';
+import { AuthService } from '../services/auth.service';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class AuthGuard implements CanActivate {
+
+  constructor(
+    private authService: AuthService,
+    private router: Router
+  ) {}
+
+  canActivate(
+    route: ActivatedRouteSnapshot,
+    state: RouterStateSnapshot
+  ): Observable<boolean | UrlTree> | Promise<boolean | UrlTree> | boolean | UrlTree {
+
+    // Check if user is authenticated
+    if (this.authService.isAuthenticated()) {
+      // Check if route requires specific role
+      const requiredRole = route.data['role'] as string;
+
+      if (requiredRole) {
+        const userRole = this.authService.getUserRole();
+
+        if (userRole === requiredRole) {
+          return true;
+        } else {
+          console.warn(`Access denied. Required role: ${requiredRole}, User role: ${userRole}`);
+          this.router.navigate(['/unauthorized']);
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    // Not authenticated - redirect to login
+    console.log('User not authenticated, redirecting to login');
+    this.router.navigate(['/login'], {
+      queryParams: { returnUrl: state.url }
+    });
+    return false;
+  }
+}
+File: src/app/core/guards/guest.guard.ts
+typescript
+import { Injectable } from '@angular/core';
+import { CanActivate, Router, UrlTree } from '@angular/router';
+import { Observable } from 'rxjs';
+import { AuthService } from '../services/auth.service';
+
+/**
+ * Guest Guard - Prevents authenticated users from accessing login/register pages
+ */
+@Injectable({
+  providedIn: 'root'
+})
+export class GuestGuard implements CanActivate {
+
+  constructor(
+    private authService: AuthService,
+    private router: Router
+  ) {}
+
+  canActivate(): Observable<boolean | UrlTree> | Promise<boolean | UrlTree> | boolean | UrlTree {
+
+    if (this.authService.isAuthenticated()) {
+      // User is already logged in, redirect to dashboard
+      const user = this.authService.getCurrentUser();
+
+      if (user?.isNewUser) {
+        this.router.navigate(['/onboarding']);
+      } else {
+        this.redirectToDashboard(user?.role);
+      }
+
+      return false;
+    }
+
+    return true;
+  }
+
+  private redirectToDashboard(role?: string): void {
+    switch (role) {
+      case 'CANDIDATE':
+        this.router.navigate(['/candidate/dashboard']);
+        break;
+      case 'RECRUITER':
+        this.router.navigate(['/recruiter/dashboard']);
+        break;
+      case 'HIRING_MANAGER':
+        this.router.navigate(['/hiring-manager/dashboard']);
+        break;
+      default:
+        this.router.navigate(['/dashboard']);
+    }
+  }
+}
+2.4 App Initializer (Session Detection on Load)
+File: src/app/core/initializers/auth.initializer.ts
+typescript
+import { APP_INITIALIZER, Provider } from '@angular/core';
+import { AuthService } from '../services/auth.service';
+import { firstValueFrom } from 'rxjs';
+
+/**
+ * Check session on app initialization
+ * This runs BEFORE the app starts, ensuring session is validated
+ */
+export function initializeAuth(authService: AuthService): () => Promise<void> {
+  return () => {
+    // If no token exists, skip session check
+    if (!authService.getToken()) {
+      return Promise.resolve();
+    }
+
+    // Verify session with backend
+    return firstValueFrom(authService.checkSession())
+      .then(() => {
+        console.log('Session validated on app init');
+      })
+      .catch(error => {
+        console.warn('Session validation failed on app init:', error);
+        // Clear invalid session
+        authService.logout();
+      });
+  };
+}
+
+/**
+ * Provider for APP_INITIALIZER
+ * Add this to app.config.ts providers array
+ */
+export const authInitializerProvider: Provider = {
+  provide: APP_INITIALIZER,
+  useFactory: initializeAuth,
+  deps: [AuthService],
+  multi: true
+};
+2.5 Login Component
+File: src/app/features/auth/login/login.component.ts
+typescript
+import { Component, OnInit } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { AuthService } from '../../../core/services/auth.service';
+import { Router } from '@angular/router';
+
+@Component({
+  selector: 'app-login',
+  templateUrl: './login.component.html',
+  styleUrls: ['./login.component.scss']
+})
+export class LoginComponent implements OnInit {
+  loginForm: FormGroup;
+  loading = false;
+  submitted = false;
+  error = '';
+  successMessage = '';
+
+  constructor(
+    private formBuilder: FormBuilder,
+    private authService: AuthService,
+    private router: Router
+  ) {
+    this.loginForm = this.formBuilder.group({
+      email: ['', [Validators.required, Validators.email]]
+    });
+  }
+
+  ngOnInit(): void {
+    // If already logged in, redirect to dashboard
+    if (this.authService.isAuthenticated()) {
+      this.redirectToDashboard();
+    }
+  }
+
+  get f() {
+    return this.loginForm.controls;
+  }
+
+  onSubmit(): void {
+    this.submitted = true;
+    this.error = '';
+    this.successMessage = '';
+
+    // Stop if form is invalid
+    if (this.loginForm.invalid) {
+      return;
+    }
+
+    this.loading = true;
+
+    this.authService.requestMagicLink(this.f['email'].value).subscribe({
+      next: (response) => {
+        this.loading = false;
+        this.successMessage = 'Magic link sent! Please check your email.';
+        console.log('Magic link sent to:', response.email);
+      },
+      error: (error) => {
+        this.loading = false;
+        this.error = error.message || 'Failed to send magic link. Please try again.
+Claude Sonnet 4.5
+continue
+
+
+Thought Process
+expand
+The user wants me to continue from where I left off. I was in the middle of the LoginComponent's error handling in the onSubmit method. Let me continue from there.
+
+typescript
+        this.error = error.message || 'Failed to send magic link. Please try again.';
+        console.error('Login error:', error);
+      }
+    });
+  }
+
+  private redirectToDashboard(): void {
+    const user = this.authService.getCurrentUser();
+
+    if (user?.isNewUser) {
+      this.router.navigate(['/onboarding']);
+      return;
+    }
+
+    switch (user?.role) {
+      case 'CANDIDATE':
+        this.router.navigate(['/candidate/dashboard']);
+        break;
+      case 'RECRUITER':
+        this.router.navigate(['/recruiter/dashboard']);
+        break;
+      case 'HIRING_MANAGER':
+        this.router.navigate(['/hiring-manager/dashboard']);
+        break;
+      default:
+        this.router.navigate(['/dashboard']);
+    }
+  }
+}
+File: src/app/features/auth/login/login.component.html
+html
+<div class="login-container">
+  <div class="login-card">
+    <div class="login-header">
+      <h1>Welcome Back</h1>
+      <p>Enter your email to receive a magic link</p>
+    </div>
+
+    <!-- Success Message -->
+    <div *ngIf="successMessage" class="alert alert-success">
+      <mat-icon>check_circle</mat-icon>
+      <span>{{ successMessage }}</span>
+    </div>
+
+    <!-- Error Message -->
+    <div *ngIf="error" class="alert alert-error">
+      <mat-icon>error</mat-icon>
+      <span>{{ error }}</span>
+    </div>
+
+    <!-- Login Form -->
+    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Email Address</mat-label>
+        <input
+          matInput
+          type="email"
+          formControlName="email"
+          placeholder="you@example.com"
+          [class.is-invalid]="submitted && f['email'].errors"
+        />
+        <mat-icon matPrefix>email</mat-icon>
+        <mat-error *ngIf="f['email'].errors?.['required']">
+          Email is required
+        </mat-error>
+        <mat-error *ngIf="f['email'].errors?.['email']">
+          Please enter a valid email address
+        </mat-error>
+      </mat-form-field>
+
+      <button
+        mat-raised-button
+        color="primary"
+        type="submit"
+        class="full-width"
+        [disabled]="loading"
+      >
+        <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
+        <span *ngIf="!loading">Send Magic Link</span>
+      </button>
+    </form>
+
+    <div class="login-footer">
+      <p>Don't have an account? <a routerLink="/register">Sign up</a></p>
+    </div>
+  </div>
+</div>
+File: src/app/features/auth/login/login.component.scss
+scss
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+}
+
+.login-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  max-width: 450px;
+  width: 100%;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 30px;
+
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 8px;
+  }
+
+  p {
+    color: #666;
+    font-size: 14px;
+  }
+}
+
+.alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  mat-icon {
+    font-size: 20px;
+  }
+
+  &.alert-success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+  }
+
+  &.alert-error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+  }
+}
+
+.full-width {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+button[type="submit"] {
+  height: 48px;
+  font-size: 16px;
+  font-weight: 500;
+  margin-top: 8px;
+
+  mat-spinner {
+    display: inline-block;
+    margin-right: 8px;
+  }
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 24px;
+
+  p {
+    color: #666;
+    font-size: 14px;
+
+    a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 500;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+}
+2.6 Magic Link Callback Component
+File: src/app/features/auth/magic-link-callback/magic-link-callback.component.ts
+typescript
+import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { AuthService } from '../../../core/services/auth.service';
+
+@Component({
+  selector: 'app-magic-link-callback',
+  templateUrl: './magic-link-callback.component.html',
+  styleUrls: ['./magic-link-callback.component.scss']
+})
+export class MagicLinkCallbackComponent implements OnInit {
+  loading = true;
+  error: string | null = null;
+
+  constructor(
+    private route: ActivatedRoute,
+    private router: Router,
+    private authService: AuthService
+  ) {}
+
+  ngOnInit(): void {
+    // Get OTT token from URL query params
+    this.route.queryParams.subscribe(params => {
+      const token = params['token'];
+
+      if (!token) {
+        this.error = 'No authentication token provided';
+        this.loading = false;
+        return;
+      }
+
+      // Verify OTT and get session JWT
+      this.authService.verifyMagicLink(token).subscribe({
+        next: (response) => {
+          console.log('Authentication successful!', response.user);
+          this.loading = false;
+
+          // Redirect based on user type
+          setTimeout(() => {
+            this.redirectUser(response.user);
+          }, 1000);
+        },
+        error: (err) => {
+          this.error = err.message || 'Failed to verify magic link. It may have expired.';
+          this.loading = false;
+          console.error('Verification error:', err);
+        }
+      });
+    });
+  }
+
+  private redirectUser(user: any): void {
+    if (user.isNewUser) {
+      // First-time user - redirect to onboarding
+      this.router.navigate(['/onboarding']);
+    } else {
+      // Existing user - redirect to role-specific dashboard
+      switch (user.role) {
+        case 'CANDIDATE':
+          this.router.navigate(['/candidate/dashboard']);
+          break;
+        case 'RECRUITER':
+          this.router.navigate(['/recruiter/dashboard']);
+          break;
+        case 'HIRING_MANAGER':
+          this.router.navigate(['/hiring-manager/dashboard']);
+          break;
+        default:
+          this.router.navigate(['/dashboard']);
+      }
+    }
+  }
+
+  goToLogin(): void {
+    this.router.navigate(['/login']);
+  }
+}
+File: src/app/features/auth/magic-link-callback/magic-link-callback.component.html
+html
+<div class="callback-container">
+  <!-- Loading State -->
+  <div *ngIf="loading" class="callback-card loading">
+    <mat-spinner diameter="60"></mat-spinner>
+    <h2>Verifying your magic link...</h2>
+    <p>Please wait while we log you in</p>
+  </div>
+
+  <!-- Success State (brief) -->
+  <div *ngIf="!loading && !error" class="callback-card success">
+    <mat-icon class="success-icon">check_circle</mat-icon>
+    <h2>Success!</h2>
+    <p>Redirecting you to your dashboard...</p>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="!loading && error" class="callback-card error">
+    <mat-icon class="error-icon">error</mat-icon>
+    <h2>Authentication Failed</h2>
+    <p>{{ error }}</p>
+    <button mat-raised-button color="primary" (click)="goToLogin()">
+      Back to Login
+    </button>
+  </div>
+</div>
+File: src/app/features/auth/magic-link-callback/magic-link-callback.component.scss
+scss
+.callback-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+}
+
+.callback-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  padding: 60px 40px;
+  max-width: 500px;
+  width: 100%;
+  text-align: center;
+
+  &.loading {
+    mat-spinner {
+      margin: 0 auto 20px;
+    }
+  }
+
+  &.success {
+    .success-icon {
+      font-size: 80px;
+      width: 80px;
+      height: 80px;
+      color: #28a745;
+      margin-bottom: 20px;
+    }
+  }
+
+  &.error {
+    .error-icon {
+      font-size: 80px;
+      width: 80px;
+      height: 80px;
+      color: #dc3545;
+      margin-bottom: 20px;
+    }
+
+    button {
+      margin-top: 20px;
+    }
+  }
+
+  h2 {
+    font-size: 24px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 12px;
+  }
+
+  p {
+    color: #666;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+}
+2.7 App Routing with Guards
+File: src/app/app.routes.ts
+typescript
+import { Routes } from '@angular/router';
+import { AuthGuard } from './core/guards/auth.guard';
+import { GuestGuard } from './core/guards/guest.guard';
+
+export const routes: Routes = [
+  // Public routes (only accessible when NOT logged in)
+  {
+    path: 'login',
+    loadComponent: () => import('./features/auth/login/login.component')
+      .then(m => m.LoginComponent),
+    canActivate: [GuestGuard]
+  },
+  {
+    path: 'register',
+    loadComponent: () => import('./features/auth/register/register.component')
+      .then(m => m.RegisterComponent),
+    canActivate: [GuestGuard]
+  },
+  {
+    path: 'auth/callback',
+    loadComponent: () => import('./features/auth/magic-link-callback/magic-link-callback.component')
+      .then(m => m.MagicLinkCallbackComponent)
+  },
+
+  // Protected routes (require authentication)
+  {
+    path: 'dashboard',
+    loadComponent: () => import('./features/dashboard/dashboard.component')
+      .then(m => m.DashboardComponent),
+    canActivate: [AuthGuard]
+  },
+  {
+    path: 'candidate/dashboard',
+    loadComponent: () => import('./features/candidate/dashboard/candidate-dashboard.component')
+      .then(m => m.CandidateDashboardComponent),
+    canActivate: [AuthGuard],
+    data: { role: 'CANDIDATE' }
+  },
+  {
+    path: 'recruiter/dashboard',
+    loadComponent: () => import('./features/recruiter/dashboard/recruiter-dashboard.component')
+      .then(m => m.RecruiterDashboardComponent),
+    canActivate: [AuthGuard],
+    data: { role: 'RECRUITER' }
+  },
+  {
+    path: 'hiring-manager/dashboard',
+    loadComponent: () => import('./features/hiring-manager/dashboard/hm-dashboard.component')
+      .then(m => m.HMDashboardComponent),
+    canActivate: [AuthGuard],
+    data: { role: 'HIRING_MANAGER' }
+  },
+  {
+    path: 'onboarding',
+    loadComponent: () => import('./features/onboarding/onboarding.component')
+      .then(m => m.OnboardingComponent),
+    canActivate: [AuthGuard]
+  },
+  {
+    path: 'profile',
+    loadComponent: () => import('./features/profile/profile.component')
+      .then(m => m.ProfileComponent),
+    canActivate: [AuthGuard]
+  },
+
+  // Public job listings
+  {
+    path: 'jobs',
+    loadComponent: () => import('./features/jobs/job-list/job-list.component')
+      .then(m => m.JobListComponent)
+  },
+  {
+    path: 'jobs/:id',
+    loadComponent: () => import('./features/jobs/job-detail/job-detail.component')
+      .then(m => m.JobDetailComponent)
+  },
+
+  // Homepage with auto-redirect
+  {
+    path: '',
+    loadComponent: () => import('./features/home/home.component')
+      .then(m => m.HomeComponent)
+  },
+
+  // Catch-all route
+  {
+    path: '**',
+    redirectTo: ''
+  }
+];
+2.8 Homepage with Auto-Redirect
+File: src/app/features/home/home.component.ts
+typescript
+import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
+import { AuthService } from '../../core/services/auth.service';
+
+@Component({
+  selector: 'app-home',
+  templateUrl: './home.component.html',
+  styleUrls: ['./home.component.scss']
+})
+export class HomeComponent implements OnInit {
+  checkingSession = true;
+
+  constructor(
+    private authService: AuthService,
+    private router: Router
+  ) {}
+
+  ngOnInit(): void {
+    // Check if user has active session
+    this.checkAndRedirect();
+  }
+
+  private checkAndRedirect(): void {
+    if (this.authService.isAuthenticated()) {
+      const user = this.authService.getCurrentUser();
+
+      if (user?.isNewUser) {
+        // New user - redirect to onboarding
+        this.router.navigate(['/onboarding']);
+      } else {
+        // Existing user - redirect to role-specific dashboard
+        this.redirectToDashboard(user?.role);
+      }
+    } else {
+      // Not authenticated - show landing page
+      this.checkingSession = false;
+    }
+  }
+
+  private redirectToDashboard(role?: string): void {
+    switch (role) {
+      case 'CANDIDATE':
+        this.router.navigate(['/candidate/dashboard']);
+        break;
+      case 'RECRUITER':
+        this.router.navigate(['/recruiter/dashboard']);
+        break;
+      case 'HIRING_MANAGER':
+        this.router.navigate(['/hiring-manager/dashboard']);
+        break;
+      default:
+        this.router.navigate(['/dashboard']);
+    }
+  }
+
+  navigateToLogin(): void {
+    this.router.navigate(['/login']);
+  }
+
+  navigateToRegister(): void {
+    this.router.navigate(['/register']);
+  }
+
+  navigateToJobs(): void {
+    this.router.navigate(['/jobs']);
+  }
+}
+File: src/app/features/home/home.component.html
+html
+<!-- Loading State while checking session -->
+<div *ngIf="checkingSession" class="loading-container">
+  <mat-spinner diameter="60"></mat-spinner>
+  <p>Loading...</p>
+</div>
+
+<!-- Landing Page (shown only if not authenticated) -->
+<div *ngIf="!checkingSession" class="home-container">
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1>Find Your Dream Job</h1>
+      <p>Connect with top employers and discover opportunities that match your skills</p>
+      <div class="hero-actions">
+        <button mat-raised-button color="primary" (click)="navigateToRegister()">
+          Get Started
+        </button>
+        <button mat-stroked-button (click)="navigateToLogin()">
+          Sign In
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section class="features">
+    <div class="container">
+      <h2>Why Choose Us?</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <mat-icon>work</mat-icon>
+          <h3>Thousands of Jobs</h3>
+          <p>Browse through thousands of job opportunities from top companies</p>
+        </div>
+        <div class="feature-card">
+          <mat-icon>security</mat-icon>
+          <h3>Secure & Private</h3>
+          <p>Your data is protected with enterprise-grade security</p>
+        </div>
+        <div class="feature-card">
+          <mat-icon>trending_up</mat-icon>
+          <h3>Career Growth</h3>
+          <p>Get matched with jobs that align with your career goals</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Call to Action -->
+  <section class="cta">
+    <div class="container">
+      <h2>Ready to Get Started?</h2>
+      <p>Join thousands of job seekers finding their perfect match</p>
+      <button mat-raised-button color="primary" (click)="navigateToRegister()">
+        Create Your Free Account
+      </button>
+      <p class="browse-link">
+        Or <a (click)="navigateToJobs()">browse jobs</a> without signing up
+      </p>
+    </div>
+  </section>
+</div>
+2.9 App Configuration
+File: src/app/app.config.ts
+typescript
+import { ApplicationConfig, importProvidersFrom } from '@angular/core';
+import { provideRouter } from '@angular/router';
+import { provideHttpClient, withInterceptors, HTTP_INTERCEPTORS } from '@angular/common/http';
+import { provideAnimations } from '@angular/platform-browser/animations';
+
+import { routes } from './app.routes';
+import { AuthInterceptor } from './core/interceptors/auth.interceptor';
+import { authInitializerProvider } from './core/initializers/auth.initializer';
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideRouter(routes),
+    provideHttpClient(),
+    provideAnimations(),
+
+    // HTTP Interceptor for adding JWT to requests
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: AuthInterceptor,
+      multi: true
+    },
+
+    // App Initializer for session check on load
+    authInitializerProvider
+  ]
+};
+File: src/environments/environment.ts
+typescript
+export const environment = {
+  production: false,
+  apiUrl: 'http://localhost:8080/api/v1'
+};
+File: src/environments/environment.prod.ts
+typescript
+export const environment = {
+  production: true,
+  apiUrl: 'https://api.yourdomain.com/api/v1'
+};
+2.10 Session Status Component (Optional)
+File: src/app/shared/components/session-status/session-status.component.ts
+typescript
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { AuthService } from '../../../core/services/auth.service';
+import { Subscription, timer } from 'rxjs';
+
+@Component({
+  selector: 'app-session-status',
+  template: `
+    <div class="session-status" *ngIf="showWarning">
+      <mat-icon>warning</mat-icon>
+      <span>Your session will expire in {{ minutesLeft }} minute(s).
+        <a (click)="refreshSession()">Extend session</a>
+      </span>
+    </div>
+  `,
+  styles: [`
+    .session-status {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: #ff9800;
+      color: white;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 1000;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+
+      a {
+        color: white;
+        text-decoration: underline;
+        cursor: pointer;
+        font-weight: 500;
+      }
+    }
+  `]
+})
+export class SessionStatusComponent implements OnInit, OnDestroy {
+  showWarning = false;
+  minutesLeft = 0;
+  private timerSubscription?: Subscription;
+
+  constructor(private authService: AuthService) {}
+
+  ngOnInit(): void {
+    // Check session expiry every minute
+    this.timerSubscription = timer(0, 60000).subscribe(() => {
+      this.checkSessionExpiry();
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.timerSubscription?.unsubscribe();
+  }
+
+  private checkSessionExpiry(): void {
+    const token = this.authService.getToken();
+    if (!token) {
+      this.showWarning = false;
+      return;
+    }
+
+    try {
+      const payload = this.decodeToken(token);
+      const expiresIn = (payload.exp * 1000) - Date.now();
+      const minutesLeft = Math.floor(expiresIn / 1000 / 60);
+
+      // Show warning if less than 10 minutes left
+      if (minutesLeft <= 10 && minutesLeft > 0) {
+        this.showWarning = true;
+        this.minutesLeft = minutesLeft;
+      } else {
+        this.showWarning = false;
+      }
+    } catch (e) {
+      this.showWarning = false;
+    }
+  }
+
+  private decodeToken(token: string): any {
+    const payload = token.split('.')[1];
+    const
+Claude Sonnet 4.5
+continue
+
+
+Thought Process
+expand
+The user wants me to continue from where I left off. I was in the middle of the SessionStatusComponent's decodeToken method. Let me continue from there and finish the implementation guide.
+
+typescript
+  private decodeToken(token: string): any {
+    const payload = token.split('.')[1];
+    const decoded = atob(payload);
+    return JSON.parse(decoded);
+  }
+
+  refreshSession(): void {
+    this.authService.refreshToken().subscribe({
+      next: () => {
+        this.showWarning = false;
+        console.log('Session extended');
+      },
+      error: (err) => {
+        console.error('Failed to refresh session:', err);
+      }
+    });
+  }
+}
+2.11 Navbar with Auth Status
+File: src/app/shared/components/navbar/navbar.component.ts
+typescript
+import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
+import { AuthService, User } from '../../../core/services/auth.service';
+import { Observable } from 'rxjs';
+
+@Component({
+  selector: 'app-navbar',
+  templateUrl: './navbar.component.html',
+  styleUrls: ['./navbar.component.scss']
+})
+export class NavbarComponent implements OnInit {
+  isAuthenticated$: Observable<boolean>;
+  currentUser$: Observable<User | null>;
+
+  constructor(
+    private authService: AuthService,
+    private router: Router
+  ) {
+    this.isAuthenticated$ = this.authService.isAuthenticated$;
+    this.currentUser$ = this.authService.currentUser$;
+  }
+
+  ngOnInit(): void {}
+
+  logout(): void {
+    if (confirm('Are you sure you want to logout?')) {
+      this.authService.logout();
+    }
+  }
+
+  navigateToProfile(): void {
+    this.router.navigate(['/profile']);
+  }
+
+  navigateToDashboard(): void {
+    const user = this.authService.getCurrentUser();
+
+    switch (user?.role) {
+      case 'CANDIDATE':
+        this.router.navigate(['/candidate/dashboard']);
+        break;
+      case 'RECRUITER':
+        this.router.navigate(['/recruiter/dashboard']);
+        break;
+      case 'HIRING_MANAGER':
+        this.router.navigate(['/hiring-manager/dashboard']);
+        break;
+      default:
+        this.router.navigate(['/dashboard']);
+    }
+  }
+}
+File: src/app/shared/components/navbar/navbar.component.html
+html
+<mat-toolbar color="primary" class="navbar">
+  <div class="navbar-container">
+    <!-- Logo -->
+    <a routerLink="/" class="navbar-brand">
+      <mat-icon>work</mat-icon>
+      <span>ETalente</span>
+    </a>
+
+    <!-- Navigation Links -->
+    <div class="navbar-nav">
+      <a routerLink="/jobs" routerLinkActive="active" class="nav-link">
+        Browse Jobs
+      </a>
+
+      <!-- Authenticated User Links -->
+      <ng-container *ngIf="isAuthenticated$ | async">
+        <a (click)="navigateToDashboard()" class="nav-link">
+          Dashboard
+        </a>
+        <a routerLink="/applications" routerLinkActive="active" class="nav-link">
+          My Applications
+        </a>
+      </ng-container>
+    </div>
+
+    <!-- User Menu -->
+    <div class="navbar-actions">
+      <!-- Not Authenticated -->
+      <ng-container *ngIf="!(isAuthenticated$ | async)">
+        <button mat-button routerLink="/login">
+          Sign In
+        </button>
+        <button mat-raised-button color="accent" routerLink="/register">
+          Get Started
+        </button>
+      </ng-container>
+
+      <!-- Authenticated -->
+      <ng-container *ngIf="isAuthenticated$ | async">
+        <button mat-icon-button [matMenuTriggerFor]="userMenu">
+          <mat-icon>account_circle</mat-icon>
+        </button>
+
+        <mat-menu #userMenu="matMenu">
+          <div class="user-info" mat-menu-item disabled>
+            <div class="user-name">
+              {{ (currentUser$ | async)?.firstName }} {{ (currentUser$ | async)?.lastName }}
+            </div>
+            <div class="user-email">{{ (currentUser$ | async)?.email }}</div>
+          </div>
+          <mat-divider></mat-divider>
+          <button mat-menu-item (click)="navigateToProfile()">
+            <mat-icon>person</mat-icon>
+            <span>Profile</span>
+          </button>
+          <button mat-menu-item (click)="navigateToDashboard()">
+            <mat-icon>dashboard</mat-icon>
+            <span>Dashboard</span>
+          </button>
+          <mat-divider></mat-divider>
+          <button mat-menu-item (click)="logout()">
+            <mat-icon>logout</mat-icon>
+            <span>Logout</span>
+          </button>
+        </mat-menu>
+      </ng-container>
+    </div>
+  </div>
+</mat-toolbar>
+
+<!-- Session Status Warning -->
+<app-session-status></app-session-status>
+File: src/app/shared/components/navbar/navbar.component.scss
+scss
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.navbar-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+}
+
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
+
+  mat-icon {
+    font-size: 28px;
+    width: 28px;
+    height: 28px;
+  }
+}
+
+.navbar-nav {
+  display: flex;
+  gap: 20px;
+  flex: 1;
+  justify-content: center;
+
+  .nav-link {
+    color: white;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    cursor: pointer;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    &.active {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+  }
+}
+
+.navbar-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.user-info {
+  padding: 8px 16px;
+  cursor: default !important;
+
+  .user-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: #333;
+  }
+
+  .user-email {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+  }
+}
+📚 PART 3: IMPLEMENTATION GUIDE FOR TEAMS
+3.1 Backend Team Checklist
+Step 1: Update Dependencies
+xml
+<!-- pom.xml (if using Maven) -->
+<dependency>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-api</artifactId>
+    <version>0.11.5</version>
+</dependency>
+<dependency>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-impl</artifactId>
+    <version>0.11.5</version>
+    <scope>runtime</scope>
+</dependency>
+<dependency>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-jackson</artifactId>
+    <version>0.11.5</version>
+    <scope>runtime</scope>
+</dependency>
+Step 2: Generate JWT Secret Key
+bash
+# Generate a secure 256-bit secret key
+openssl rand -base64 32
+
+# Example output:
+# h8fY2kL9pQ3mN6rT1vZ4xW7cB0aE5gD8
+
+# Set as environment variable
+export JWT_SECRET_KEY="h8fY2kL9pQ3mN6rT1vZ4xW7cB0aE5gD8"
+Step 3: Update User Entity
+java
+@Entity
+@Table(name = "users")
+public class User {
+    // ... existing fields
+
+    @Column(name = "magic_link_token")
+    private String magicLinkToken;
+
+    @Column(name = "magic_link_expiry")
+    private LocalDateTime magicLinkExpiry;
+
+    @Column(name = "email_verified")
+    private boolean emailVerified = false;
+
+    // Getters and setters
+}
+Step 4: Create Flyway Migration
+sql
+-- V9__add_magic_link_fields.sql
+ALTER TABLE users
+ADD COLUMN magic_link_token VARCHAR(255),
+ADD COLUMN magic_link_expiry TIMESTAMP,
+ADD COLUMN email_verified BOOLEAN DEFAULT FALSE;
+
+CREATE INDEX idx_magic_link_token ON users(magic_link_token);
+Step 5: Implement Files in Order
+✅ JwtService.java
+✅ JwtAuthenticationFilter.java
+✅ DTOs (LoginRequest, VerifyTokenResponse, SessionResponse)
+✅ AuthenticationController.java
+✅ SecurityConfig.java
+✅ Update application.yml
+Step 6: Test Endpoints
+bash
+# Test 1: Request Magic Link
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com"}'
+
+# Test 2: Verify OTT (replace with actual token from email)
+curl -X GET "http://localhost:8080/api/auth/verify?token=YOUR_OTT_TOKEN"
+
+# Test 3: Check Session (replace with JWT from verify response)
+curl -X GET http://localhost:8080/api/auth/session \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+# Test 4: Refresh Token
+curl -X POST http://localhost:8080/api/auth/refresh \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+# Test 5: Logout
+curl -X POST http://localhost:8080/api/auth/logout \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+3.2 Frontend Team Checklist
+Step 1: Install Angular Material (if not already)
+bash
+ng add @angular/material
+Step 2: Create Project Structure
+bash
+# Create core services
+ng generate service core/services/auth
+
+# Create guards
+ng generate guard core/guards/auth
+ng generate guard core/guards/guest
+
+# Create interceptor
+ng generate interceptor core/interceptors/auth
+
+# Create components
+ng generate component features/auth/login
+ng generate component features/auth/magic-link-callback
+ng generate component features/home
+ng generate component shared/components/navbar
+ng generate component shared/components/session-status
+Step 3: Update Environment Files
+typescript
+// src/environments/environment.ts
+export const environment = {
+  production: false,
+  apiUrl: 'http://localhost:8080/api/v1'
+};
+
+// src/environments/environment.prod.ts
+export const environment = {
+  production: true,
+  apiUrl: 'https://api.yourdomain.com/api/v1'
+};
+Step 4: Implement Files in Order
+✅ auth.service.ts
+✅ auth.interceptor.ts
+✅ auth.guard.ts
+✅ guest.guard.ts
+✅ auth.initializer.ts
+✅ login.component.ts (+ HTML/SCSS)
+✅ magic-link-callback.component.ts (+ HTML/SCSS)
+✅ home.component.ts (+ HTML/SCSS)
+✅ app.routes.ts
+✅ app.config.ts
+Step 5: Test User Flows
+Flow 1: New User Registration
+
+Go to /login
+Enter email
+Check email for magic link
+Click magic link
+Should redirect to /onboarding (if isNewUser: true)
+Flow 2: Returning User Login
+
+Go to /login
+Enter email
+Check email for magic link
+Click magic link
+Should redirect to role-specific dashboard
+Flow 3: Homepage Auto-Redirect
+
+Have active session
+Navigate to / (homepage)
+Should automatically redirect to dashboard
+Flow 4: Protected Route Access
+
+Logout
+Try to access /dashboard
+Should redirect to /login
+Flow 5: Session Expiry
+
+Login
+Wait for token to expire (or manually change expiration)
+Try to access protected route
+Should redirect to login with expired session
+3.3 Testing Strategy
+Backend Tests
+java
+@SpringBootTest
+@AutoConfigureMockMvc
+class AuthenticationIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Test
+    void shouldSendMagicLink() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"test@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").exists());
+    }
+
+    @Test
+    void shouldVerifyOttAndReturnJwt() throws Exception {
+        // First, create a user with OTT token
+        String ott = createTestUserWithOtt("test@example.com");
+
+        mockMvc.perform(get("/api/auth/verify")
+                .param("token", ott))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").exists())
+                .andExpect(jsonPath("$.user.email").value("test@example.com"));
+    }
+
+    @Test
+    void shouldCheckSessionWithValidToken() throws Exception {
+        String jwt = generateValidJwt();
+
+        mockMvc.perform(get("/api/auth/session")
+                .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated").value(true));
+    }
+
+    @Test
+    void shouldRefreshToken() throws Exception {
+        String jwt = generateValidJwt();
+
+        mockMvc.perform(post("/api/auth/refresh")
+                .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").exists());
+    }
+
+    @Test
+    void shouldRejectExpiredToken() throws Exception {
+        String expiredJwt = generateExpiredJwt();
+
+        mockMvc.perform(get("/api/auth/session")
+                .header("Authorization", "Bearer " + expiredJwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated").value(false));
+    }
+}
+Frontend Tests
+typescript
+// auth.service.spec.ts
+describe('AuthService', () => {
+  let service: AuthService;
+  let httpMock: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [HttpClientTestingModule],
+      providers: [AuthService]
+    });
+
+    service = TestBed.inject(AuthService);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpMock.verify();
+    localStorage.clear();
+  });
+
+  it('should request magic link', () => {
+    const email = 'test@example.com';
+
+    service.requestMagicLink(email).subscribe(response => {
+      expect(response.message).toBe('Magic link sent to your email');
+      expect(response.email).toBe(email);
+    });
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/auth/login`);
+    expect(req.request.method).toBe('POST');
+    req.flush({ message: 'Magic link sent to your email', email });
+  });
+
+  it('should verify magic link and store token', () => {
+    const mockResponse: VerifyTokenResponse = {
+      token: 'mock.jwt.token',
+      user: {
+        id: '123',
+        email: 'test@example.com',
+        role: 'CANDIDATE',
+        firstName: 'John',
+        lastName: 'Doe',
+        isNewUser: false
+      },
+      expiresIn: 3600000
+    };
+
+    service.verifyMagicLink('ott-token').subscribe(response => {
+      expect(response.token).toBe(mockResponse.token);
+      expect(service.getToken()).toBe(mockResponse.token);
+      expect(service.isAuthenticated()).toBe(true);
+    });
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/auth/verify?token=ott-token`);
+    expect(req.request.method).toBe('GET');
+    req.flush(mockResponse);
+  });
+
+  it('should check session', () => {
+    const mockSession: SessionResponse = {
+      authenticated: true,
+      userId: '123',
+      email: 'test@example.com',
+      role: 'CANDIDATE',
+      isNewUser: false,
+      expiresIn: 3600000
+    };
+
+    service.checkSession().subscribe(response => {
+      expect(response.authenticated).toBe(true);
+      expect(response.email).toBe('test@example.com');
+    });
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/auth/session`);
+    expect(req.request.method).toBe('GET');
+    req.flush(mockSession);
+  });
+
+  it('should logout and clear token', () => {
+    // Set up authenticated state
+    localStorage.setItem('auth_token', 'mock.jwt.token');
+
+    service.logout();
+
+    expect(service.getToken()).toBeNull();
+    expect(service.isAuthenticated()).toBe(false);
+  });
+});
+3.4 Deployment Checklist
+Backend Deployment
+yaml
+# docker-compose.yml (Production)
+version: '3.8'
+
+services:
+  backend:
+    image: etalente-backend:latest
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - FRONTEND_URL=https://app.yourdomain.com
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=etalente
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:
+Frontend Deployment
+bash
+# Build for production
+ng build --configuration production
+
+# Environment variables for production
+# Set these in your
+Claude Sonnet 4.5
+continue
+
+
+Thought Process
+expand
+The user wants me to continue from where I left off in the deployment section. I was in the middle of the "Frontend Deployment" section, specifically showing environment variables for production.
+
+bash
+# Build for production
+ng build --configuration production
+
+# Environment variables for production
+# Set these in your CI/CD pipeline or hosting platform
+
+# Example: Netlify _redirects file
+/* /index.html 200
+
+# Example: nginx.conf for Docker
+server {
+    listen 80;
+    server_name localhost;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API proxy (optional, if you want to avoid CORS)
+    location /api {
+        proxy_pass http://backend:8080/api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+Environment Variables Checklist
+Backend:
+
+bash
+# Required
+JWT_SECRET_KEY=your-256-bit-secret-key
+DB_PASSWORD=your-database-password
+FRONTEND_URL=https://app.yourdomain.com
+
+# Optional
+SPRING_PROFILES_ACTIVE=prod
+SMTP_HOST=smtp.sendgrid.net
+SMTP_PORT=587
+SMTP_USERNAME=apikey
+SMTP_PASSWORD=your-sendgrid-api-key
+NOVU_API_KEY=your-novu-api-key
+Frontend:
+
+bash
+# Set in environment.prod.ts or via build-time replacement
+API_URL=https://api.yourdomain.com/api/v1
+3.5 Common Issues & Solutions
+Issue 1: CORS Errors
+Symptom: Browser console shows CORS policy errors
+
+Solution (Backend):
+
+java
+// SecurityConfig.java - Update allowed origins
+@Bean
+public CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration configuration = new CorsConfiguration();
+    configuration.setAllowedOriginPatterns(Arrays.asList(
+        "http://localhost:4200",           // Local development
+        "https://app.yourdomain.com",      // Production
+        "https://*.netlify.app"            // Netlify preview deployments
+    ));
+    configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+    configuration.setAllowedHeaders(Arrays.asList("*"));
+    configuration.setAllowCredentials(true);
+    configuration.setExposedHeaders(Arrays.asList("Authorization"));
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", configuration);
+    return source;
+}
+Issue 2: Token Not Attached to Requests
+Symptom: Backend returns 401 Unauthorized even though user is logged in
+
+Solution (Frontend):
+
+typescript
+// Ensure HTTP Interceptor is registered in app.config.ts
+export const appConfig: ApplicationConfig = {
+  providers: [
+    // ... other providers
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: AuthInterceptor,
+      multi: true
+    }
+  ]
+};
+
+// Verify token is stored correctly
+console.log('Token:', localStorage.getItem('auth_token'));
+Issue 3: Infinite Redirect Loop
+Symptom: App keeps redirecting between login and dashboard
+
+Solution:
+
+typescript
+// auth.guard.ts - Add route state check
+canActivate(
+  route: ActivatedRouteSnapshot,
+  state: RouterStateSnapshot
+): boolean {
+  if (this.authService.isAuthenticated()) {
+    return true;
+  }
+
+  // Prevent redirect loop by checking if already on login page
+  if (state.url === '/login') {
+    return true;
+  }
+
+  this.router.navigate(['/login'], {
+    queryParams: { returnUrl: state.url },
+    skipLocationChange: false  // Important: don't skip location change
+  });
+  return false;
+}
+Issue 4: Session Not Persisting After Page Refresh
+Symptom: User gets logged out when refreshing page
+
+Solution:
+
+typescript
+// Ensure APP_INITIALIZER is registered
+// app.config.ts
+export const appConfig: ApplicationConfig = {
+  providers: [
+    // ... other providers
+    authInitializerProvider  // Add this!
+  ]
+};
+
+// Verify token is in localStorage
+if (localStorage.getItem('auth_token')) {
+  console.log('Token found in localStorage');
+} else {
+  console.log('No token in localStorage');
+}
+Issue 5: Magic Link Expires Too Quickly
+Symptom: Users report magic links don't work
+
+Solution (Backend):
+
+yaml
+# application.yml - Increase magic link expiration
+magic-link:
+  expiration-minutes: 30  # Increase from 15 to 30 minutes
+Issue 6: JWT Signature Verification Failed
+Symptom: Backend logs show "Invalid JWT signature"
+
+Solution:
+
+Ensure JWT_SECRET_KEY is consistent across all environments
+Key must be Base64 encoded and at least 256 bits (32 characters)
+Don't change the key after tokens are issued (invalidates all existing tokens)
+bash
+# Generate a new key
+openssl rand -base64 32
+
+# Verify key length
+echo -n "your-secret-key" | wc -c  # Should be >= 32
+Issue 7: Auto-Redirect Not Working on Homepage
+Symptom: Logged-in users see landing page instead of being redirected
+
+Solution:
+
+typescript
+// home.component.ts - Ensure ngOnInit runs
+ngOnInit(): void {
+  console.log('HomeComponent initialized');
+  console.log('Is authenticated:', this.authService.isAuthenticated());
+  this.checkAndRedirect();
+}
+
+private checkAndRedirect(): void {
+  const token = this.authService.getToken();
+  console.log('Token exists:', !!token);
+
+  if (this.authService.isAuthenticated()) {
+    const user = this.authService.getCurrentUser();
+    console.log('Current user:', user);
+    // ... redirect logic
+  }
+}
+3.6 Security Best Practices
+1. Token Storage
+typescript
+// ✅ GOOD: Use localStorage for SPAs
+localStorage.setItem('auth_token', token);
+
+// ❌ BAD: Don't expose token in URL
+// Never do: this.router.navigate(['/dashboard'], { queryParams: { token } });
+
+// ✅ BETTER: Use httpOnly cookies for maximum security (requires backend change)
+// Backend sets cookie, frontend doesn't handle token directly
+2. JWT Expiration
+yaml
+# Production: Short-lived tokens
+jwt:
+  expiration: 1800000  # 30 minutes
+
+# Development: Longer tokens for convenience
+jwt:
+  expiration: 3600000  # 1 hour
+3. HTTPS Only
+java
+// SecurityConfig.java
+http
+  .requiresChannel(channel -> channel
+    .anyRequest().requiresSecure()  // Force HTTPS in production
+  )
+4. Token Refresh Strategy
+typescript
+// Auto-refresh 5 minutes before expiration
+private scheduleTokenRefresh(): void {
+  const token = this.getToken();
+  if (!token) return;
+
+  const payload = this.decodeToken(token);
+  const expiresIn = (payload.exp * 1000) - Date.now();
+  const refreshIn = expiresIn - (5 * 60 * 1000);  // 5 minutes before expiry
+
+  if (refreshIn > 0) {
+    this.refreshTokenTimer = setTimeout(() => {
+      this.refreshToken().subscribe();
+    }, refreshIn);
+  }
+}
+5. XSS Protection
+typescript
+// Angular has built-in XSS protection
+// But still sanitize user input
+import { DomSanitizer } from '@angular/platform-browser';
+
+constructor(private sanitizer: DomSanitizer) {}
+
+sanitizeUrl(url: string) {
+  return this.sanitizer.sanitize(SecurityContext.URL, url);
+}
+3.7 Monitoring & Logging
+Backend Logging
+java
+// Add structured logging
+@Slf4j
+@RestController
+@RequestMapping("/api/auth")
+public class AuthenticationController {
+
+    @PostMapping("/login")
+    public ResponseEntity<Map<String, String>> login(@RequestBody LoginRequest request) {
+        MDC.put("email", request.getEmail());
+        log.info("Magic link requested");
+
+        try {
+            authenticationService.sendMagicLink(request.getEmail());
+            log.info("Magic link sent successfully");
+            return ResponseEntity.ok(Map.of("message", "Magic link sent"));
+        } catch (Exception e) {
+            log.error("Failed to send magic link", e);
+            throw e;
+        } finally {
+            MDC.clear();
+        }
+    }
+}
+Frontend Error Tracking
+typescript
+// Install Sentry or similar
+npm install @sentry/angular
+
+// app.config.ts
+import * as Sentry from "@sentry/angular";
+
+Sentry.init({
+  dsn: "your-sentry-dsn",
+  environment: environment.production ? 'production' : 'development',
+  integrations: [
+    new Sentry.BrowserTracing({
+      routingInstrumentation: Sentry.routingInstrumentation,
+    }),
+  ],
+  tracesSampleRate: 1.0,
+});
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    {
+      provide: ErrorHandler,
+      useValue: Sentry.createErrorHandler(),
+    },
+    // ... other providers
+  ]
+};
+3.8 Performance Optimization
+Backend: Database Indexing
+sql
+-- Add indexes for frequently queried fields
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_magic_link_token ON users(magic_link_token);
+CREATE INDEX idx_job_applications_candidate_id ON job_applications(candidate_id);
+CREATE INDEX idx_job_applications_job_post_id ON job_applications(job_post_id);
+Backend: API Response Caching
+java
+@RestController
+@RequestMapping("/api/auth")
+public class AuthenticationController {
+
+    // Cache session checks for 30 seconds
+    @Cacheable(value = "sessions", key = "#authHeader", unless = "#result.authenticated == false")
+    @GetMapping("/session")
+    public ResponseEntity<SessionResponse> checkSession(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        // ... implementation
+    }
+}
+Frontend: Lazy Loading
+typescript
+// app.routes.ts - Already implemented with loadComponent
+export const routes: Routes = [
+  {
+    path: 'dashboard',
+    loadComponent: () => import('./features/dashboard/dashboard.component')
+      .then(m => m.DashboardComponent),
+    canActivate: [AuthGuard]
+  }
+];
+Frontend: Service Worker (PWA)
+bash
+# Add PWA support
+ng add @angular/pwa
+
+# This adds:
+# - Service worker for offline support
+# - App manifest
+# - Icons
+3.9 Quick Reference: API Endpoints
+Method	Endpoint	Auth Required	Description
+POST	/api/auth/login	No	Request magic link
+GET	/api/auth/verify?token={ott}	No	Verify OTT, get JWT
+GET	/api/auth/session	Yes	Check session validity
+POST	/api/auth/refresh	Yes	Refresh JWT token
+POST	/api/auth/logout	Yes	Logout (optional)
+GET	/api/job-posts	No	List public job posts
+POST	/api/job-posts	Yes	Create job post
+GET	/api/applications/me	Yes	Get my applications
+POST	/api/job-posts/{id}/apply	Yes	Apply to job
+3.10 Quick Reference: Route Guards
+Route	Guard	Redirect On Fail
+/login	GuestGuard	/dashboard
+/register	GuestGuard	/dashboard
+/dashboard	AuthGuard	/login
+/candidate/dashboard	AuthGuard + Role	/login or /unauthorized
+/recruiter/dashboard	AuthGuard + Role	/login or /unauthorized
+/profile	AuthGuard	/login
+/ (Home)	None	Auto-redirect if authenticated
+3.11 Testing Credentials (Development Only)
+typescript
+// For development/testing only
+export const TEST_USERS = {
+  candidate: {
+    email: 'candidate@test.com',
+    role: 'CANDIDATE'
+  },
+  recruiter: {
+    email: 'recruiter@test.com',
+    role: 'RECRUITER'
+  },
+  hiringManager: {
+    email: 'manager@test.com',
+    role: 'HIRING_MANAGER'
+  }
+};
+
+// Seed these users in your database
+// DO NOT use in production!
+📊 PART 4: WORKFLOW DIAGRAMS
+4.1 Complete Authentication Flow
+text
+┌─────────────────────────────────────────────────────────────────────┐
+│                     PASSWORDLESS AUTH FLOW                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. User visits app                                                 │
+│     ↓                                                               │
+│  2. APP_INITIALIZER checks for existing token                      │
+│     ├─ Token exists & valid → Skip to step 9                       │
+│     └─ No token → Continue to step 3                               │
+│     ↓                                                               │
+│  3. User goes to /login page                                        │
+│     ↓                                                               │
+│  4. User enters email → POST /api/auth/login                        │
+│     ↓                                                               │
+│  5. Backend generates OTT, sends magic link email                   │
+│     ↓                                                               │
+│  6. User clicks magic link (contains OTT)                           │
+│     ↓                                                               │
+│  7. Frontend (callback route) → GET /api/auth/verify?token={OTT}   │
+│     ↓                                                               │
+│  8. Backend validates OTT, returns JWT + user data                  │
+│     ↓                                                               │
+│  9. Frontend stores JWT in localStorage                             │
+│     ↓                                                               │
+│  10. Frontend updates auth state (BehaviorSubject)                  │
+│     ↓                                                               │
+│  11. Frontend redirects based on user.isNewUser                     │
+│      ├─ isNewUser: true  → /onboarding                             │
+│      └─ isNewUser: false → role-specific dashboard                 │
+│     ↓                                                               │
+│  12. User navigates app (AuthGuard protects routes)                 │
+│     ↓                                                               │
+│  13. HTTP Interceptor adds "Authorization: Bearer {JWT}" header     │
+│     ↓                                                               │
+│  14. Token refresh scheduled (5 min before expiry)                  │
+│     ↓                                                               │
+│  15. Auto-refresh → POST /api/auth/refresh                          │
+│     ↓                                                               │
+│  16. User logs out → Clear localStorage, redirect to /login        │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+4.2 Homepage Auto-Redirect Logic
+text
+┌──────────────────────────────────────────┐
+│  User navigates to homepage (/)          │
+└──────────────┬───────────────────────────┘
+               │
+               ↓
+        ┌──────────────┐
+        │ Check Token  │
+        └──────┬───────┘
+               │
+         ┌─────┴─────┐
+         │           │
+    ┌────▼───┐   ┌───▼────┐
+    │ Token  │   │   No   │
+    │ Exists │
+Claude Sonnet 4.5
+continue
+
+
+Thought Process
+expand
+The user wants me to continue the documentation, specifically completing the homepage auto-redirect logic diagram and any remaining sections.
+
+text
+┌──────────────────────────────────────────┐
+│  User navigates to homepage (/)          │
+└──────────────┬───────────────────────────┘
+               │
+               ↓
+        ┌──────────────┐
+        │ Check Token  │
+        └──────┬───────┘
+               │
+         ┌─────┴─────┐
+         │           │
+    ┌────▼───┐   ┌───▼────┐
+    │ Token  │   │   No   │
+    │ Exists │   │ Token  │
+    └────┬───┘   └───┬────┘
+         │           │
+         ↓           ↓
+    ┌────────┐   ┌──────────────┐
+    │Validate│   │ Show Landing │
+    │ Token  │   │     Page     │
+    └────┬───┘   └──────────────┘
+         │
+    ┌────┴────┐
+    │         │
+┌───▼───┐ ┌──▼──┐
+│ Valid │ │ Exp │
+│ Token │ │ired │
+└───┬───┘ └──┬──┘
+    │        │
+    │        ↓
+    │   ┌────────┐
+    │   │ Logout │
+    │   │Redirect│
+    │   │/login  │
+    │   └────────┘
+    │
+    ↓
+┌─────────────┐
+│Get User Data│
+└──────┬──────┘
+       │
+  ┌────┴────┐
+  │         │
+┌─▼──────┐ ┌▼─────────┐
+│isNewUsr│ │ Existing │
+│= true  │ │   User   │
+└───┬────┘ └────┬─────┘
+    │           │
+    ↓           ↓
+┌─────────┐ ┌────────────┐
+│Redirect │ │  Redirect  │
+│/onboard │ │  Based on  │
+│   ing   │ │    Role    │
+└─────────┘ └──────┬─────┘
+                   │
+            ┌──────┴──────┐
+            │             │
+     ┌──────▼──┐   ┌──────▼──────┐
+     │CANDIDATE│   │  RECRUITER  │
+     │/cand.   │   │  /recruiter │
+     │dashboard│   │  /dashboard │
+     └─────────┘   └──────┬──────┘
+                          │
+                   ┌──────▼────────┐
+                   │HIRING_MANAGER │
+                   │/hiring-manager│
+                   │   /dashboard  │
+                   └───────────────┘
+4.3 Token Lifecycle
+text
+┌─────────────────────────────────────────────────────────────┐
+│                     JWT TOKEN LIFECYCLE                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────┐                                          │
+│  │ Token Issued │                                          │
+│  │  (60 min)    │                                          │
+│  └──────┬───────┘                                          │
+│         │                                                   │
+│         ↓                                                   │
+│  ┌──────────────┐                                          │
+│  │ Token Stored │                                          │
+│  │ localStorage │                                          │
+│  └──────┬───────┘                                          │
+│         │                                                   │
+│         ↓                                                   │
+│  ┌──────────────────┐                                      │
+│  │ Used in Requests │◄─────────┐                          │
+│  │ (Auto-attached)  │          │                          │
+│  └──────┬───────────┘          │                          │
+│         │                      │                          │
+│    Time passes (55 min)        │                          │
+│         │                      │                          │
+│         ↓                      │                          │
+│  ┌──────────────────┐          │                          │
+│  │ 5 Minutes Before │          │                          │
+│  │    Expiry        │          │                          │
+│  └──────┬───────────┘          │                          │
+│         │                      │                          │
+│         ↓                      │                          │
+│  ┌──────────────────┐          │                          │
+│  │ Auto-Refresh     │          │                          │
+│  │ Triggered        │          │                          │
+│  └──────┬───────────┘          │                          │
+│         │                      │                          │
+│         ↓                      │                          │
+│  ┌──────────────────┐          │                          │
+│  │ POST /api/auth/  │          │                          │
+│  │     refresh      │          │                          │
+│  └──────┬───────────┘          │                          │
+│         │                      │                          │
+│    ┌────┴─────┐                │                          │
+│    │          │                │                          │
+│ ┌──▼───┐  ┌───▼────┐           │                          │
+│ │Success│ │ Failed │           │                          │
+│ └──┬───┘  └───┬────┘           │                          │
+│    │          │                │                          │
+│    │          ↓                │                          │
+│    │     ┌────────┐            │                          │
+│    │     │ Logout │            │                          │
+│    │     │Redirect│            │                          │
+│    │     │/login  │            │                          │
+│    │     └────────┘            │                          │
+│    │                           │                          │
+│    ↓                           │                          │
+│ ┌─────────────┐                │                          │
+│ │ New Token   │                │                          │
+│ │ Issued      │                │                          │
+│ └──────┬──────┘                │                          │
+│        │                       │                          │
+│        └───────────────────────┘                          │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+📝 PART 5: FINAL CHECKLISTS
+5.1 Backend Developer Checklist
+Pre-Implementation
+ Review JWT security best practices
+ Ensure Java 17+ is installed
+ Verify PostgreSQL database is running
+ Generate secure JWT secret key (256-bit minimum)
+ Set up environment variables
+Implementation Phase
+ Create JwtService.java with all required methods
+ Implement JwtAuthenticationFilter.java
+ Create DTOs: LoginRequest, VerifyTokenResponse, SessionResponse
+ Implement AuthenticationController.java with all endpoints
+ Update SecurityConfig.java with CORS and JWT filter
+ Add magic link fields to User entity
+ Create Flyway migration for new user fields
+ Update application.yml with JWT configuration
+ Implement AuthenticationService with OTT logic
+Testing Phase
+ Test magic link request endpoint
+ Test OTT verification endpoint
+ Test session check endpoint
+ Test token refresh endpoint
+ Test logout endpoint
+ Test protected endpoints with valid JWT
+ Test protected endpoints without JWT (should return 401)
+ Test expired token handling
+ Write unit tests for JwtService
+ Write integration tests for auth flow
+Deployment
+ Set JWT_SECRET_KEY environment variable in production
+ Set FRONTEND_URL environment variable
+ Configure SMTP for magic link emails
+ Set up database in production
+ Run Flyway migrations
+ Test magic link emails in production
+ Monitor logs for authentication errors
+ Set up alerts for failed authentication attempts
+5.2 Frontend Developer Checklist
+Pre-Implementation
+ Ensure Angular 17+ is installed
+ Verify Angular Material is configured
+ Review TypeScript async/await patterns
+ Set up local backend connection
+Implementation Phase
+ Create auth.service.ts with all methods
+ Implement auth.interceptor.ts
+ Create auth.guard.ts for protected routes
+ Create guest.guard.ts for public-only routes
+ Implement auth.initializer.ts for session check on load
+ Create login.component (TS + HTML + SCSS)
+ Create magic-link-callback.component (TS + HTML + SCSS)
+ Create home.component with auto-redirect logic (TS + HTML + SCSS)
+ Create navbar.component with auth status (TS + HTML + SCSS)
+ Create session-status.component for expiry warnings
+ Update app.routes.ts with guards
+ Update app.config.ts with interceptor and initializer
+ Create environment files with API URLs
+Testing Phase
+ Test login flow (request magic link)
+ Test magic link verification
+ Test automatic redirection on homepage
+ Test protected route access when logged out
+ Test role-based routing
+ Test token refresh mechanism
+ Test logout functionality
+ Test session persistence after page refresh
+ Test token expiry handling
+ Write unit tests for AuthService
+ Write unit tests for guards
+ Write E2E tests for complete auth flow
+Deployment
+ Update environment.prod.ts with production API URL
+ Build for production: ng build --configuration production
+ Test production build locally
+ Configure hosting platform (Netlify/Vercel/etc.)
+ Set up redirect rules for SPA routing
+ Test magic link flow in production
+ Verify CORS is working
+ Test on multiple browsers
+ Test on mobile devices
+ Monitor error tracking (Sentry/LogRocket)
+5.3 QA/Testing Checklist
+Functional Testing
+ Login Flow
+
+ Valid email → Magic link received
+ Invalid email → Proper error message
+ Magic link works within expiry window
+ Expired magic link shows error
+ Used magic link cannot be reused
+ Navigation & Routing
+
+ Logged-out user accessing protected route → Redirected to login
+ Logged-in user accessing login page → Redirected to dashboard
+ Homepage auto-redirects logged-in users
+ Role-based routing works correctly
+ Return URL after login works
+ Session Management
+
+ Session persists after page refresh
+ Token auto-refreshes before expiry
+ Expired session redirects to login
+ Logout clears session properly
+ API Integration
+
+ JWT token attached to all protected requests
+ 401 errors trigger logout
+ Network errors handled gracefully
+ Request retry logic works
+Security Testing
+ XSS protection (Angular sanitizes by default)
+ CSRF protection (stateless JWT doesn't need CSRF tokens)
+ JWT signature validation works
+ Expired tokens rejected
+ Invalid tokens rejected
+ Token not exposed in URL
+ HTTPS enforced in production
+ Secure cookies configuration (if using cookies)
+Performance Testing
+ Page load time < 3 seconds
+ API response time < 500ms
+ Token refresh doesn't block UI
+ Lazy loading reduces initial bundle size
+ Service worker caches assets (if PWA)
+Browser/Device Testing
+ Chrome (latest)
+ Firefox (latest)
+ Safari (latest)
+ Edge (latest)
+ iOS Safari
+ Android Chrome
+ Desktop (1920x1080)
+ Tablet (768x1024)
+ Mobile (375x667)
+5.4 DevOps Checklist
+CI/CD Pipeline
+ Automated tests run on every commit
+ Build fails if tests fail
+ Code coverage reports generated
+ Security scanning (Snyk/Dependabot)
+ Automated deployment to staging
+ Manual approval for production deployment
+Monitoring & Logging
+ Application logs centralized (ELK/CloudWatch)
+ Error tracking configured (Sentry/Rollbar)
+ Performance monitoring (New Relic/Datadog)
+ Uptime monitoring (Pingdom/UptimeRobot)
+ Alert notifications (Slack/PagerDuty)
+Backup & Recovery
+ Database backups automated (daily)
+ Backup restoration tested
+ Disaster recovery plan documented
+ Rollback procedure documented
+🎓 PART 6: TRAINING MATERIALS
+6.1 Quick Start Guide for New Developers
+Backend Developer (5-Minute Setup)
+bash
+# 1. Clone repository
+git clone https://github.com/yourorg/etalente-backend.git
+cd etalente-backend
+
+# 2. Set environment variables
+export JWT_SECRET_KEY="your-generated-secret-key"
+export DB_PASSWORD="postgres"
+
+# 3. Start database
+docker-compose up -d postgres
+
+# 4. Run application
+./gradlew bootRun
+
+# 5. Test it works
+curl http://localhost:8080/actuator/health
+Frontend Developer (5-Minute Setup)
+bash
+# 1. Clone repository
+git clone https://github.com/yourorg/etalente-frontend.git
+cd etalente-frontend
+
+# 2. Install dependencies
+npm install
+
+# 3. Start dev server
+ng serve
+
+# 4. Open browser
+open http://localhost:4200
+6.2 Common Tasks Reference
+Task: Add a New Protected Route
+Backend:
+
+java
+// JobPostController.java
+@GetMapping("/my-custom-endpoint")
+@PreAuthorize("hasRole('CANDIDATE')")  // Role-based access
+public ResponseEntity<String> myCustomEndpoint() {
+    return ResponseEntity.ok("Only candidates can see this");
+}
+Frontend:
+
+typescript
+// app.routes.ts
+{
+  path: 'my-custom-page',
+  loadComponent: () => import('./features/my-custom/my-custom.component')
+    .then(m => m.MyCustomComponent),
+  canActivate: [AuthGuard],
+  data: { role: 'CANDIDATE' }  // Optional: restrict by role
+}
+Task: Get Current User Information
+Backend:
+
+java
+@GetMapping("/api/me")
+public ResponseEntity<UserDto> getCurrentUser() {
+    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+    String userId = (String) auth.getPrincipal();
+
+    User user = userRepository.findById(UUID.fromString(userId))
+        .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+    return ResponseEntity.ok(UserDto.fromEntity(user));
+}
+Frontend:
+
+typescript
+// In any component
+import { AuthService } from '@core/services/auth.service';
+
+constructor(private authService: AuthService) {}
+
+ngOnInit() {
+  const user = this.authService.getCurrentUser();
+  console.log('Current user:', user);
+
+  // Or use observable
+  this.authService.currentUser$.subscribe(user => {
+    console.log('User changed:', user);
+  });
+}
+Task: Check User Role
+Frontend:
+
+typescript
+// In template
+<div *ngIf="authService.hasRole('CANDIDATE')">
+  Only candidates see this
+</div>
+
+// In component
+if (this.authService.hasRole('HIRING_MANAGER')) {
+  //
+Claude Sonnet 4.5
+continue
+
+
+Thought Process
+expand
+The user wants me to continue the guide. I was in the middle of showing how to check user roles. Let me continue from there.
+
+typescript
+// In template
+<div *ngIf="authService.hasRole('CANDIDATE')">
+  Only candidates see this
+</div>
+
+// In component
+if (this.authService.hasRole('HIRING_MANAGER')) {
+  // Show hiring manager features
+  this.loadHiringManagerData();
+}
+
+// Or use switch statement
+const role = this.authService.getUserRole();
+switch (role) {
+  case 'CANDIDATE':
+    this.showCandidateView();
+    break;
+  case 'RECRUITER':
+    this.showRecruiterView();
+    break;
+  case 'HIRING_MANAGER':
+    this.showHiringManagerView();
+    break;
+}
+Backend:
+
+java
+// In service method
+@Service
+public class SomeService {
+
+    public void performAction() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
+        // Check if user has specific role
+        boolean isCandidate = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_CANDIDATE"));
+
+        if (isCandidate) {
+            // Perform candidate-specific action
+        }
+    }
+}
+
+// Or use @PreAuthorize annotation
+@PreAuthorize("hasRole('HIRING_MANAGER')")
+public void hiringManagerOnlyMethod() {
+    // Only hiring managers can call this
+}
+Task: Manually Trigger Token Refresh
+Frontend:
+
+typescript
+// In any component
+constructor(private authService: AuthService) {}
+
+refreshMyToken() {
+  this.authService.refreshToken().subscribe({
+    next: (response) => {
+      console.log('Token refreshed successfully');
+      alert('Your session has been extended');
+    },
+    error: (error) => {
+      console.error('Failed to refresh token:', error);
+      alert('Session refresh failed. Please login again.');
+    }
+  });
+}
+Task: Add Custom Claims to JWT
+Backend:
+
+java
+// JwtService.java - Update generateToken method
+public String generateToken(String userId, String email, String role,
+                           boolean isNewUser, String organizationId) {
+    Map<String, Object> claims = new HashMap<>();
+    claims.put("email", email);
+    claims.put("role", role);
+    claims.put("is_new_user", isNewUser);
+    claims.put("organization_id", organizationId);  // New custom claim
+
+    return buildToken(claims, userId, jwtExpiration);
+}
+
+// Extract custom claim
+public String extractOrganizationId(String token) {
+    return extractClaim(token, claims -> claims.get("organization_id", String.class));
+}
+Frontend:
+
+typescript
+// auth.service.ts - Add method to extract custom claim
+getOrganizationId(): string | null {
+  const token = this.getToken();
+  if (!token) return null;
+
+  const payload = this.decodeToken(token);
+  return payload.organization_id || null;
+}
+Task: Implement "Remember Me" Functionality
+Backend:
+
+java
+// Add longer expiration for "remember me" tokens
+public String generateLongLivedToken(String userId, String email, String role, boolean isNewUser) {
+    Map<String, Object> claims = new HashMap<>();
+    claims.put("email", email);
+    claims.put("role", role);
+    claims.put("is_new_user", isNewUser);
+    claims.put("remember_me", true);
+
+    // 30 days expiration for "remember me"
+    long rememberMeExpiration = 30L * 24 * 60 * 60 * 1000;
+    return buildToken(claims, userId, rememberMeExpiration);
+}
+Frontend:
+
+typescript
+// login.component.ts
+export class LoginComponent {
+  loginForm = this.fb.group({
+    email: ['', [Validators.required, Validators.email]],
+    rememberMe: [false]  // Add checkbox
+  });
+
+  onSubmit() {
+    const rememberMe = this.loginForm.get('rememberMe')?.value;
+
+    // Send to backend
+    this.authService.requestMagicLink(
+      this.loginForm.get('email')?.value!,
+      rememberMe
+    ).subscribe(/* ... */);
+  }
+}
+6.3 Troubleshooting Guide
+Problem: "Authorization header not found" Error
+Symptom: Backend logs show "Authorization header not found" or returns 401
+
+Diagnosis:
+
+typescript
+// Add debug logging in interceptor
+intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+  const token = this.authService.getToken();
+  console.log('Token exists:', !!token);
+  console.log('Request URL:', req.url);
+
+  if (token) {
+    console.log('Adding Authorization header');
+    req = req.clone({
+      setHeaders: { Authorization: `Bearer ${token}` }
+    });
+  }
+
+  return next.handle(req);
+}
+Solutions:
+
+Verify token exists in localStorage: localStorage.getItem('auth_token')
+Check if interceptor is registered in app.config.ts
+Verify request URL matches API base URL
+Check browser Network tab → Request Headers
+Problem: "CORS policy: No 'Access-Control-Allow-Origin' header"
+Diagnosis:
+
+bash
+# Check backend CORS configuration
+curl -I -X OPTIONS http://localhost:8080/api/auth/session \
+  -H "Origin: http://localhost:4200" \
+  -H "Access-Control-Request-Method: GET"
+Solutions:
+
+java
+// SecurityConfig.java - Update CORS config
+@Bean
+public CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration configuration = new CorsConfiguration();
+
+    // Allow specific origins
+    configuration.setAllowedOriginPatterns(Arrays.asList(
+        "http://localhost:4200",
+        "https://yourdomain.com"
+    ));
+
+    // Allow credentials
+    configuration.setAllowCredentials(true);
+
+    // Allow all headers
+    configuration.setAllowedHeaders(Arrays.asList("*"));
+
+    // Allow all methods
+    configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+
+    // Expose Authorization header
+    configuration.setExposedHeaders(Arrays.asList("Authorization"));
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", configuration);
+    return source;
+}
+Problem: Token Expires Immediately
+Diagnosis:
+
+typescript
+// Check token expiration
+const token = localStorage.getItem('auth_token');
+if (token) {
+  const payload = JSON.parse(atob(token.split('.')[1]));
+  const expiresAt = new Date(payload.exp * 1000);
+  const now = new Date();
+
+  console.log('Token expires at:', expiresAt);
+  console.log('Current time:', now);
+  console.log('Time until expiry:', (expiresAt.getTime() - now.getTime()) / 1000 / 60, 'minutes');
+}
+Solutions:
+
+Check backend JWT expiration config: jwt.expiration in application.yml
+Verify system clocks are synchronized (backend and frontend)
+Check for timezone issues
+Problem: User Logged Out After Page Refresh
+Diagnosis:
+
+typescript
+// Check if token persists in localStorage
+console.log('Token in localStorage:', localStorage.getItem('auth_token'));
+console.log('User data in localStorage:', localStorage.getItem('user_data'));
+Solutions:
+
+Verify you're using localStorage not sessionStorage
+Ensure APP_INITIALIZER is configured correctly
+Check browser console for errors during initialization
+Verify token isn't being cleared by another part of the app
+Problem: Magic Link Not Received
+Diagnosis:
+
+java
+// Backend - Add logging in email service
+@Service
+public class EmailService {
+
+    public void sendMagicLinkEmail(String to, String token) {
+        log.info("Attempting to send magic link to: {}", to);
+
+        try {
+            // Email sending logic
+            log.info("Magic link sent successfully to: {}", to);
+        } catch (Exception e) {
+            log.error("Failed to send magic link to: {}", to, e);
+            throw e;
+        }
+    }
+}
+Solutions:
+
+Check SMTP configuration in application.yml
+Verify email service credentials
+Check spam/junk folder
+Check backend logs for email sending errors
+Test with a mail testing service (MailHog, Mailtrap)
+Problem: "Cannot read properties of null (reading 'role')"
+Symptom: Frontend crashes when accessing user properties
+
+Solutions:
+
+typescript
+// Use optional chaining and null checks
+const user = this.authService.getCurrentUser();
+
+// ❌ BAD
+console.log(user.role);  // Crashes if user is null
+
+// ✅ GOOD
+console.log(user?.role);  // Returns undefined if user is null
+
+// ✅ BETTER
+if (user) {
+  console.log(user.role);
+}
+
+// ✅ BEST (in template)
+<div *ngIf="currentUser$ | async as user">
+  <p>Role: {{ user.role }}</p>
+</div>
+6.4 Performance Optimization Tips
+Backend Optimization
+java
+// 1. Add database connection pooling
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 20000
+
+// 2. Enable response compression
+server:
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+
+// 3. Add caching for session checks
+@Configuration
+@EnableCaching
+public class CacheConfig {
+
+    @Bean
+    public CacheManager cacheManager() {
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager("sessions");
+        cacheManager.setCaffeine(Caffeine.newBuilder()
+            .expireAfterWrite(30, TimeUnit.SECONDS)
+            .maximumSize(1000));
+        return cacheManager;
+    }
+}
+
+// 4. Use async for non-critical operations
+@Async
+public void logAuthenticationEvent(String userId, String action) {
+    // Log to database or external service
+}
+Frontend Optimization
+typescript
+// 1. Use OnPush change detection
+@Component({
+  selector: 'app-my-component',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `...`
+})
+
+// 2. Unsubscribe from observables
+export class MyComponent implements OnInit, OnDestroy {
+  private destroy$ = new Subject<void>();
+
+  ngOnInit() {
+    this.authService.currentUser$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(user => {
+        // Handle user changes
+      });
+  }
+
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+}
+
+// 3. Use trackBy in *ngFor
+<div *ngFor="let item of items; trackBy: trackById">
+  {{ item.name }}
+</div>
+
+trackById(index: number, item: any): any {
+  return item.id;
+}
+
+// 4. Lazy load images
+<img [src]="imageUrl" loading="lazy" alt="Description">
+
+// 5. Debounce user input
+import { debounceTime } from 'rxjs/operators';
+
+this.searchForm.valueChanges
+  .pipe(debounceTime(300))
+  .subscribe(value => {
+    this.search(value);
+  });
+6.5 Security Hardening Checklist
+Backend Security
+java
+// 1. Add rate limiting
+@Configuration
+public class RateLimitConfig {
+
+    @Bean
+    public RateLimiter rateLimiter() {
+        return RateLimiter.create(100); // 100 requests per second
+    }
+}
+
+// 2. Add security headers
+@Configuration
+public class SecurityHeadersConfig {
+
+    @Bean
+    public FilterRegistrationBean<Filter> securityHeadersFilter() {
+        FilterRegistrationBean<Filter> registration = new FilterRegistrationBean<>();
+        registration.setFilter((request, response, chain) -> {
+            HttpServletResponse httpResponse = (HttpServletResponse) response;
+            httpResponse.setHeader("X-Content-Type-Options", "nosniff");
+            httpResponse.setHeader("X-Frame-Options", "DENY");
+            httpResponse.setHeader("X-XSS-Protection", "1; mode=block");
+            httpResponse.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+            chain.doFilter(request, response);
+        });
+        return registration;
+    }
+}
+
+// 3. Implement token blacklisting for logout
+@Service
+public class TokenBlacklistService {
+
+    private final Set<String> blacklistedTokens = ConcurrentHashMap.newKeySet();
+
+    public void blacklistToken(String token) {
+        blacklistedTokens.add(token);
+
+        // Schedule removal after token expiration
+        scheduler.schedule(() -> blacklistedTokens.remove(token),
+                          getTokenExpiration(token), TimeUnit.MILLISECONDS);
+    }
+
+    public boolean isBlacklisted(String token) {
+        return blacklistedTokens.contains(token);
+    }
+}
+
+// 4. Add audit logging
+@Aspect
+@Component
+public class AuthAuditAspect {
+
+    @AfterReturning(pointcut = "execution(* com.etalente.backend.controller.AuthenticationController.*(..))")
+    public void logAuthEvent(JoinPoint joinPoint) {
+        String method = joinPoint.getSignature().getName();
+        Object[] args = joinPoint.getArgs();
+
+        log.info("Auth event: method={}, args={}", method, args);
+
+        // Save to audit log table
+        auditLogService.logAuthEvent(method, args);
+    }
+}
+Frontend Security
+typescript
+// 1. Sanitize user input
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+
+constructor(private sanitizer: DomSanitizer) {}
+
+sanitizeContent(content: string): SafeHtml {
+  return this.sanitizer.sanitize(SecurityContext.HTML, content) || '';
+}
+
+// 2. Implement Content Security Policy
+// Add to index.html
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               script-src 'self' 'unsafe-inline';
+               style-src 'self' 'unsafe-inline';
+               img-src 'self' data: https:;">
+
+// 3. Clear sensitive data on logout
+logout() {
+  // Clear all localStorage
+  localStorage.clear();
+
+  // Clear sessionStorage
+  sessionStorage.clear();
+
+  // Clear cookies
+  document.cookie.split(";").forEach(c => {
+    document.cookie = c.replace(/^ +/, "").replace(/=.*/,
+      "=;expires=" + new Date().toUTCString() + ";path=/");
+  });
+
+  this.router.navigate(['/login']);
+}
+
+// 4. Implement idle timeout
+import { Idle, DEFAULT_INTERRUPTSOURCES } from '@ng-idle/core';
+
+constructor(private idle: Idle) {
+  // Set idle time (15 minutes)
+  idle.setIdle(900);
+
+  // Set timeout period (5 minutes warning)
+  idle.setTimeout(300);
+
+  // Set interrupts (user activity)
+  idle.setInterrupts(DEFAULT_INTERRUPTSOURCES);
+
+  // Watch for idle
+  idle.onTimeout.subscribe(() => {
+    this.authService.logout();
+    alert('You have been logged out due to inactivity');
+  });
+
+  // Start watching
+  this.idle.watch();
+}
+📊 PART 7: METRICS & MONITORING
+7.1 Key Metrics to Track
+Authentication Metrics
+java
+// Backend - Add Micrometer metrics
+@Service
+public class AuthenticationMetricsService {
+
+    private final Counter loginAttempts;
+    private final Counter successfulLogins;
+    private final Counter failedLogins;
+    private final Timer loginDuration;
+
+    public AuthenticationMetricsService(MeterRegistry registry) {
+        this.loginAttempts = Counter.builder("auth.login.attempts")
+            .description("Total login attempts")
+            .register(registry);
+
+        this.successfulLogins = Counter.builder("auth.login.success")
+            .description("Successful logins")
+            .register(registry);
+
+        this.failedLogins = Counter.builder("auth.login.failed")
+            .description("Failed logins")
+            .register(registry);
+
+        this.loginDuration = Timer.builder("auth.login.duration")
+            .description("Login duration")
+            .register(registry);
+    }
+
+    public void recordLogin
+Claude Sonnet 4.5
+continue
+
+
+Thought Process
+expand
+The user wants me to continue the document. I was in the middle of implementing authentication metrics in the backend. Let me continue from there.
+
+java
+    public void recordLoginAttempt() {
+        loginAttempts.increment();
+    }
+
+    public void recordSuccessfulLogin() {
+        successfulLogins.increment();
+    }
+
+    public void recordFailedLogin() {
+        failedLogins.increment();
+    }
+
+    public <T> T recordLoginDuration(Supplier<T> operation) {
+        return loginDuration.record(operation);
+    }
+}
+
+// Usage in AuthenticationController
+@RestController
+@RequestMapping("/api/auth")
+public class AuthenticationController {
+
+    private final AuthenticationMetricsService metricsService;
+
+    @PostMapping("/login")
+    public ResponseEntity<Map<String, String>> login(@RequestBody LoginRequest request) {
+        metricsService.recordLoginAttempt();
+
+        try {
+            return metricsService.recordLoginDuration(() -> {
+                authenticationService.sendMagicLink(request.getEmail());
+                metricsService.recordSuccessfulLogin();
+                return ResponseEntity.ok(Map.of("message", "Magic link sent"));
+            });
+        } catch (Exception e) {
+            metricsService.recordFailedLogin();
+            throw e;
+        }
+    }
+}
+Frontend Metrics
+typescript
+// analytics.service.ts
+import { Injectable } from '@angular/core';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class AnalyticsService {
+
+  // Track authentication events
+  trackLogin(method: 'magic_link' | 'oauth') {
+    this.trackEvent('auth', 'login', method);
+  }
+
+  trackLoginSuccess(userId: string, role: string) {
+    this.trackEvent('auth', 'login_success', role, { userId });
+  }
+
+  trackLoginFailure(reason: string) {
+    this.trackEvent('auth', 'login_failure', reason);
+  }
+
+  trackTokenRefresh() {
+    this.trackEvent('auth', 'token_refresh');
+  }
+
+  trackLogout() {
+    this.trackEvent('auth', 'logout');
+  }
+
+  trackSessionExpiry() {
+    this.trackEvent('auth', 'session_expired');
+  }
+
+  // Generic event tracking
+  private trackEvent(category: string, action: string, label?: string, data?: any) {
+    // Google Analytics 4
+    if (typeof gtag !== 'undefined') {
+      gtag('event', action, {
+        event_category: category,
+        event_label: label,
+        ...data
+      });
+    }
+
+    // Or send to your own analytics endpoint
+    this.http.post('/api/analytics/event', {
+      category,
+      action,
+      label,
+      data,
+      timestamp: new Date()
+    }).subscribe();
+  }
+}
+
+// Use in auth.service.ts
+export class AuthService {
+  constructor(
+    private analytics: AnalyticsService
+  ) {}
+
+  verifyMagicLink(token: string): Observable<VerifyTokenResponse> {
+    return this.http.get<VerifyTokenResponse>(`${this.API_URL}/auth/verify`, {
+      params: { token }
+    }).pipe(
+      tap(response => {
+        this.handleSuccessfulAuth(response);
+        this.analytics.trackLoginSuccess(response.user.id, response.user.role);
+      }),
+      catchError(error => {
+        this.analytics.trackLoginFailure(error.message);
+        return throwError(() => error);
+      })
+    );
+  }
+}
+7.2 Health Check Endpoints
+Backend Health Checks
+java
+// Custom health indicator
+@Component
+public class JwtHealthIndicator implements HealthIndicator {
+
+    private final JwtService jwtService;
+
+    @Override
+    public Health health() {
+        try {
+            // Test JWT generation
+            String testToken = jwtService.generateToken("test", "test@example.com", "CANDIDATE", false);
+
+            // Test JWT validation
+            String userId = jwtService.extractUserId(testToken);
+
+            if ("test".equals(userId)) {
+                return Health.up()
+                    .withDetail("jwt", "operational")
+                    .build();
+            } else {
+                return Health.down()
+                    .withDetail("jwt", "validation failed")
+                    .build();
+            }
+        } catch (Exception e) {
+            return Health.down()
+                .withDetail("jwt", "error")
+                .withDetail("error", e.getMessage())
+                .build();
+        }
+    }
+}
+
+// Database connection health check (built-in)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    db:
+      enabled: true
+    diskspace:
+      enabled: true
+
+// Access health check
+// GET http://localhost:8080/actuator/health
+Frontend Health Checks
+typescript
+// health-check.service.ts
+@Injectable({
+  providedIn: 'root'
+})
+export class HealthCheckService {
+
+  constructor(private http: HttpClient) {}
+
+  checkBackendHealth(): Observable<any> {
+    return this.http.get(`${environment.apiUrl}/../actuator/health`);
+  }
+
+  checkAuthenticationHealth(): Observable<boolean> {
+    return this.http.get<SessionResponse>(`${environment.apiUrl}/auth/session`)
+      .pipe(
+        map(response => response.authenticated),
+        catchError(() => of(false))
+      );
+  }
+
+  performHealthCheck(): Observable<HealthStatus> {
+    return forkJoin({
+      backend: this.checkBackendHealth(),
+      auth: this.checkAuthenticationHealth()
+    }).pipe(
+      map(results => ({
+        healthy: results.backend.status === 'UP' && results.auth,
+        details: results
+      })),
+      catchError(error => of({
+        healthy: false,
+        error: error.message
+      }))
+    );
+  }
+}
+
+interface HealthStatus {
+  healthy: boolean;
+  details?: any;
+  error?: string;
+}
+7.3 Logging Best Practices
+Backend Structured Logging
+java
+// Use SLF4J with Logback/Log4j2
+@Slf4j
+@Service
+public class AuthenticationService {
+
+    public void sendMagicLink(String email) {
+        // Structured logging with MDC
+        MDC.put("email", email);
+        MDC.put("action", "send_magic_link");
+
+        log.info("Initiating magic link send");
+
+        try {
+            // Business logic
+            log.info("Magic link sent successfully");
+        } catch (Exception e) {
+            log.error("Failed to send magic link", e);
+            throw e;
+        } finally {
+            MDC.clear();
+        }
+    }
+
+    public VerifyTokenResponse verifyOttAndGenerateSession(String ott) {
+        MDC.put("action", "verify_ott");
+
+        long startTime = System.currentTimeMillis();
+
+        try {
+            User user = userRepository.findByMagicLinkToken(ott)
+                .orElseThrow(() -> {
+                    log.warn("Invalid OTT token provided");
+                    return new BadRequestException("Invalid token");
+                });
+
+            MDC.put("userId", user.getId().toString());
+            MDC.put("userRole", user.getRole().name());
+
+            // Check expiration
+            if (user.getMagicLinkExpiry().isBefore(LocalDateTime.now())) {
+                log.warn("Expired OTT token used");
+                throw new BadRequestException("Token expired");
+            }
+
+            // Generate JWT
+            String jwt = jwtService.generateToken(/* ... */);
+
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("OTT verification successful, duration={}ms", duration);
+
+            return new VerifyTokenResponse(/* ... */);
+
+        } catch (Exception e) {
+            log.error("OTT verification failed", e);
+            throw e;
+        } finally {
+            MDC.clear();
+        }
+    }
+}
+
+// Logback configuration (logback-spring.xml)
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>email</includeMdcKeyName>
+            <includeMdcKeyName>userId</includeMdcKeyName>
+            <includeMdcKeyName>action</includeMdcKeyName>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/application.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/application-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>
+Frontend Error Logging
+typescript
+// error-handler.service.ts
+import { ErrorHandler, Injectable, Injector } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+
+@Injectable()
+export class GlobalErrorHandler implements ErrorHandler {
+
+  constructor(private injector: Injector) {}
+
+  handleError(error: Error | HttpErrorResponse) {
+    const logger = this.injector.get(LoggerService);
+
+    if (error instanceof HttpErrorResponse) {
+      // Server error
+      logger.logError({
+        type: 'HTTP_ERROR',
+        status: error.status,
+        message: error.message,
+        url: error.url,
+        timestamp: new Date().toISOString()
+      });
+
+      // Show user-friendly message
+      this.showErrorToast(this.getErrorMessage(error));
+
+    } else {
+      // Client error
+      logger.logError({
+        type: 'CLIENT_ERROR',
+        message: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      });
+
+      console.error('Client error:', error);
+    }
+  }
+
+  private getErrorMessage(error: HttpErrorResponse): string {
+    switch (error.status) {
+      case 401:
+        return 'Your session has expired. Please login again.';
+      case 403:
+        return 'You do not have permission to perform this action.';
+      case 404:
+        return 'The requested resource was not found.';
+      case 500:
+        return 'A server error occurred. Please try again later.';
+      default:
+        return 'An unexpected error occurred.';
+    }
+  }
+
+  private showErrorToast(message: string) {
+    // Use your toast/snackbar service
+    const snackbar = this.injector.get(MatSnackBar);
+    snackbar.open(message, 'Close', { duration: 5000 });
+  }
+}
+
+// logger.service.ts
+@Injectable({
+  providedIn: 'root'
+})
+export class LoggerService {
+
+  constructor(private http: HttpClient) {}
+
+  logError(error: any) {
+    // Log to backend
+    this.http.post('/api/logs/error', {
+      ...error,
+      userAgent: navigator.userAgent,
+      url: window.location.href
+    }).subscribe({
+      error: (err) => console.error('Failed to log error to backend', err)
+    });
+
+    // Also log to external service (Sentry, LogRocket, etc.)
+    if (typeof Sentry !== 'undefined') {
+      Sentry.captureException(error);
+    }
+  }
+
+  logInfo(message: string, data?: any) {
+    console.info(message, data);
+
+    this.http.post('/api/logs/info', {
+      level: 'INFO',
+      message,
+      data,
+      timestamp: new Date().toISOString()
+    }).subscribe();
+  }
+}
+
+// Register in app.config.ts
+export const appConfig: ApplicationConfig = {
+  providers: [
+    {
+      provide: ErrorHandler,
+      useClass: GlobalErrorHandler
+    },
+    // ... other providers
+  ]
+};
+🎯 PART 8: FINAL SUMMARY
+8.1 What We've Built
+Complete Authentication System
+✅ Backend (Spring Boot)
+
+JWT generation and validation
+Passwordless magic link authentication
+Session management
+Token refresh mechanism
+Role-based access control
+Security filters and configuration
+✅ Frontend (Angular)
+
+Auth service with observable state management
+HTTP interceptor for automatic token attachment
+Auth guards for route protection
+Auto-redirect on homepage
+Token refresh before expiry
+Session persistence across page refreshes
+Logout functionality
+8.2 Key Features
+Security
+✅ Stateless JWT authentication
+✅ Secure token storage in localStorage
+✅ Automatic token refresh (5 min before expiry)
+✅ XSS protection (Angular sanitization)
+✅ CORS configuration
+✅ Role-based authorization
+User Experience
+✅ Passwordless login (magic link)
+✅ Automatic session detection
+✅ Role-based dashboard routing
+✅ Session expiry warnings
+✅ Seamless token refresh
+✅ Remember me functionality (optional)
+Developer Experience
+✅ Clean, maintainable code
+✅ Comprehensive error handling
+✅ Extensive logging
+✅ Easy to test
+✅ Well-documented
+8.3 Production Readiness Checklist
+Before Going Live
+Security:
+
+ JWT secret is 256-bit and stored securely
+ HTTPS enforced in production
+ CORS restricted to production domain
+ Rate limiting configured
+ Security headers added
+ Sensitive data not logged
+ SQL injection protection verified
+ XSS protection verified
+Performance:
+
+ Database indexes created
+ Connection pooling configured
+ Response caching implemented
+ Compression enabled
+ Lazy loading for routes
+ Images optimized
+Monitoring:
+
+ Application logs centralized
+ Error tracking configured (Sentry/Rollbar)
+ Performance monitoring setup (New Relic/Datadog)
+ Uptime monitoring enabled
+ Alerts configured for critical errors
+Testing:
+
+ All unit tests passing
+ Integration tests passing
+ E2E tests passing
+ Load testing completed
+ Security testing completed
+ Browser compatibility verified
+Deployment:
+
+ Environment variables configured
+ Database migrations tested
+ Backup strategy in place
+ Rollback plan documented
+ CI/CD pipeline working
+ SSL certificates installed
+8.4 Post-Launch Monitoring
+Week 1 After Launch
+ Monitor error rates (should be < 1%)
+ Track authentication success rate (should be > 95%)
+ Monitor API response times (should be < 500ms)
+ Check for failed login attempts (detect attacks)
+ Verify email delivery rates
+ Monitor token refresh rates
+ Check for CORS errors
+ Verify session persistence
+Month 1 After Launch
+ Review authentication metrics
+ Analyze user login patterns
+ Identify and fix bottlenecks
+ Optimize slow queries
+ Review and update documentation
+ Gather user feedback
+ Plan improvements
+8.5 Support Contacts
+Backend Team Lead: [Name] - [Email]
+Frontend Team Lead: [Name] - [Email]
+DevOps Lead: [Name] - [Email]
+QA Lead: [Name] - [Email]
+
+8.6 Additional Resources
+Documentation
+Backend API docs: http://localhost:8080/swagger-ui.html
+Frontend Storybook: http://localhost:6006 (if configured)
+Architecture diagrams: /docs/architecture/
+Deployment guide: /docs/deployment.md
+External Resources
+JWT.io - JWT debugger
+Spring Security docs
+Angular Security Guide
+OWASP Top 10
+🎉 CONGRATULATIONS!
+You now have a production-ready, secure, passwordless authentication system with:
+
+✅ Magic link authentication
+✅ JWT session management
+✅ Automatic session detection
+✅ Token refresh mechanism
+✅ Role-based routing
+✅ Complete test coverage
+✅ Comprehensive monitoring
+
+Your teams are ready to implement this robust solution!
+
+Quick Reference Card
+Backend Endpoints
+text
+POST   /api/auth/login          - Request magic link
+GET    /api/auth/verify         - Verify OTT, get JWT
+GET    /api/auth/session        - Check session
+POST   /api/auth/refresh        - Refresh token
+POST   /api/auth/logout         - Logout
+Frontend Services
+typescript
+authService.requestMagicLink(email)
+authService.verifyMagicLink(token)
+authService.checkSession()
+authService.refreshToken()
+authService.logout()
+authService.isAuthenticated()
+authService.getCurrentUser()
+authService.getUserRole()
+Environment Variables
+bash
+# Backend
+JWT_SECRET_
