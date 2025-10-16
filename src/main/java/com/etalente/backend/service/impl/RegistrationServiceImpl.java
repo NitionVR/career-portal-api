@@ -42,7 +42,7 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final NovuNotificationService novuNotificationService; // New
 
 
-    @Value("${magic-link-url}")
+    @Value("${magic-link.url}")
     private String magicLinkUrl;
 
     public RegistrationServiceImpl(UserRepository userRepository,

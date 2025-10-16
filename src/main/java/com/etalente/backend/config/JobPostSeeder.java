@@ -179,10 +179,10 @@ public class JobPostSeeder implements CommandLineRunner {
 
                     if (!exists) {
                         logger.info("Attempting to create and publish job post: {}", request.title());
-                        JobPostResponse createdJobPost = jobPostService.createJobPost(request, hiringManager.getEmail());
+                        JobPostResponse createdJobPost = jobPostService.createJobPost(request, hiringManager.getId());
                         logger.info("Job post created with ID: {}", createdJobPost.id());
                         // Publish the job post immediately so it's visible
-                        jobPostService.publishJobPost(createdJobPost.id(), hiringManager.getEmail());
+                        jobPostService.publishJobPost(createdJobPost.id(), hiringManager.getId());
                         logger.info("Job post published: {}", createdJobPost.title());
                     } else {
                         logger.info("Job post already exists, skipping: {}", request.title());
