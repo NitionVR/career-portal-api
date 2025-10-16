@@ -42,10 +42,12 @@ logging:
 jwt:
   secret-key: dGhpc2lzYWxvbmdzZWNyZXRrZXlmb3Jqd3R0ZXN0aW5nMTIz
   expiration: 3600000 # 1 hour for tests
-magic-link-url: http://localhost:4200/auth/callback
+magic-link:
+  url: http://localhost:4200/auth/callback
 invitation-link-url: http://localhost:4200/auth/accept-invitation
 invitation-expiry-hours: 72
-cors-allowed-origins: http://localhost:4200
+cors:
+  allowed-origins: http://localhost:4200
 ott:
   expiration-minutes: 15 # Test default
 
