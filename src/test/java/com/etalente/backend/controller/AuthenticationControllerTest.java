@@ -1,6 +1,7 @@
 package com.etalente.backend.controller;
 
 import com.etalente.backend.BaseIntegrationTest;
+import com.etalente.backend.dto.VerifyTokenResponse;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.AuthenticationService;
 import org.junit.jupiter.api.Test;
@@ -13,17 +14,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import io.jsonwebtoken.Claims;
-import org.springframework.security.core.userdetails.UserDetails;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import static org.assertj.core.api.Assertions.assertThat;
-import org.json.JSONObject;
-
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class AuthenticationControllerTest extends BaseIntegrationTest {
 
@@ -41,27 +32,78 @@ class AuthenticationControllerTest extends BaseIntegrationTest {
         String email = "test@example.com";
         String requestBody = "{\"email\":\"" + email + "\"}";
 
-        // Mock the service layer to do nothing when the magic link is initiated
         doNothing().when(authenticationService).initiateMagicLinkLogin(email);
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isOk())
-                .andExpect(content().string("Magic link sent. Please check your email."));
+                .andExpect(jsonPath("$.message").value("Magic link sent to your email"))
+                .andExpect(jsonPath("$.email").value(email));
     }
 
     @Test
-    void exchangeOtt_shouldReturnJwt_whenOttIsValid() throws Exception {
+    void verifyToken_shouldReturnVerifyTokenResponse_whenTokenIsValid() throws Exception {
         String ott = "valid-ott";
-        String sessionJwt = "new-session-jwt";
+        String jwt = "new-session-jwt";
+        String userId = "user-id";
+        String email = "test@example.com";
+        String role = "CANDIDATE";
 
-        when(authenticationService.exchangeOneTimeTokenForJwt(ott)).thenReturn(sessionJwt);
+        VerifyTokenResponse.UserDto userDto = new VerifyTokenResponse.UserDto(userId, email, role, "Test", "User", false);
+        VerifyTokenResponse response = new VerifyTokenResponse(jwt, userDto, 3600000L);
 
-        mockMvc.perform(post("/api/auth/exchange-ott")
-                        .contentType(MediaType.TEXT_PLAIN) // OTT is sent as plain text in body
-                        .content(ott))
+        when(authenticationService.exchangeOneTimeTokenForJwt(ott)).thenReturn(response);
+
+        mockMvc.perform(get("/api/auth/verify")
+                        .param("token", ott))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value(sessionJwt));
+                .andExpect(jsonPath("$.token").value(jwt))
+                .andExpect(jsonPath("$.user.id").value(userId))
+                .andExpect(jsonPath("$.user.email").value(email));
+    }
+
+    @Test
+    void checkSession_shouldReturnAuthenticatedResponse_whenTokenIsValid() throws Exception {
+        String userId = "user-id";
+        String email = "test@example.com";
+        String role = "CANDIDATE";
+        String jwt = jwtService.generateToken(userId, email, role, false);
+
+        mockMvc.perform(get("/api/auth/session")
+                        .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated").value(true))
+                .andExpect(jsonPath("$.userId").value(userId))
+                .andExpect(jsonPath("$.email").value(email))
+                .andExpect(jsonPath("$.role").value(role));
+    }
+
+    @Test
+    void checkSession_shouldReturnUnauthenticatedResponse_whenTokenIsMissing() throws Exception {
+        mockMvc.perform(get("/api/auth/session"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated").value(false));
+    }
+
+    @Test
+    void refreshToken_shouldReturnNewToken() throws Exception {
+        String userId = "user-id";
+        String email = "test@example.com";
+        String role = "CANDIDATE";
+        String jwt = jwtService.generateToken(userId, email, role, false);
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isString())
+                .andExpect(jsonPath("$.expiresIn").isNumber());
+    }
+
+    @Test
+    void logout_shouldReturnSuccessMessage() throws Exception {
+        mockMvc.perform(post("/api/auth/logout"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Logged out successfully"));
     }
 }

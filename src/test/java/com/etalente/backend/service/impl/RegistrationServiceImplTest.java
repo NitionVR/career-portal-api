@@ -12,16 +12,16 @@ import com.etalente.backend.repository.OrganizationRepository;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.EmailService;
 import com.etalente.backend.service.TokenStore;
+import com.etalente.backend.service.NovuNotificationService;
 import com.github.javafaker.Faker;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Map;
 import java.util.Optional;
@@ -50,6 +50,9 @@ class RegistrationServiceImplTest {
     @Mock
     private TokenStore tokenStore;
 
+    @Mock
+    private NovuNotificationService novuNotificationService;
+
     private RegistrationServiceImpl registrationService;
 
     private Faker faker;
@@ -63,7 +66,8 @@ class RegistrationServiceImplTest {
                 organizationRepository,
                 emailService,
                 jwtService,
-                Optional.of(tokenStore)
+                Optional.of(tokenStore),
+                novuNotificationService
         );
     }
 

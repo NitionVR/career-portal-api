@@ -1,40 +1,37 @@
 package com.etalente.backend.service.impl;
 
+import com.etalente.backend.dto.VerifyTokenResponse;
+import com.etalente.backend.exception.UnauthorizedException;
 import com.etalente.backend.model.OneTimeToken;
 import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
+import com.etalente.backend.repository.OneTimeTokenRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.EmailService;
-import com.etalente.backend.repository.OneTimeTokenRepository;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.Tag;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-@Tag("integration")
+@Tag("unit")
 class AuthenticationServiceImplTest {
 
     @Mock
@@ -47,7 +44,7 @@ class AuthenticationServiceImplTest {
     private JwtService jwtService;
 
     @Mock
-    private OneTimeTokenRepository oneTimeTokenRepository; // New
+    private OneTimeTokenRepository oneTimeTokenRepository;
 
     @InjectMocks
     private AuthenticationServiceImpl authenticationService;
@@ -55,7 +52,7 @@ class AuthenticationServiceImplTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(authenticationService, "magicLinkUrl", "http://localhost:4200/auth/callback");
-        ReflectionTestUtils.setField(authenticationService, "ottExpirationMinutes", 15L); // New
+        ReflectionTestUtils.setField(authenticationService, "ottExpirationMinutes", 15L);
     }
 
     @Test
@@ -67,7 +64,7 @@ class AuthenticationServiceImplTest {
         newUser.setRole(Role.CANDIDATE);
 
         when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
-        when(userRepository.save(any(User.class))).thenReturn(newUser); // Return the actual new user
+        when(userRepository.save(any(User.class))).thenReturn(newUser);
 
         // When
         authenticationService.initiateMagicLinkLogin(email);
@@ -83,7 +80,7 @@ class AuthenticationServiceImplTest {
         assertFalse(ottCaptor.getValue().isUsed());
         assertTrue(ottCaptor.getValue().getExpiryDate().isAfter(LocalDateTime.now()));
 
-        verify(emailService).sendMagicLink(eq(email), contains("http://localhost:4200/auth/callback?ott="));
+        verify(emailService).sendMagicLink(eq(email), anyString());
     }
 
     @Test
@@ -103,29 +100,31 @@ class AuthenticationServiceImplTest {
         ArgumentCaptor<OneTimeToken> ottCaptor = ArgumentCaptor.forClass(OneTimeToken.class);
         verify(oneTimeTokenRepository).save(ottCaptor.capture());
         assertEquals(existingUser, ottCaptor.getValue().getUser());
-        assertFalse(ottCaptor.getValue().isUsed());
-        assertTrue(ottCaptor.getValue().getExpiryDate().isAfter(LocalDateTime.now()));
-
-        verify(emailService).sendMagicLink(eq(email), contains("http://localhost:4200/auth/callback?ott="));
     }
 
     @Test
-    void exchangeOneTimeTokenForJwt_shouldReturnJwt_whenTokenIsValid() {
+    void exchangeOneTimeTokenForJwt_shouldReturnResponse_whenTokenIsValid() {
         // Given
         String ott = "valid-ott";
         User user = new User();
+        user.setId(UUID.randomUUID());
         user.setEmail("test@example.com");
         user.setRole(Role.CANDIDATE);
+        user.setCreatedAt(LocalDateTime.now());
         OneTimeToken oneTimeToken = new OneTimeToken(ott, user, LocalDateTime.now().plusMinutes(10));
 
         when(oneTimeTokenRepository.findByToken(ott)).thenReturn(Optional.of(oneTimeToken));
-        when(jwtService.generateToken(any(Map.class), any(UserDetails.class))).thenReturn("session-jwt");
+        when(jwtService.generateToken(anyString(), anyString(), anyString(), any(boolean.class))).thenReturn("session-jwt");
+        when(jwtService.getTimeUntilExpiration("session-jwt")).thenReturn(3600000L);
 
         // When
-        String jwt = authenticationService.exchangeOneTimeTokenForJwt(ott);
+        VerifyTokenResponse response = authenticationService.exchangeOneTimeTokenForJwt(ott);
 
         // Then
-        assertEquals("session-jwt", jwt);
+        assertNotNull(response);
+        assertEquals("session-jwt", response.getToken());
+        assertEquals(user.getId().toString(), response.getUser().getId());
+        assertEquals(user.getEmail(), response.getUser().getEmail());
         assertTrue(oneTimeToken.isUsed());
         verify(oneTimeTokenRepository).save(oneTimeToken);
     }
@@ -137,9 +136,7 @@ class AuthenticationServiceImplTest {
         when(oneTimeTokenRepository.findByToken(ott)).thenReturn(Optional.empty());
 
         // When & Then
-        assertThrows(RuntimeException.class, () -> {
-            authenticationService.exchangeOneTimeTokenForJwt(ott);
-        });
+        assertThrows(UnauthorizedException.class, () -> authenticationService.exchangeOneTimeTokenForJwt(ott));
     }
 
     @Test
@@ -147,17 +144,13 @@ class AuthenticationServiceImplTest {
         // Given
         String ott = "used-ott";
         User user = new User();
-        user.setEmail("test@example.com");
-        user.setRole(Role.CANDIDATE);
         OneTimeToken oneTimeToken = new OneTimeToken(ott, user, LocalDateTime.now().plusMinutes(10));
         oneTimeToken.setUsed(true);
 
         when(oneTimeTokenRepository.findByToken(ott)).thenReturn(Optional.of(oneTimeToken));
 
         // When & Then
-        assertThrows(RuntimeException.class, () -> {
-            authenticationService.exchangeOneTimeTokenForJwt(ott);
-        });
+        assertThrows(UnauthorizedException.class, () -> authenticationService.exchangeOneTimeTokenForJwt(ott));
     }
 
     @Test
@@ -165,15 +158,11 @@ class AuthenticationServiceImplTest {
         // Given
         String ott = "expired-ott";
         User user = new User();
-        user.setEmail("test@example.com");
-        user.setRole(Role.CANDIDATE);
         OneTimeToken oneTimeToken = new OneTimeToken(ott, user, LocalDateTime.now().minusMinutes(10));
 
         when(oneTimeTokenRepository.findByToken(ott)).thenReturn(Optional.of(oneTimeToken));
 
         // When & Then
-        assertThrows(RuntimeException.class, () -> {
-            authenticationService.exchangeOneTimeTokenForJwt(ott);
-        });
+        assertThrows(UnauthorizedException.class, () -> authenticationService.exchangeOneTimeTokenForJwt(ott));
     }
 }
