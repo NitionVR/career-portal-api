@@ -20,13 +20,13 @@ public class JobPostPermissionService {
      * Check if user can create job posts (HIRING_MANAGER only)
      */
     public void verifyCanCreate(User user) {
-        // Check organization first for better error message
-        if (user.getOrganization() == null) {
-            throw new UnauthorizedException("User must belong to an organization to create job posts");
-        }
-
         if (user.getRole() != Role.HIRING_MANAGER) {
             throw new UnauthorizedException("Only hiring managers can create job posts");
+        }
+
+        // Check organization after role for better error message
+        if (user.getOrganization() == null) {
+            throw new UnauthorizedException("User must belong to an organization to create job posts");
         }
     }
 

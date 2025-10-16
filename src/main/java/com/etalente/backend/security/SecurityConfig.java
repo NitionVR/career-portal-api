@@ -40,9 +40,18 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/api/register/**").permitAll()
+                        .requestMatchers(
+                                "/api/auth/**",
+                                "/api/register/**",
+                                "/api/invitations/validate/**",
+                                "/api/invitations/accept/**",
+                                "/actuator/**",
+                                "/error",
+                                "/v3/api-docs/**",
+                                "/swagger-ui.html",
+                                "/swagger-ui/**"
+                        ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/job-posts", "/api/job-posts/**").permitAll()
-                        .requestMatchers("/actuator/**", "/error", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

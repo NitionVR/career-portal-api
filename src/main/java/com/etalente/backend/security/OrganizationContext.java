@@ -102,11 +102,6 @@ public class OrganizationContext {
         return user.getRole() == Role.CANDIDATE;
     }
 
-    /**
-     * Get the current authenticated user
-     * @return User entity
-     * @throws UnauthorizedException if no user is authenticated
-     */
     public User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated() || authentication instanceof AnonymousAuthenticationToken) {
@@ -114,27 +109,15 @@ public class OrganizationContext {
         }
 
         Object principal = authentication.getPrincipal();
-        if (!(principal instanceof UserDetails)) {
+        if (!(principal instanceof String)) {
             throw new UnauthorizedException("Invalid authentication principal");
         }
 
-        String email = ((UserDetails) principal).getUsername();
-        return userRepository.findByEmail(email)
+        UUID userId = UUID.fromString((String) principal);
+        return userRepository.findById(userId)
                 .orElseThrow(() -> new UnauthorizedException("User not found"));
     }
-
-    /**
-     * Get the current user's email
-     * @return User email
-     */
-    public String getCurrentUserEmail() {
-        return getCurrentUser().getEmail();
-    }
-
-    /**
-     * Try to get the current user, return null if not authenticated
-     * @return User or null
-     */
+//...
     public User getCurrentUserOrNull() {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -144,12 +127,12 @@ public class OrganizationContext {
             }
 
             Object principal = authentication.getPrincipal();
-            if (!(principal instanceof UserDetails)) {
+            if (!(principal instanceof String)) {
                 return null;
             }
 
-            String email = ((UserDetails) principal).getUsername();
-            return userRepository.findByEmail(email).orElse(null);
+            UUID userId = UUID.fromString((String) principal);
+            return userRepository.findById(userId).orElse(null);
         } catch (Exception e) {
             return null;
         }

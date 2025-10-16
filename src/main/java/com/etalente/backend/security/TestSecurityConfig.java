@@ -38,8 +38,13 @@ public class TestSecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/test/**").permitAll()  // Test helper endpoints
-                        .requestMatchers("/api/auth/**", "/api/register/**").permitAll()
+                        .requestMatchers(
+                                "/api/test/**",
+                                "/api/auth/**",
+                                "/api/register/**",
+                                "/api/invitations/validate/**",
+                                "/api/invitations/accept/**"
+                        ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/job-posts", "/api/job-posts/**").permitAll()
                         .anyRequest().authenticated()
                 )
