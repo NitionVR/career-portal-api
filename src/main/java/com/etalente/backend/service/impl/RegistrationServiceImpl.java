@@ -7,10 +7,11 @@ import com.etalente.backend.exception.BadRequestException;
 import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
 import com.etalente.backend.model.Organization;
-import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.repository.OrganizationRepository;
+import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.EmailService;
+import com.etalente.backend.service.NovuNotificationService; // New import
 import com.etalente.backend.service.RegistrationService;
 import com.etalente.backend.service.TokenStore;
 import io.jsonwebtoken.Claims;
@@ -38,6 +39,7 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final EmailService emailService;
     private final JwtService jwtService;
     private final Optional<TokenStore> tokenStore;
+    private final NovuNotificationService novuNotificationService; // New
 
 
     @Value("${magic-link-url}")
@@ -47,12 +49,14 @@ public class RegistrationServiceImpl implements RegistrationService {
                                   OrganizationRepository organizationRepository,
                                   EmailService emailService,
                                   JwtService jwtService,
-                                  @Autowired(required = false) Optional<TokenStore> tokenStore) {
+                                  @Autowired(required = false) Optional<TokenStore> tokenStore,
+                                  NovuNotificationService novuNotificationService) { // Updated constructor
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
         this.emailService = emailService;
         this.jwtService = jwtService;
         this.tokenStore = tokenStore;
+        this.novuNotificationService = novuNotificationService; // New
     }
 
     @Override
@@ -111,7 +115,10 @@ public class RegistrationServiceImpl implements RegistrationService {
         user.setEmailVerified(true);
         user.setProfileComplete(true);
 
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user);
+        novuNotificationService.sendWelcomeNotification(savedUser); // Trigger welcome notification
+
+        return savedUser;
     }
 
     @Override
@@ -151,7 +158,10 @@ public class RegistrationServiceImpl implements RegistrationService {
 
         savedUser.setOrganization(organization); // Associate user with the new organization
 
-        return userRepository.save(savedUser); // Save user again to update the organization
+        User finalSavedUser = userRepository.save(savedUser); // Save user again to update the organization
+        novuNotificationService.sendWelcomeNotification(finalSavedUser); // Trigger welcome notification
+
+        return finalSavedUser;
     }
 
     private Claims validateRegistrationToken(String token) {
