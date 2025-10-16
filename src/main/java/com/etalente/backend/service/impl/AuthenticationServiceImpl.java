@@ -1,5 +1,8 @@
 package com.etalente.backend.service.impl;
 
+import com.etalente.backend.dto.VerifyTokenResponse;
+import com.etalente.backend.exception.ResourceNotFoundException;
+import com.etalente.backend.exception.UnauthorizedException;
 import com.etalente.backend.model.OneTimeToken;
 import com.etalente.backend.model.User;
 import com.etalente.backend.repository.OneTimeTokenRepository;
@@ -8,13 +11,10 @@ import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.AuthenticationService;
 import com.etalente.backend.service.EmailService;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,89 +24,100 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     private final UserRepository userRepository;
     private final EmailService emailService;
     private final JwtService jwtService;
-    private final OneTimeTokenRepository oneTimeTokenRepository; // New
+    private final OneTimeTokenRepository oneTimeTokenRepository;
 
     @Value("${magic-link-url}")
     private String magicLinkUrl;
 
-    @Value("${ott.expiration-minutes}") // New
+    @Value("${ott.expiration-minutes}")
     private long ottExpirationMinutes;
 
-    public AuthenticationServiceImpl(UserRepository userRepository, EmailService emailService, JwtService jwtService, OneTimeTokenRepository oneTimeTokenRepository) { // Updated constructor
+    public AuthenticationServiceImpl(UserRepository userRepository, EmailService emailService, JwtService jwtService, OneTimeTokenRepository oneTimeTokenRepository) {
         this.userRepository = userRepository;
         this.emailService = emailService;
         this.jwtService = jwtService;
-        this.oneTimeTokenRepository = oneTimeTokenRepository; // New
+        this.oneTimeTokenRepository = oneTimeTokenRepository;
     }
 
     @Override
+    @Transactional
     public void initiateMagicLinkLogin(String email) {
-        // 1. Find the user, determining if they are new or existing
-        Optional<User> userOptional = userRepository.findByEmail(email);
+        User user = userRepository.findByEmail(email)
+                .orElseGet(() -> {
+                    User newUser = new User();
+                    newUser.setEmail(email);
+                    newUser.setRole(com.etalente.backend.model.Role.CANDIDATE);
+                    // Set isNewUser flag for brand new users
+                    // Note: We need a way to determine if a user is truly new or just logging in for the first time
+                    // after registration. A simple check on creation timestamp or a dedicated field might be needed.
+                    // For now, we assume a user found by email is not new.
+                    return userRepository.save(newUser);
+                });
 
-        User user = userOptional.orElseGet(() -> {
-            User newUser = new User();
-            newUser.setEmail(email);
-            newUser.setRole(com.etalente.backend.model.Role.CANDIDATE);
-            return userRepository.save(newUser);
-        });
-
-        // 2. Generate a cryptographically secure random string for the OTT
         String ott = UUID.randomUUID().toString();
         LocalDateTime expiryDate = LocalDateTime.now().plusMinutes(ottExpirationMinutes);
 
-        // 3. Store the OTT in the database
         OneTimeToken oneTimeToken = new OneTimeToken(ott, user, expiryDate);
         oneTimeTokenRepository.save(oneTimeToken);
 
-        // 4. Construct the magic link URL with the OTT
-        String magicLink = magicLinkUrl + "?ott=" + ott;
+        String magicLink = magicLinkUrl + "?token=" + ott; // Changed from ott= to token= to match frontend expectations
 
-        // 5. Send the email
         emailService.sendMagicLink(email, magicLink);
     }
 
     @Override
-    public String exchangeOneTimeTokenForJwt(String ott) {
+    @Transactional
+    public VerifyTokenResponse exchangeOneTimeTokenForJwt(String ott) {
         OneTimeToken oneTimeToken = oneTimeTokenRepository.findByToken(ott)
-                .orElseThrow(() -> new RuntimeException("Invalid or expired one-time token."));
+                .orElseThrow(() -> new UnauthorizedException("Invalid or expired one-time token."));
 
         if (oneTimeToken.isUsed() || oneTimeToken.getExpiryDate().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Invalid or expired one-time token.");
+            throw new UnauthorizedException("Invalid or expired one-time token.");
         }
 
         oneTimeToken.setUsed(true);
         oneTimeTokenRepository.save(oneTimeToken);
 
-        // Fetch the user explicitly within the transaction to ensure it's managed
-        User user = userRepository.findById(oneTimeToken.getUser().getId())
-                .orElseThrow(() -> new RuntimeException("User not found for one-time token."));
+        User user = oneTimeToken.getUser();
+        if (user == null) {
+            throw new ResourceNotFoundException("User not found for the provided token.");
+        }
 
-        UserDetails userDetails = new org.springframework.security.core.userdetails.User(user.getEmail(), "", new ArrayList<>());
+        // Determine if the user is new. A simple heuristic: if createdAt is very recent.
+        // A more robust solution might involve a dedicated 'status' or 'lastLogin' field.
+        boolean isNewUser = user.getCreatedAt() != null &&
+                            java.time.Duration.between(user.getCreatedAt(), LocalDateTime.now()).toMinutes() < 5;
 
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("role", user.getRole().name());
+        String jwt = jwtService.generateToken(
+                user.getId().toString(),
+                user.getEmail(),
+                user.getRole().name(),
+                isNewUser
+        );
 
-        return jwtService.generateToken(claims, userDetails);
+        VerifyTokenResponse.UserDto userDto = new VerifyTokenResponse.UserDto(
+                user.getId().toString(),
+                user.getEmail(),
+                user.getRole().name(),
+                user.getFirstName(),
+                user.getLastName(),
+                isNewUser
+        );
+
+        long expiresIn = jwtService.getTimeUntilExpiration(jwt);
+
+        return new VerifyTokenResponse(jwt, userDto, expiresIn);
     }
 
     @Override
     public String generateJwtForUser(User user) {
-        UserDetails userDetails = new org.springframework.security.core.userdetails.User(
+        // This method might need re-evaluation or could be deprecated in favor of the new flow.
+        // For now, it generates a token without the isNewUser flag.
+        return jwtService.generateToken(
+                user.getId().toString(),
                 user.getEmail(),
-                "",
-                new ArrayList<>()
+                user.getRole().name(),
+                false // Assume not a new user when generating token directly
         );
-
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", user.getId().toString());
-        if (user.getRole() != null) {
-            claims.put("role", user.getRole().name());
-        }
-        if (user.getUsername() != null) {
-            claims.put("username", user.getUsername());
-        }
-
-        return jwtService.generateToken(claims, userDetails);
     }
 }
