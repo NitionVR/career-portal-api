@@ -38,3 +38,5 @@ logging:
 cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:https://dev.etalente.com}
 invitation-link-url: https://dev.etalente.com/auth/accept-invitation
 invitation-expiry-hours: 72
+ott:
+  expiration-minutes: ${OTT_EXPIRATION_MINUTES:15} # Default for dev
