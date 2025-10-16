@@ -68,11 +68,14 @@ public class JwtService {
         return buildToken(extraClaims, userDetails, jwtExpiration);
     }
 
-    public String generateToken(String userId, String email, String role, boolean isNewUser) {
+    public String generateToken(String userId, String email, String role, boolean isNewUser, String username) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("email", email);
         claims.put("role", role);
         claims.put("is_new_user", isNewUser);
+        if (username != null) {
+            claims.put("username", username);
+        }
         return buildToken(claims, userId, jwtExpiration);
     }
 
