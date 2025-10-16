@@ -11,7 +11,7 @@ Feature: Recruiter Invitation
 
   Scenario: A hiring manager invites a recruiter who successfully registers
     # 1. Register a new Hiring Manager
-    Given path '/api/auth/register'
+    Given path '/api/register'
     And request { email: '#(hiringManagerEmail)', role: 'HIRING_MANAGER' }
     When method POST
     Then status 200
@@ -24,7 +24,7 @@ Feature: Recruiter Invitation
     * def hmRegToken = response.token
 
     # 3. Complete Hiring Manager registration
-    Given path '/api/auth/register/hiring-manager'
+    Given path '/api/register/hiring-manager'
     And param token = hmRegToken
     And request
     """

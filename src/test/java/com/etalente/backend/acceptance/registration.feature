@@ -8,7 +8,7 @@ Feature: User Registration
 
   Scenario: Successfully register a new candidate
     # Step 1: Initiate registration
-    Given path '/api/auth/register'
+    Given path '/api/register'
     And request { email: '#(randomEmail)', role: 'CANDIDATE' }
     When method post
     Then status 200
@@ -22,7 +22,7 @@ Feature: User Registration
     And def registrationToken = response.token
 
     # Step 3: Validate the token
-    Given path '/api/auth/validate-registration-token'
+    Given path '/api/register/validate-token'
     And param token = registrationToken
     When method get
     Then status 200
@@ -31,7 +31,7 @@ Feature: User Registration
     And match response.valid == true
 
     # Step 4: Complete the candidate registration
-    Given path '/api/auth/register/candidate'
+    Given path '/api/register/candidate'
     And param token = registrationToken
     And request
     """
@@ -48,8 +48,7 @@ Feature: User Registration
 
     # Step 5: Verify the token is a valid JWT
     * def jwtClaims = read('classpath:com/etalente/backend/acceptance/jwt-claims.js')
-    * print 'JWT Token:', response.token
     * def payload = call jwtClaims response.token
     * match payload.username == randomUsername
     * match payload.role == 'CANDIDATE'
-    * match payload.sub == randomEmail
+    * match payload.email == randomEmail
