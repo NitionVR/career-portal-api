@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class ProfileServiceImpl implements ProfileService {
@@ -22,9 +23,9 @@ public class ProfileServiceImpl implements ProfileService {
 
     @Override
     @Transactional
-    public void updateProfile(String userEmail, Map<String, String> profileData) {
-        User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + userEmail));
+    public void updateProfile(UUID userId, Map<String, String> profileData) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
         user.setFirstName(profileData.get("firstName"));
         user.setLastName(profileData.get("lastName"));

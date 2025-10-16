@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/profile")
@@ -24,8 +25,8 @@ public class ProfileController {
     @PutMapping
     public ResponseEntity<Void> updateProfile(@RequestBody Map<String, String> profileData) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String userEmail = authentication.getName();
-        profileService.updateProfile(userEmail, profileData);
+        UUID userId = UUID.fromString(authentication.getName());
+        profileService.updateProfile(userId, profileData);
         return ResponseEntity.ok().build();
     }
 }
