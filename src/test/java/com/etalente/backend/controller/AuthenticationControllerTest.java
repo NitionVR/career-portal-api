@@ -68,7 +68,7 @@ class AuthenticationControllerTest extends BaseIntegrationTest {
         String userId = "user-id";
         String email = "test@example.com";
         String role = "CANDIDATE";
-        String jwt = jwtService.generateToken(userId, email, role, false);
+        String jwt = jwtService.generateToken(userId, email, role, false, null);
 
         mockMvc.perform(get("/api/auth/session")
                         .header("Authorization", "Bearer " + jwt))
@@ -91,7 +91,7 @@ class AuthenticationControllerTest extends BaseIntegrationTest {
         String userId = "user-id";
         String email = "test@example.com";
         String role = "CANDIDATE";
-        String jwt = jwtService.generateToken(userId, email, role, false);
+        String jwt = jwtService.generateToken(userId, email, role, false, "testuser");
 
         mockMvc.perform(post("/api/auth/refresh")
                         .header("Authorization", "Bearer " + jwt))

@@ -1,6 +1,7 @@
 package com.etalente.backend.controller;
 
 import com.etalente.backend.BaseIntegrationTest;
+import com.etalente.backend.TestHelper;
 import com.etalente.backend.dto.CandidateRegistrationDto;
 import com.etalente.backend.dto.HiringManagerRegistrationDto;
 import com.etalente.backend.dto.RegistrationRequest;
@@ -43,6 +44,9 @@ class RegistrationControllerTest extends BaseIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private TestHelper testHelper;
+
     private Faker faker;
 
     @BeforeEach
@@ -56,7 +60,7 @@ class RegistrationControllerTest extends BaseIntegrationTest {
         RegistrationRequest request = new RegistrationRequest(faker.internet().emailAddress(), Role.CANDIDATE);
 
         // When & Then
-        mockMvc.perform(post("/api/auth/register")
+        mockMvc.perform(post("/api/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -69,11 +73,11 @@ class RegistrationControllerTest extends BaseIntegrationTest {
     @Test
     void initiateRegistration_shouldFail_forExistingUser() throws Exception {
         // Given
-        User existingUser = createUser(Role.CANDIDATE);
+        User existingUser = testHelper.createUser(faker.internet().emailAddress(), Role.CANDIDATE);
         RegistrationRequest request = new RegistrationRequest(existingUser.getEmail(), Role.CANDIDATE);
 
         // When & Then
-        mockMvc.perform(post("/api/auth/register")
+        mockMvc.perform(post("/api/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -87,7 +91,7 @@ class RegistrationControllerTest extends BaseIntegrationTest {
         CandidateRegistrationDto dto = createFakeCandidateDto();
 
         // When & Then
-        mockMvc.perform(post("/api/auth/register/candidate")
+        mockMvc.perform(post("/api/register/candidate")
                         .param("token", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
@@ -112,7 +116,7 @@ class RegistrationControllerTest extends BaseIntegrationTest {
         HiringManagerRegistrationDto dto = createFakeHiringManagerDto();
 
         // When & Then
-        mockMvc.perform(post("/api/auth/register/hiring-manager")
+        mockMvc.perform(post("/api/register/hiring-manager")
                         .param("token", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
@@ -132,7 +136,7 @@ class RegistrationControllerTest extends BaseIntegrationTest {
     @Test
     void registration_shouldFail_withDuplicateUsername() throws Exception {
         // Given
-        User existingUser = createUser(Role.CANDIDATE);
+        User existingUser = testHelper.createUser(faker.internet().emailAddress(), Role.CANDIDATE);
         String token = generateRegistrationToken(faker.internet().emailAddress(), Role.CANDIDATE);
         CandidateRegistrationDto dto = new CandidateRegistrationDto(
                 existingUser.getUsername(), // Duplicate username
@@ -146,7 +150,7 @@ class RegistrationControllerTest extends BaseIntegrationTest {
         );
 
         // When & Then
-        mockMvc.perform(post("/api/auth/register/candidate")
+        mockMvc.perform(post("/api/register/candidate")
                         .param("token", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
@@ -160,7 +164,7 @@ class RegistrationControllerTest extends BaseIntegrationTest {
         CandidateRegistrationDto dto = createFakeCandidateDto();
 
         // When & Then
-        mockMvc.perform(post("/api/auth/register/candidate")
+        mockMvc.perform(post("/api/register/candidate")
                         .param("token", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
@@ -176,7 +180,7 @@ class RegistrationControllerTest extends BaseIntegrationTest {
         String token = generateRegistrationToken(email, role);
 
         // When & Then
-        mockMvc.perform(get("/api/auth/validate-registration-token")
+        mockMvc.perform(get("/api/register/validate-token")
                         .param("token", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(email))
@@ -187,7 +191,7 @@ class RegistrationControllerTest extends BaseIntegrationTest {
     @Test
     void validateRegistrationToken_shouldReturnInvalid_forBadToken() throws Exception {
         // When & Then
-        mockMvc.perform(get("/api/auth/validate-registration-token")
+        mockMvc.perform(get("/api/register/validate-token")
                         .param("token", "invalid-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.valid").value(false))
@@ -195,14 +199,6 @@ class RegistrationControllerTest extends BaseIntegrationTest {
     }
 
     // Helper methods
-    private User createUser(Role role) {
-        User user = new User();
-        user.setEmail(faker.internet().emailAddress());
-        user.setUsername(faker.name().username());
-        user.setRole(role);
-        return userRepository.save(user);
-    }
-
     private CandidateRegistrationDto createFakeCandidateDto() {
         return new CandidateRegistrationDto(
                 faker.name().username(),

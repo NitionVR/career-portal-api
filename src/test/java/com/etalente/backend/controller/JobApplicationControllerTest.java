@@ -1,34 +1,27 @@
 package com.etalente.backend.controller;
 
 import com.etalente.backend.BaseIntegrationTest;
+import com.etalente.backend.TestHelper;
 import com.etalente.backend.dto.WorkflowTriggerRequest;
 import com.etalente.backend.dto.WorkflowTriggerResponse;
 import com.etalente.backend.integration.novu.NovuWorkflowService;
 import com.etalente.backend.model.*;
 import com.etalente.backend.repository.*;
-import com.etalente.backend.security.JwtService;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.concurrent.CompletableFuture;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.hamcrest.Matchers.is;
 import static org.assertj.core.api.Assertions.assertThat;
-
+import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 public class JobApplicationControllerTest extends BaseIntegrationTest {
 
@@ -48,40 +41,7 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     private JobPostRepository jobPostRepository;
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private OrganizationRepository organizationRepository;
-
-    @Autowired
-    private JwtService jwtService;
-
-    private User candidate;
-    private User hiringManager;
-    private String candidateToken;
-
-    @BeforeEach
-    void setUp() {
-        Organization org = new Organization();
-        org.setName("Test Corp");
-        organizationRepository.save(org);
-
-        candidate = new User();
-        candidate.setEmail("candidate@test.com");
-        candidate.setUsername("candidate");
-        candidate.setRole(Role.CANDIDATE);
-        candidate.setOrganization(null);
-        userRepository.save(candidate);
-
-        hiringManager = new User();
-        hiringManager.setEmail("hm@test.com");
-        hiringManager.setUsername("hm");
-        hiringManager.setRole(Role.HIRING_MANAGER);
-        hiringManager.setOrganization(org);
-        userRepository.save(hiringManager);
-
-        candidateToken = jwtService.generateToken(userDetailsService.loadUserByUsername(candidate.getEmail()));
-    }
+    private TestHelper testHelper;
 
     @Test
     void getMyApplications_shouldReturn403_whenNotAuthenticated() throws Exception {
@@ -91,6 +51,7 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
 
     @Test
     void getMyApplications_shouldReturn200_whenAuthenticated() throws Exception {
+        String candidateToken = testHelper.createUserAndGetJwt("candidate@test.com", Role.CANDIDATE);
         mockMvc.perform(get("/api/applications/me")
                         .header("Authorization", "Bearer " + candidateToken))
                 .andExpect(status().isOk());
@@ -99,16 +60,20 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void getMyApplications_shouldReturnFilteredResults_whenSearchQueryIsProvided() throws Exception {
         // Given
+        User candidate = testHelper.createUser("candidate@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.createUserAndGetJwt(candidate.getEmail(), candidate.getRole());
+        User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
+
         JobPost jobPost1 = new JobPost();
         jobPost1.setTitle("Java Developer");
         jobPost1.setCompany("Acme Inc.");
-        jobPost1.setCreatedBy(hiringManager); // Set the createdBy user
+        jobPost1.setCreatedBy(hiringManager);
         jobPostRepository.save(jobPost1);
 
         JobPost jobPost2 = new JobPost();
         jobPost2.setTitle("Python Developer");
         jobPost2.setCompany("Beta Corp.");
-        jobPost2.setCreatedBy(hiringManager); // Set the createdBy user
+        jobPost2.setCreatedBy(hiringManager);
         jobPostRepository.save(jobPost2);
 
         JobApplication application1 = new JobApplication();
@@ -135,6 +100,10 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void getApplicationDetails_shouldReturnApplicationDetailsWithCommunicationHistory() throws Exception {
         // Given
+        User candidate = testHelper.createUser("candidate@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.createUserAndGetJwt(candidate.getEmail(), candidate.getRole());
+        User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
+
         JobPost jobPost1 = new JobPost();
         jobPost1.setTitle("Java Developer");
         jobPost1.setCompany("Acme Inc.");
@@ -161,6 +130,10 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void getMyApplications_shouldReturnSortedResults_whenSortQueryIsProvided() throws Exception {
         // Given
+        User candidate = testHelper.createUser("candidate@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.createUserAndGetJwt(candidate.getEmail(), candidate.getRole());
+        User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
+
         JobPost jobPost1 = new JobPost();
         jobPost1.setTitle("Java Developer");
         jobPost1.setCompany("Acme Inc.");
@@ -196,6 +169,9 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void applyForJob_shouldCreateApplicationAndTriggerNotification() throws Exception {
         // Given
+        String candidateToken = testHelper.createUserAndGetJwt("candidate@test.com", Role.CANDIDATE);
+        User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
+
         JobPost jobPost = new JobPost();
         jobPost.setTitle("Open Job for Application");
         jobPost.setCompany("Novu Test Corp.");
@@ -221,6 +197,9 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void applyForJob_shouldFail_whenJobPostIsNotOpen() throws Exception {
         // Given
+        String candidateToken = testHelper.createUserAndGetJwt("candidate@test.com", Role.CANDIDATE);
+        User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
+
         JobPost jobPost = new JobPost();
         jobPost.setTitle("Closed Job");
         jobPost.setCompany("Closed Corp.");
@@ -239,6 +218,10 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void withdrawApplication_shouldWithdrawSuccessfully_whenStatusIsApplied() throws Exception {
         // Given
+        User candidate = testHelper.createUser("candidate@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.createUserAndGetJwt(candidate.getEmail(), candidate.getRole());
+        User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
+
         JobPost jobPost = new JobPost();
         jobPost.setTitle("Test Job");
         jobPost.setCompany("Test Company");
@@ -263,6 +246,10 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void withdrawApplication_shouldFail_whenStatusIsNotAppliedOrUnderReview() throws Exception {
         // Given
+        User candidate = testHelper.createUser("candidate@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.createUserAndGetJwt(candidate.getEmail(), candidate.getRole());
+        User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
+
         JobPost jobPost = new JobPost();
         jobPost.setTitle("Test Job");
         jobPost.setCompany("Test Company");

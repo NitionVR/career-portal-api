@@ -1,13 +1,13 @@
 package com.etalente.backend.controller;
 
 import com.etalente.backend.BaseIntegrationTest;
+import com.etalente.backend.TestHelper;
 import com.etalente.backend.dto.AcceptInvitationRequest;
 import com.etalente.backend.dto.RecruiterInvitationRequest;
 import com.etalente.backend.model.*;
 import com.etalente.backend.repository.OrganizationRepository;
 import com.etalente.backend.repository.RecruiterInvitationRepository;
 import com.etalente.backend.repository.UserRepository;
-import com.etalente.backend.security.JwtService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,13 +20,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -51,28 +48,15 @@ class InvitationControllerTest extends BaseIntegrationTest {
     private RecruiterInvitationRepository invitationRepository;
 
     @Autowired
-    private JwtService jwtService;
+    private TestHelper testHelper;
 
     private final Faker faker = new Faker();
-    private com.etalente.backend.model.User hiringManager;
-    private String hiringManagerJwt;
-
-    @BeforeEach
-    void setUp() {
-        hiringManager = new com.etalente.backend.model.User();
-        hiringManager.setEmail(faker.internet().emailAddress());
-        hiringManager.setRole(Role.HIRING_MANAGER);
-        hiringManager.setCompanyName(faker.company().name());
-        hiringManager.setIndustry(faker.company().industry());
-        userRepository.save(hiringManager);
-
-        hiringManagerJwt = jwtService.generateToken(new org.springframework.security.core.userdetails.User(hiringManager.getEmail(), "", new ArrayList<>()));
-    }
 
     @Test
     @DisplayName("POST /api/invitations/recruiter should return 201 CREATED when inviter is a hiring manager")
     void inviteRecruiter_shouldReturnCreated_whenUserIsHiringManager() throws Exception {
         // Given
+        String hiringManagerJwt = testHelper.createUserAndGetJwt(faker.internet().emailAddress(), Role.HIRING_MANAGER);
         RecruiterInvitationRequest request = new RecruiterInvitationRequest(faker.internet().emailAddress(), "Welcome!");
 
         // When & Then
@@ -91,6 +75,7 @@ class InvitationControllerTest extends BaseIntegrationTest {
     @DisplayName("POST /api/invitations/bulk-recruiter should return 200 OK when hiring manager invites multiple recruiters")
     void inviteRecruiterBulk_shouldReturnOk_whenHiringManagerInvitesMultipleRecruiters() throws Exception {
         // Given
+        String hiringManagerJwt = testHelper.createUserAndGetJwt(faker.internet().emailAddress(), Role.HIRING_MANAGER);
         List<RecruiterInvitationRequest> requests = List.of(
                 new RecruiterInvitationRequest(faker.internet().emailAddress(), "Welcome to the team!"),
                 new RecruiterInvitationRequest(faker.internet().emailAddress(), "Join us!")
@@ -111,8 +96,9 @@ class InvitationControllerTest extends BaseIntegrationTest {
     @DisplayName("POST /api/invitations/accept/{token} should return 200 OK and create user")
     void acceptInvitation_shouldReturnOkAndJwt_whenTokenIsValid() throws Exception {
         // Given
+        User hiringManager = testHelper.createUser(faker.internet().emailAddress(), Role.HIRING_MANAGER);
         Organization org = new Organization();
-        org.setName(hiringManager.getCompanyName());
+        org.setName(faker.company().name());
         org.setCreatedBy(hiringManager);
         organizationRepository.save(org);
 
@@ -141,7 +127,7 @@ class InvitationControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.token").exists())
                 .andExpect(jsonPath("$.message").value("Invitation accepted successfully"));
 
-        com.etalente.backend.model.User newUser = userRepository.findByEmail(invitation.getEmail()).orElseThrow();
+        User newUser = userRepository.findByEmail(invitation.getEmail()).orElseThrow();
         assertEquals(request.username(), newUser.getUsername());
         assertEquals(Role.RECRUITER, newUser.getRole());
         assertEquals(org.getId(), newUser.getOrganization().getId());
