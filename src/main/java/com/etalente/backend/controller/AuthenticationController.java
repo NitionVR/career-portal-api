@@ -1,10 +1,13 @@
 package com.etalente.backend.controller;
 
-import com.etalente.backend.dto.*;
-import com.etalente.backend.model.User;
+import com.etalente.backend.dto.LoginRequest;
+import com.etalente.backend.dto.SessionResponse;
+import com.etalente.backend.dto.VerifyTokenResponse;
+import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.AuthenticationService;
-import com.etalente.backend.service.RegistrationService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,55 +17,107 @@ import java.util.Map;
 @RequestMapping("/api/auth")
 public class AuthenticationController {
 
+    private static final Logger logger = LoggerFactory.getLogger(AuthenticationController.class);
+
     private final AuthenticationService authenticationService;
-    private final RegistrationService registrationService;
+    private final JwtService jwtService;
 
     public AuthenticationController(AuthenticationService authenticationService,
-                                  RegistrationService registrationService) {
+                                   JwtService jwtService) {
         this.authenticationService = authenticationService;
-        this.registrationService = registrationService;
+        this.jwtService = jwtService;
     }
 
+    /**
+     * Step 1: Request magic link
+     * POST /api/auth/login
+     */
     @PostMapping("/login")
-    public ResponseEntity<String> login(@RequestBody Map<String, String> request) {
-        String email = request.get("email");
-        authenticationService.initiateMagicLinkLogin(email);
-        return ResponseEntity.ok("Magic link sent. Please check your email.");
+    public ResponseEntity<Map<String, String>> login(@Valid @RequestBody LoginRequest request) {
+        logger.info("Magic link requested for email: {}", request.getEmail());
+        authenticationService.initiateMagicLinkLogin(request.getEmail());
+        return ResponseEntity.ok(Map.of(
+            "message", "Magic link sent to your email",
+            "email", request.getEmail()
+        ));
     }
 
-    @PostMapping("/exchange-ott")
-    public ResponseEntity<RegistrationResponse> exchangeOtt(@RequestBody String ott) {
-        String jwt = authenticationService.exchangeOneTimeTokenForJwt(ott);
-        return ResponseEntity.ok(new RegistrationResponse(jwt));
+    /**
+     * Step 2: Verify OTT and return session JWT
+     * GET /api/auth/verify?token=xxx
+     */
+    @GetMapping("/verify")
+    public ResponseEntity<VerifyTokenResponse> verifyToken(@RequestParam String token) {
+        logger.info("Verifying OTT token");
+        VerifyTokenResponse response = authenticationService.exchangeOneTimeTokenForJwt(token);
+        return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/register")
-    public ResponseEntity<Map<String, String>> initiateRegistration(@Valid @RequestBody RegistrationRequest request) {
-        registrationService.initiateRegistration(request);
-        return ResponseEntity.ok(Map.of("message", "Registration link sent to your email"));
+    /**
+     * Check if current session is valid
+     * GET /api/auth/session
+     */
+    @GetMapping("/session")
+    public ResponseEntity<SessionResponse> checkSession(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.ok(SessionResponse.unauthenticated());
+        }
+
+        String token = authHeader.substring(7);
+
+        try {
+            String userId = jwtService.extractUserId(token);
+
+            if (jwtService.isTokenValid(token, userId)) {
+                String email = jwtService.extractEmail(token);
+                String role = jwtService.extractRole(token);
+                Boolean isNewUser = jwtService.extractIsNewUser(token);
+                long expiresIn = jwtService.getTimeUntilExpiration(token);
+
+                return ResponseEntity.ok(SessionResponse.authenticated(
+                    userId, email, role, isNewUser, expiresIn
+                ));
+            }
+        } catch (Exception e) {
+            logger.warn("Session check failed: {}", e.getMessage());
+        }
+
+        return ResponseEntity.ok(SessionResponse.unauthenticated());
     }
 
-    @PostMapping("/register/candidate")
-    public ResponseEntity<Map<String, String>> completeCandiateRegistration(
-            @RequestParam String token,
-            @Valid @RequestBody CandidateRegistrationDto dto) {
-        User user = registrationService.completeRegistration(token, dto);
-        String jwt = authenticationService.generateJwtForUser(user);
-        return ResponseEntity.ok(Map.of("token", jwt));
+    /**
+     * Refresh session (extend expiration)
+     * POST /api/auth/refresh
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<Map<String, Object>> refreshToken(
+            @RequestHeader("Authorization") String authHeader) {
+
+        String token = authHeader.substring(7);
+        String userId = jwtService.extractUserId(token);
+        String email = jwtService.extractEmail(token);
+        String role = jwtService.extractRole(token);
+        Boolean isNewUser = jwtService.extractIsNewUser(token);
+
+        // Generate new token with same claims
+        String newToken = jwtService.generateToken(userId, email, role, isNewUser);
+
+        return ResponseEntity.ok(Map.of(
+            "token", newToken,
+            "expiresIn", jwtService.getTimeUntilExpiration(newToken)
+        ));
     }
 
-    @PostMapping("/register/hiring-manager")
-    public ResponseEntity<Map<String, String>> completeHiringManagerRegistration(
-            @RequestParam String token,
-            @Valid @RequestBody HiringManagerRegistrationDto dto) {
-        User user = registrationService.completeRegistration(token, dto);
-        String jwt = authenticationService.generateJwtForUser(user);
-        return ResponseEntity.ok(Map.of("token", jwt));
-    }
-
-    @GetMapping("/validate-registration-token")
-    public ResponseEntity<Map<String, Object>> validateRegistrationToken(@RequestParam String token) {
-        Map<String, Object> tokenInfo = registrationService.validateToken(token);
-        return ResponseEntity.ok(tokenInfo);
+    /**
+     * Logout (client-side token deletion)
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, String>> logout() {
+        logger.info("User logged out");
+        return ResponseEntity.ok(Map.of(
+            "message", "Logged out successfully"
+        ));
     }
 }
