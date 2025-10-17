@@ -35,7 +35,7 @@ public class AuthenticationController {
     @PostMapping("/login")
     public ResponseEntity<Map<String, String>> login(@Valid @RequestBody LoginRequest request) {
         logger.info("Magic link requested for email: {}", request.getEmail());
-        authenticationService.initiateMagicLinkLogin(request.getEmail());
+        authenticationService.sendMagicLink(request.getEmail());
         return ResponseEntity.ok(Map.of(
             "message", "Magic link sent to your email",
             "email", request.getEmail()

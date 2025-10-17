@@ -41,18 +41,9 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
     @Override
     @Transactional
-    public void initiateMagicLinkLogin(String email) {
+    public void sendMagicLink(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseGet(() -> {
-                    User newUser = new User();
-                    newUser.setEmail(email);
-                    newUser.setRole(com.etalente.backend.model.Role.CANDIDATE);
-                    // Set isNewUser flag for brand new users
-                    // Note: We need a way to determine if a user is truly new or just logging in for the first time
-                    // after registration. A simple check on creation timestamp or a dedicated field might be needed.
-                    // For now, we assume a user found by email is not new.
-                    return userRepository.save(newUser);
-                });
+                .orElseThrow(() -> new ResourceNotFoundException("User with email " + email + " not found."));
 
         String ott = UUID.randomUUID().toString();
         LocalDateTime expiryDate = LocalDateTime.now().plusMinutes(ottExpirationMinutes);
@@ -83,10 +74,13 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             throw new ResourceNotFoundException("User not found for the provided token.");
         }
 
-        // Determine if the user is new. A simple heuristic: if createdAt is very recent.
-        // A more robust solution might involve a dedicated 'status' or 'lastLogin' field.
-        boolean isNewUser = user.getCreatedAt() != null &&
-                            java.time.Duration.between(user.getCreatedAt(), LocalDateTime.now()).toMinutes() < 5;
+        boolean isNewUser = user.isNewUser();
+
+        // If the user is new, update the flag to false after this first login
+        if (isNewUser) {
+            user.setNewUser(false);
+            userRepository.save(user);
+        }
 
         String jwt = jwtService.generateToken(
                 user.getId().toString(),
