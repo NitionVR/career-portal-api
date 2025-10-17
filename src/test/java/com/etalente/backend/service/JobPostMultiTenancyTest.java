@@ -107,6 +107,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
     @Test
     void recruiterCanSeeJobPostsFromSameOrganization() {
+        recruiterA.setOrganization(hiringManagerA.getOrganization());
         authenticateAs(recruiterA.getId().toString());
         Page<JobPostResponse> jobs = jobPostService.listJobPosts(PageRequest.of(0, 10), null, null, null, null, null);
 
@@ -190,7 +191,7 @@ class JobPostMultiTenancyTest extends BaseIntegrationTest {
 
         assertThatThrownBy(() -> jobPostService.createJobPost(request, candidate.getId()))
                 .isInstanceOf(UnauthorizedException.class)
-                .hasMessageContaining("must belong to an organization");
+                .hasMessageContaining("Only hiring managers can create job posts");
     }
 
     @Test
