@@ -91,7 +91,6 @@ class JobPostServiceImplTest {
     void createJobPost_shouldSaveAndReturnJobPost() {
         // Given
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
-        when(organizationContext.requireOrganization()).thenReturn(organization);
         JobPostRequest request = createFakeJobPostRequest();
         when(jobPostRepository.save(any(JobPost.class))).thenReturn(testJobPost);
 
