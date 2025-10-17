@@ -36,6 +36,16 @@ public class TestHelper {
         );
     }
 
+    public String generateJwtForUser(User user) {
+        return jwtService.generateToken(
+                user.getId().toString(),
+                user.getEmail(),
+                user.getRole().name(),
+                false,
+                user.getUsername()
+        );
+    }
+
     public User createUser(String email, Role role) {
         User user = new User();
         user.setEmail(email);
@@ -49,7 +59,7 @@ public class TestHelper {
         // Save the user first to get a persistent instance with an ID
         User savedUser = userRepository.save(user);
 
-        if (role == Role.HIRING_MANAGER) {
+        if (role == Role.HIRING_MANAGER || role == Role.RECRUITER) {
             // Now create the organization with the persistent user
             Organization org = new Organization();
             org.setName(savedUser.getCompanyName());
