@@ -69,7 +69,10 @@ public class JobPostServiceImpl implements JobPostService {
         permissionService.verifyCanCreate(user);
 
         // Ensure user has an organization
-        Organization organization = organizationContext.requireOrganization();
+        Organization organization = user.getOrganization();
+        if (organization == null) {
+            throw new BadRequestException("User must belong to an organization to create a job post.");
+        }
 
         JobPost jobPost = new JobPost();
         mapRequestToJobPost(request, jobPost);
