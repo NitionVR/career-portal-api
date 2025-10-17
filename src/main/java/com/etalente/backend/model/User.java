@@ -47,6 +47,9 @@ public class User {
     private boolean profileComplete;
     private boolean emailVerified;
 
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean isNewUser = true;
+
     @CreatedDate
     private LocalDateTime createdAt;
 
@@ -208,6 +211,14 @@ public class User {
 
     public void setEmailVerified(boolean emailVerified) {
         this.emailVerified = emailVerified;
+    }
+
+    public boolean isNewUser() {
+        return isNewUser;
+    }
+
+    public void setNewUser(boolean newUser) {
+        isNewUser = newUser;
     }
 
     public LocalDateTime getCreatedAt() {
