@@ -19,18 +19,27 @@ The authentication process is entirely passwordless and relies on time-sensitive
 ### 1. Request Magic Link
 
 -   **Endpoint**: `POST /api/auth/login`
--   **Description**: Initiates the login process by sending a magic link to the user's email. If the email does not exist in the database, a new user account is created with the `CANDIDATE` role.
+-   **Description**: Initiates the login process by sending a magic link to a user's email. This endpoint is for **existing users only**. If the email does not exist in the database, a `404 Not Found` error is returned.
 -   **Request Body**:
     ```json
     {
       "email": "user@example.com"
     }
     ```
--   **Response**:
+-   **Success Response (200 OK)**:
     ```json
     {
       "message": "Magic link sent to your email",
       "email": "user@example.com"
+    }
+    ```
+-   **Error Response (404 Not Found)**:
+    ```json
+    {
+        "timestamp": "2025-10-17T19:50:03.759564",
+        "status": 404,
+        "error": "Not Found",
+        "message": "User with email nonexistent@example.com not found."
     }
     ```
 
