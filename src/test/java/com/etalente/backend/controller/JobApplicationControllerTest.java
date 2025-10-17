@@ -51,7 +51,7 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
 
     @Test
     void getMyApplications_shouldReturn200_whenAuthenticated() throws Exception {
-        String candidateToken = testHelper.createUserAndGetJwt("candidate@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.createUserAndGetJwt("candidate-200@test.com", Role.CANDIDATE);
         mockMvc.perform(get("/api/applications/me")
                         .header("Authorization", "Bearer " + candidateToken))
                 .andExpect(status().isOk());
@@ -60,8 +60,8 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void getMyApplications_shouldReturnFilteredResults_whenSearchQueryIsProvided() throws Exception {
         // Given
-        User candidate = testHelper.createUser("candidate@test.com", Role.CANDIDATE);
-        String candidateToken = testHelper.createUserAndGetJwt(candidate.getEmail(), candidate.getRole());
+        User candidate = testHelper.createUser("candidate-search@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.generateJwtForUser(candidate);
         User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
 
         JobPost jobPost1 = new JobPost();
@@ -100,8 +100,8 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void getApplicationDetails_shouldReturnApplicationDetailsWithCommunicationHistory() throws Exception {
         // Given
-        User candidate = testHelper.createUser("candidate@test.com", Role.CANDIDATE);
-        String candidateToken = testHelper.createUserAndGetJwt(candidate.getEmail(), candidate.getRole());
+        User candidate = testHelper.createUser("candidate-details@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.generateJwtForUser(candidate);
         User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
 
         JobPost jobPost1 = new JobPost();
@@ -114,7 +114,7 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
         application.setCandidate(candidate);
         application.setJobPost(jobPost1);
         application.setStatus(JobApplicationStatus.APPLIED);
-        jobApplicationRepository.save(application);
+        application = jobApplicationRepository.save(application);
 
         jobApplicationAuditRepository.save(new JobApplicationAudit(application, JobApplicationStatus.APPLIED, "Application submitted."));
 
@@ -130,8 +130,8 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void getMyApplications_shouldReturnSortedResults_whenSortQueryIsProvided() throws Exception {
         // Given
-        User candidate = testHelper.createUser("candidate@test.com", Role.CANDIDATE);
-        String candidateToken = testHelper.createUserAndGetJwt(candidate.getEmail(), candidate.getRole());
+        User candidate = testHelper.createUser("candidate-sort@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.generateJwtForUser(candidate);
         User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
 
         JobPost jobPost1 = new JobPost();
@@ -161,7 +161,7 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
         // When & Then
         mockMvc.perform(get("/api/applications/me")
                         .header("Authorization", "Bearer " + candidateToken)
-                        .param("sort", "status"))
+                        .param("sort", "status,asc"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()", is(2)))
                 .andExpect(jsonPath("$.content[0].status", is("APPLIED")));
@@ -169,7 +169,7 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void applyForJob_shouldCreateApplicationAndTriggerNotification() throws Exception {
         // Given
-        String candidateToken = testHelper.createUserAndGetJwt("candidate@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.createUserAndGetJwt("candidate-apply-success@test.com", Role.CANDIDATE);
         User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
 
         JobPost jobPost = new JobPost();
@@ -197,7 +197,7 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void applyForJob_shouldFail_whenJobPostIsNotOpen() throws Exception {
         // Given
-        String candidateToken = testHelper.createUserAndGetJwt("candidate@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.createUserAndGetJwt("candidate-apply-fail@test.com", Role.CANDIDATE);
         User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
 
         JobPost jobPost = new JobPost();
@@ -218,8 +218,8 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void withdrawApplication_shouldWithdrawSuccessfully_whenStatusIsApplied() throws Exception {
         // Given
-        User candidate = testHelper.createUser("candidate@test.com", Role.CANDIDATE);
-        String candidateToken = testHelper.createUserAndGetJwt(candidate.getEmail(), candidate.getRole());
+        User candidate = testHelper.createUser("candidate-withdraw-success@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.generateJwtForUser(candidate);
         User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
 
         JobPost jobPost = new JobPost();
@@ -232,7 +232,7 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
         application.setCandidate(candidate);
         application.setJobPost(jobPost);
         application.setStatus(JobApplicationStatus.APPLIED);
-        jobApplicationRepository.save(application);
+        application = jobApplicationRepository.save(application);
 
         // When & Then
         mockMvc.perform(delete("/api/applications/{id}", application.getId())
@@ -246,8 +246,8 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
     @Test
     void withdrawApplication_shouldFail_whenStatusIsNotAppliedOrUnderReview() throws Exception {
         // Given
-        User candidate = testHelper.createUser("candidate@test.com", Role.CANDIDATE);
-        String candidateToken = testHelper.createUserAndGetJwt(candidate.getEmail(), candidate.getRole());
+        User candidate = testHelper.createUser("candidate-withdraw-fail@test.com", Role.CANDIDATE);
+        String candidateToken = testHelper.generateJwtForUser(candidate);
         User hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
 
         JobPost jobPost = new JobPost();
@@ -260,7 +260,7 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
         application.setCandidate(candidate);
         application.setJobPost(jobPost);
         application.setStatus(JobApplicationStatus.HIRED); // Invalid status for withdrawal
-        jobApplicationRepository.save(application);
+        application = jobApplicationRepository.save(application);
 
         // When & Then
         mockMvc.perform(delete("/api/applications/{id}", application.getId())
