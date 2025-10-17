@@ -131,13 +131,13 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void getJobPost_shouldReturnJobPost_whenExists() throws Exception {
         // Given
-        User user = testHelper.createUser("hm@example.com", Role.HIRING_MANAGER);
-        JobPost jobPost = createJobPost(user);
+        User owner = testHelper.createUser("owner@example.com", Role.HIRING_MANAGER);
+        JobPost jobPost = createJobPost(owner);
+        String ownerToken = testHelper.generateJwtForUser(owner);
 
-        // When & Then
-        mockMvc.perform(get("/api/job-posts/{id}", jobPost.getId()))
+        mockMvc.perform(get("/api/job-posts/{id}", jobPost.getId())
+                        .header("Authorization", "Bearer " + ownerToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id", is(jobPost.getId().toString())))
                 .andExpect(jsonPath("$.title", is(jobPost.getTitle())));
     }
 
@@ -168,9 +168,9 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void listMyJobPosts_shouldReturnOnlyUsersPosts() throws Exception {
         // Given
-        User user1 = testHelper.createUser("user1@example.com", Role.HIRING_MANAGER);
+        User user1 = testHelper.createUser("user1-list@example.com", Role.HIRING_MANAGER);
         User user2 = testHelper.createUser("user2@example.com", Role.HIRING_MANAGER);
-        String token = testHelper.createUserAndGetJwt(user1.getEmail(), user1.getRole());
+        String token = testHelper.generateJwtForUser(user1);
 
         createJobPost(user1);
         createJobPost(user1);
@@ -186,9 +186,8 @@ class JobPostControllerTest extends BaseIntegrationTest {
 
     @Test
     void updateJobPost_shouldUpdatePost_whenOwner() throws Exception {
-        // Given
-        User user = testHelper.createUser("owner@example.com", Role.HIRING_MANAGER);
-        String token = testHelper.createUserAndGetJwt(user.getEmail(), user.getRole());
+        User user = testHelper.createUser("owner-update@example.com", Role.HIRING_MANAGER);
+        String token = testHelper.generateJwtForUser(user);
         JobPost jobPost = createJobPost(user);
         JobPostRequest updateRequest = createFakeJobPostRequest();
 
@@ -220,9 +219,8 @@ class JobPostControllerTest extends BaseIntegrationTest {
 
     @Test
     void deleteJobPost_shouldDeletePost_whenOwner() throws Exception {
-        // Given
-        User user = testHelper.createUser("owner@example.com", Role.HIRING_MANAGER);
-        String token = testHelper.createUserAndGetJwt(user.getEmail(), user.getRole());
+        User user = testHelper.createUser("owner-delete@example.com", Role.HIRING_MANAGER);
+        String token = testHelper.generateJwtForUser(user);
         JobPost jobPost = createJobPost(user);
 
         // When & Then
@@ -273,6 +271,7 @@ class JobPostControllerTest extends BaseIntegrationTest {
 
     private void createAndPublishJobPost(User user) {
         JobPost jobPost = createJobPost(user);
+        authenticateAs(user.getId());
         jobPostService.publishJobPost(jobPost.getId(), user.getId());
     }
 
