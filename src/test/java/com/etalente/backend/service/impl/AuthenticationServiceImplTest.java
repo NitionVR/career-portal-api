@@ -49,10 +49,13 @@ class AuthenticationServiceImplTest {
     @InjectMocks
     private AuthenticationServiceImpl authenticationService;
 
+    private ArgumentCaptor<String> stringCaptor;
+
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(authenticationService, "magicLinkUrl", "http://localhost:4200/auth/callback");
         ReflectionTestUtils.setField(authenticationService, "ottExpirationMinutes", 15L);
+        stringCaptor = ArgumentCaptor.forClass(String.class);
     }
 
     @Test
@@ -114,7 +117,7 @@ class AuthenticationServiceImplTest {
         OneTimeToken oneTimeToken = new OneTimeToken(ott, user, LocalDateTime.now().plusMinutes(10));
 
         when(oneTimeTokenRepository.findByToken(ott)).thenReturn(Optional.of(oneTimeToken));
-        when(jwtService.generateToken(anyString(), anyString(), anyString(), any(boolean.class), anyString())).thenReturn("session-jwt");
+        when(jwtService.generateToken(any(), any(), any(), any(boolean.class), any())).thenReturn("session-jwt");
         when(jwtService.getTimeUntilExpiration("session-jwt")).thenReturn(3600000L);
 
         // When
