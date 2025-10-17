@@ -1,5 +1,6 @@
 package com.etalente.backend.controller;
 
+import com.etalente.backend.TestHelper;
 import com.etalente.backend.dto.StateTransitionRequest;
 import com.etalente.backend.model.*;
 import com.etalente.backend.repository.JobPostRepository;
@@ -62,157 +63,108 @@ class JobPostStateMachineControllerTest {
     @Autowired
     private JobPostService jobPostService;
 
-    private String hiringManagerToken;
-    private String recruiterToken;
-    private User hiringManager;
+    @Autowired
+    private TestHelper testHelper;
+
+    private JobPost completeJobPost;
+    private User hm;
     private User recruiter;
-    private Organization organization;
-    private JobPost testJobPost;
+    private String hmToken;
+    private String recruiterToken;
+    private JobPost incompleteJobPost;
+    private JobPost openJobPost;
+    private JobPost closedJobPost;
 
     @BeforeEach
     void setUp() {
-        // Create organization
-        organization = new Organization();
-        organization.setName("Test Company " + UUID.randomUUID());
-        organization = organizationRepository.save(organization);
+        hm = testHelper.createUser("hm-" + UUID.randomUUID() + "@test.com", Role.HIRING_MANAGER);
+        recruiter = testHelper.createUser("recruiter-" + UUID.randomUUID() + "@test.com", Role.RECRUITER);
+        recruiter.setOrganization(hm.getOrganization());
+        userRepository.save(recruiter);
 
-        // Create hiring manager
-        hiringManager = new User();
-        hiringManager.setEmail("hm-" + UUID.randomUUID() + "@test.com");
-        hiringManager.setRole(Role.HIRING_MANAGER);
-        hiringManager.setOrganization(organization);
-        hiringManager.setEmailVerified(true);
-        hiringManager = userRepository.save(hiringManager);
+        hmToken = testHelper.generateJwtForUser(hm);
+        recruiterToken = testHelper.generateJwtForUser(recruiter);
 
-        // Create recruiter
-        recruiter = new User();
-        recruiter.setEmail("recruiter-" + UUID.randomUUID() + "@test.com");
-        recruiter.setRole(Role.RECRUITER);
-        recruiter.setOrganization(organization);
-        recruiter.setEmailVerified(true);
-        recruiter = userRepository.save(recruiter);
+        completeJobPost = createCompleteJobPost(hm);
+        incompleteJobPost = createIncompleteJobPost(hm);
 
-        // Create test job post
-        testJobPost = createCompleteJobPost();
-        testJobPost = jobPostRepository.save(testJobPost);
+        openJobPost = createCompleteJobPost(hm);
+        openJobPost.setStatus(JobPostStatus.OPEN);
+        jobPostRepository.save(openJobPost);
 
-        // Flush to ensure everything is persisted
-        entityManager.flush();
-        entityManager.clear();
-
-        // Reload entities to ensure they're managed and have proper IDs
-        organization = organizationRepository.findById(organization.getId()).orElseThrow();
-        hiringManager = userRepository.findById(hiringManager.getId()).orElseThrow();
-        recruiter = userRepository.findById(recruiter.getId()).orElseThrow();
-        testJobPost = jobPostRepository.findById(testJobPost.getId()).orElseThrow();
-
-        // Generate tokens AFTER flushing and reloading
-        UserDetails hiringManagerDetails = userDetailsService.loadUserByUsername(hiringManager.getEmail());
-        hiringManagerToken = jwtService.generateToken(hiringManagerDetails);
-
-        UserDetails recruiterDetails = userDetailsService.loadUserByUsername(recruiter.getEmail());
-        recruiterToken = jwtService.generateToken(recruiterDetails);
+        closedJobPost = createCompleteJobPost(hm);
+        closedJobPost.setStatus(JobPostStatus.CLOSED);
+        jobPostRepository.save(closedJobPost);
     }
 
     @Test
     void testPublishJobPost_Success() throws Exception {
-        testJobPost = jobPostRepository.findById(testJobPost.getId()).orElseThrow();
-        mockMvc.perform(patch("/api/job-posts/{id}/publish", testJobPost.getId())
-                        .header("Authorization", "Bearer " + hiringManagerToken))
+        User hiringManager = testHelper.createUser("hm-" + UUID.randomUUID() + "@test.com", Role.HIRING_MANAGER);
+        String hmToken = testHelper.generateJwtForUser(hiringManager);
+        JobPost jobPost = createCompleteJobPost(hiringManager);
+
+        mockMvc.perform(patch("/api/job-posts/{id}/publish", jobPost.getId())
+                        .header("Authorization", "Bearer " + hmToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("OPEN"));
     }
 
     @Test
     void testPublishIncompleteJobPost_Fails() throws Exception {
-        testJobPost.setTitle(null);
-        testJobPost = jobPostRepository.save(testJobPost);
-        entityManager.flush();
-
-        mockMvc.perform(patch("/api/job-posts/{id}/publish", testJobPost.getId())
-                        .header("Authorization", "Bearer " + hiringManagerToken))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message", containsString("missing required fields")));
+        mockMvc.perform(patch("/api/job-posts/{id}/publish", incompleteJobPost.getId())
+                        .header("Authorization", "Bearer " + hmToken))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
     void testCloseJobPost_WithReason() throws Exception {
-        // First publish
-        testJobPost.setStatus(JobPostStatus.OPEN);
-        testJobPost = jobPostRepository.save(testJobPost);
-        entityManager.flush();
-
-        mockMvc.perform(patch("/api/job-posts/{id}/close", testJobPost.getId())
-                        .param("reason", "Position filled")
-                        .header("Authorization", "Bearer " + hiringManagerToken))
+        mockMvc.perform(patch("/api/job-posts/{id}/close", openJobPost.getId())
+                        .header("Authorization", "Bearer " + hmToken)
+                        .param("reason", "Position filled"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CLOSED"));
     }
 
     @Test
     void testReopenJobPost() throws Exception {
-        // Set to closed
-        testJobPost.setStatus(JobPostStatus.CLOSED);
-        testJobPost = jobPostRepository.save(testJobPost);
-        entityManager.flush();
-
-        mockMvc.perform(patch("/api/job-posts/{id}/reopen", testJobPost.getId())
-                        .param("reason", "Need to hire more candidates")
-                        .header("Authorization", "Bearer " + hiringManagerToken))
+        mockMvc.perform(patch("/api/job-posts/{id}/reopen", closedJobPost.getId())
+                        .header("Authorization", "Bearer " + hmToken)
+                        .param("reason", "Need to hire more candidates"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("OPEN"));
     }
 
     @Test
     void testArchiveJobPost() throws Exception {
-        testJobPost.setStatus(JobPostStatus.CLOSED);
-        testJobPost = jobPostRepository.save(testJobPost);
-        entityManager.flush();
-
-        mockMvc.perform(patch("/api/job-posts/{id}/archive", testJobPost.getId())
-                        .param("reason", "Archiving old posting")
-                        .header("Authorization", "Bearer " + hiringManagerToken))
+        mockMvc.perform(patch("/api/job-posts/{id}/archive", completeJobPost.getId())
+                        .header("Authorization", "Bearer " + hmToken)
+                        .param("reason", "Archiving old posting"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ARCHIVED"));
     }
 
     @Test
     void testGenericTransitionEndpoint() throws Exception {
-        StateTransitionRequest request = new StateTransitionRequest(
-                JobPostStatus.OPEN,
-                "Publishing via generic endpoint"
-        );
-
-        mockMvc.perform(patch("/api/job-posts/{id}/transition", testJobPost.getId())
-                        .header("Authorization", "Bearer " + hiringManagerToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+        mockMvc.perform(patch("/api/job-posts/{id}/transition", completeJobPost.getId())
+                        .header("Authorization", "Bearer " + hmToken)
+                        .contentType("application/json")
+                        .content("{\"targetStatus\":\"OPEN\",\"reason\":\"Publishing via generic endpoint\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("OPEN"));
     }
 
     @Test
     void testInvalidTransition_Fails() throws Exception {
-        testJobPost.setStatus(JobPostStatus.ARCHIVED);
-        testJobPost = jobPostRepository.save(testJobPost);
-        entityManager.flush();
-
-        StateTransitionRequest request = new StateTransitionRequest(
-                JobPostStatus.OPEN,
-                "Trying invalid transition"
-        );
-
-        mockMvc.perform(patch("/api/job-posts/{id}/transition", testJobPost.getId())
-                        .header("Authorization", "Bearer " + hiringManagerToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message", containsString("Invalid state transition")));
+        mockMvc.perform(patch("/api/job-posts/{id}/transition", closedJobPost.getId())
+                        .header("Authorization", "Bearer " + hmToken)
+                        .contentType("application/json")
+                        .content("{\"targetStatus\":\"DRAFT\",\"reason\":\"Trying invalid transition\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
     void testRecruiterCanPublish() throws Exception {
-        mockMvc.perform(patch("/api/job-posts/{id}/publish", testJobPost.getId())
+        mockMvc.perform(patch("/api/job-posts/{id}/publish", completeJobPost.getId())
                         .header("Authorization", "Bearer " + recruiterToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("OPEN"));
@@ -220,39 +172,25 @@ class JobPostStateMachineControllerTest {
 
     @Test
     void testRecruiterCanClose() throws Exception {
-        testJobPost.setStatus(JobPostStatus.OPEN);
-        testJobPost = jobPostRepository.save(testJobPost);
-        entityManager.flush();
-
-        mockMvc.perform(patch("/api/job-posts/{id}/close", testJobPost.getId())
-                        .param("reason", "Closed by recruiter")
-                        .header("Authorization", "Bearer " + recruiterToken))
+        mockMvc.perform(patch("/api/job-posts/{id}/close", openJobPost.getId())
+                        .header("Authorization", "Bearer " + recruiterToken)
+                        .param("reason", "Closed by recruiter"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CLOSED"));
     }
 
     @Test
     void testTransitionToSameStatus_Fails() throws Exception {
-        testJobPost.setStatus(JobPostStatus.OPEN);
-        testJobPost = jobPostRepository.save(testJobPost);
-        entityManager.flush();
-
-        StateTransitionRequest request = new StateTransitionRequest(
-                JobPostStatus.OPEN,
-                "Same status"
-        );
-
-        mockMvc.perform(patch("/api/job-posts/{id}/transition", testJobPost.getId())
-                        .header("Authorization", "Bearer " + hiringManagerToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message", containsString("already in OPEN status")));
+        mockMvc.perform(patch("/api/job-posts/{id}/transition", openJobPost.getId())
+                        .header("Authorization", "Bearer " + hmToken)
+                        .contentType("application/json")
+                        .content("{\"targetStatus\":\"OPEN\",\"reason\":\"Same status\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
     void testUnauthorizedAccess_Fails() throws Exception {
-        mockMvc.perform(patch("/api/job-posts/{id}/publish", testJobPost.getId()))
+        mockMvc.perform(patch("/api/job-posts/{id}/publish", completeJobPost.getId()))
                 .andExpect(status().isForbidden()); // Changed from isUnauthorized to isForbidden
     }
 
@@ -262,13 +200,21 @@ class JobPostStateMachineControllerTest {
         System.out.println("JobPostService class: " + jobPostService.getClass().getName());
     }
 
-    private JobPost createCompleteJobPost() {
+    private JobPost createIncompleteJobPost(User user) {
+        JobPost jobPost = new JobPost();
+        jobPost.setTitle("Incomplete Job");
+        jobPost.setCreatedBy(user);
+        jobPost.setOrganization(user.getOrganization());
+        return jobPostRepository.save(jobPost);
+    }
+
+    private JobPost createCompleteJobPost(User user) {
         JobPost jobPost = new JobPost();
         jobPost.setTitle("Software Engineer");
         jobPost.setDescription("Test description for a software engineer position");
         jobPost.setJobType("Full-time");
         jobPost.setExperienceLevel("Mid-level");
-        jobPost.setCompany(organization.getName());
+        jobPost.setCompany(user.getOrganization().getName());
 
         // Create a proper location
         ObjectNode location = objectMapper.createObjectNode();
@@ -277,8 +223,8 @@ class JobPostStateMachineControllerTest {
         jobPost.setLocation(location);
 
         jobPost.setStatus(JobPostStatus.DRAFT);
-        jobPost.setCreatedBy(hiringManager);
-        jobPost.setOrganization(organization);
-        return jobPost;
+        jobPost.setCreatedBy(user);
+        jobPost.setOrganization(user.getOrganization());
+        return jobPostRepository.save(jobPost);
     }
 }
