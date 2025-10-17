@@ -1,6 +1,7 @@
 package com.etalente.backend.service.impl;
 
 import com.etalente.backend.dto.VerifyTokenResponse;
+import com.etalente.backend.exception.ResourceNotFoundException;
 import com.etalente.backend.exception.UnauthorizedException;
 import com.etalente.backend.model.OneTimeToken;
 import com.etalente.backend.model.Role;
@@ -27,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -59,50 +61,33 @@ class AuthenticationServiceImplTest {
     }
 
     @Test
-    void initiateMagicLinkLogin_shouldCreateNewUserWithDefaultRole_whenUserNotFound() {
+    void sendMagicLink_shouldThrowException_whenUserNotFound() {
         // Given
-        String email = "newuser@example.com";
-        User newUser = new User();
-        newUser.setEmail(email);
-        newUser.setRole(Role.CANDIDATE);
-
+        String email = "nonexistent@test.com";
         when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
-        when(userRepository.save(any(User.class))).thenReturn(newUser);
 
-        // When
-        authenticationService.initiateMagicLinkLogin(email);
+        // When & Then
+        assertThrows(ResourceNotFoundException.class, () -> {
+            authenticationService.sendMagicLink(email);
+        });
 
-        // Then
-        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(userCaptor.capture());
-        assertEquals(Role.CANDIDATE, userCaptor.getValue().getRole());
-
-        ArgumentCaptor<OneTimeToken> ottCaptor = ArgumentCaptor.forClass(OneTimeToken.class);
-        verify(oneTimeTokenRepository).save(ottCaptor.capture());
-        assertEquals(newUser, ottCaptor.getValue().getUser());
-        assertFalse(ottCaptor.getValue().isUsed());
-        assertTrue(ottCaptor.getValue().getExpiryDate().isAfter(LocalDateTime.now()));
-
-        verify(emailService).sendMagicLink(eq(email), anyString());
+        verify(emailService, never()).sendMagicLink(anyString(), anyString());
     }
 
     @Test
-    void initiateMagicLinkLogin_shouldUseExistingUser_whenUserFound() {
+    void sendMagicLink_shouldUseExistingUser_whenUserFound() {
         // Given
-        String email = "existinguser@example.com";
+        String email = "existing@test.com";
         User existingUser = new User();
         existingUser.setEmail(email);
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(existingUser));
 
         // When
-        authenticationService.initiateMagicLinkLogin(email);
+        authenticationService.sendMagicLink(email);
 
         // Then
-        verify(userRepository).findByEmail(email);
-
-        ArgumentCaptor<OneTimeToken> ottCaptor = ArgumentCaptor.forClass(OneTimeToken.class);
-        verify(oneTimeTokenRepository).save(ottCaptor.capture());
-        assertEquals(existingUser, ottCaptor.getValue().getUser());
+        verify(userRepository, never()).save(any(User.class));
+        verify(emailService).sendMagicLink(eq(email), anyString());
     }
 
     @Test

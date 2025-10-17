@@ -32,7 +32,7 @@ class AuthenticationControllerTest extends BaseIntegrationTest {
         String email = "test@example.com";
         String requestBody = "{\"email\":\"" + email + "\"}";
 
-        doNothing().when(authenticationService).initiateMagicLinkLogin(email);
+        doNothing().when(authenticationService).sendMagicLink(email);
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
