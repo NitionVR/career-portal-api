@@ -7,6 +7,7 @@ import com.etalente.backend.dto.LocationDto;
 import com.etalente.backend.dto.SkillDto;
 import com.etalente.backend.model.*;
 import com.etalente.backend.repository.JobPostRepository;
+import com.etalente.backend.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +35,9 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
 
     @Autowired
     private JobPostRepository jobPostRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @Autowired
     private TestHelper testHelper;
@@ -105,7 +109,7 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCanUpdateJobPost() throws Exception {
-        String hmToken = testHelper.createUserAndGetJwt(jobPost.getCreatedBy().getEmail(), jobPost.getCreatedBy().getRole());
+        String hmToken = testHelper.generateJwtForUser(jobPost.getCreatedBy());
         JobPostRequest request = createJobPostRequest();
 
         mockMvc.perform(put("/api/job-posts/" + jobPost.getId())
@@ -117,7 +121,10 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
 
     @Test
     void recruiterCanUpdateJobPost() throws Exception {
-        String recruiterToken = testHelper.createUserAndGetJwt("recruiter-" + UUID.randomUUID() + "@test.com", Role.RECRUITER);
+        User recruiter = testHelper.createUser("recruiter-" + UUID.randomUUID() + "@test.com", Role.RECRUITER);
+        recruiter.setOrganization(jobPost.getOrganization());
+        userRepository.save(recruiter);
+        String recruiterToken = testHelper.generateJwtForUser(recruiter);
         JobPostRequest request = createJobPostRequest();
 
         mockMvc.perform(put("/api/job-posts/" + jobPost.getId())
@@ -143,7 +150,7 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCanDeleteOwnJobPost() throws Exception {
-        String hmToken = testHelper.createUserAndGetJwt(jobPost.getCreatedBy().getEmail(), jobPost.getCreatedBy().getRole());
+        String hmToken = testHelper.generateJwtForUser(jobPost.getCreatedBy());
         mockMvc.perform(delete("/api/job-posts/" + jobPost.getId())
                         .header("Authorization", "Bearer " + hmToken))
                 .andExpect(status().isNoContent());
@@ -169,7 +176,7 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCanPublishJobPost() throws Exception {
-        String hmToken = testHelper.createUserAndGetJwt(jobPost.getCreatedBy().getEmail(), jobPost.getCreatedBy().getRole());
+        String hmToken = testHelper.generateJwtForUser(jobPost.getCreatedBy());
         mockMvc.perform(patch("/api/job-posts/" + jobPost.getId() + "/publish")
                         .header("Authorization", "Bearer " + hmToken))
                 .andExpect(status().isOk())
@@ -178,7 +185,10 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
 
     @Test
     void recruiterCanPublishJobPost() throws Exception {
-        String recruiterToken = testHelper.createUserAndGetJwt("recruiter-" + UUID.randomUUID() + "@test.com", Role.RECRUITER);
+        User recruiter = testHelper.createUser("recruiter-" + UUID.randomUUID() + "@test.com", Role.RECRUITER);
+        recruiter.setOrganization(jobPost.getOrganization());
+        userRepository.save(recruiter);
+        String recruiterToken = testHelper.generateJwtForUser(recruiter);
         mockMvc.perform(patch("/api/job-posts/" + jobPost.getId() + "/publish")
                         .header("Authorization", "Bearer " + recruiterToken))
                 .andExpect(status().isOk())
@@ -195,7 +205,7 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCanCloseJobPost() throws Exception {
-        String hmToken = testHelper.createUserAndGetJwt(jobPost.getCreatedBy().getEmail(), jobPost.getCreatedBy().getRole());
+        String hmToken = testHelper.generateJwtForUser(jobPost.getCreatedBy());
         // First publish it
         jobPost.setStatus(JobPostStatus.OPEN);
         jobPostRepository.save(jobPost);
@@ -208,7 +218,10 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
 
     @Test
     void recruiterCanCloseJobPost() throws Exception {
-        String recruiterToken = testHelper.createUserAndGetJwt("recruiter-" + UUID.randomUUID() + "@test.com", Role.RECRUITER);
+        User recruiter = testHelper.createUser("recruiter-" + UUID.randomUUID() + "@test.com", Role.RECRUITER);
+        recruiter.setOrganization(jobPost.getOrganization());
+        userRepository.save(recruiter);
+        String recruiterToken = testHelper.generateJwtForUser(recruiter);
         // First publish it
         jobPost.setStatus(JobPostStatus.OPEN);
         jobPostRepository.save(jobPost);
@@ -232,7 +245,7 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
 
     @Test
     void hiringManagerCanUpdateJobPostStatus() throws Exception {
-        String hmToken = testHelper.createUserAndGetJwt(jobPost.getCreatedBy().getEmail(), jobPost.getCreatedBy().getRole());
+        String hmToken = testHelper.generateJwtForUser(jobPost.getCreatedBy());
         mockMvc.perform(patch("/api/job-posts/" + jobPost.getId() + "/status")
                         .header("Authorization", "Bearer " + hmToken)
                         .param("status", "OPEN"))
@@ -242,7 +255,10 @@ class JobPostPermissionControllerTest extends BaseIntegrationTest {
 
     @Test
     void recruiterCanUpdateJobPostStatus() throws Exception {
-        String recruiterToken = testHelper.createUserAndGetJwt("recruiter-" + UUID.randomUUID() + "@test.com", Role.RECRUITER);
+        User recruiter = testHelper.createUser("recruiter-" + UUID.randomUUID() + "@test.com", Role.RECRUITER);
+        recruiter.setOrganization(jobPost.getOrganization());
+        userRepository.save(recruiter);
+        String recruiterToken = testHelper.generateJwtForUser(recruiter);
         mockMvc.perform(patch("/api/job-posts/" + jobPost.getId() + "/status")
                         .header("Authorization", "Bearer " + recruiterToken)
                         .param("status", "OPEN"))
