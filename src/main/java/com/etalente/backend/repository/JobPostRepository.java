@@ -55,4 +55,5 @@ public interface JobPostRepository extends JpaRepository<JobPost, UUID>, JpaSpec
 
     @Deprecated
     Page<JobPost> findByStatus(JobPostStatus status, Pageable pageable);
+    boolean existsByTitleAndCompany(String title, String company);
 }

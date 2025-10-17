@@ -5,6 +5,7 @@ import com.etalente.backend.dto.JobPostResponse;
 import com.etalente.backend.model.Organization;
 import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
+import com.etalente.backend.repository.JobPostRepository;
 import com.etalente.backend.repository.OrganizationRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.service.JobPostService;
@@ -39,6 +40,7 @@ public class JobPostSeeder implements CommandLineRunner {
     private final JobPostService jobPostService;
     private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
+    private final JobPostRepository jobPostRepository;
     private final ObjectMapper objectMapper;
     private final ResourcePatternResolver resourcePatternResolver;
 
@@ -48,10 +50,12 @@ public class JobPostSeeder implements CommandLineRunner {
     public JobPostSeeder(JobPostService jobPostService,
                          UserRepository userRepository,
                          OrganizationRepository organizationRepository,
+                         JobPostRepository jobPostRepository,
                          ObjectMapper objectMapper) {
         this.jobPostService = jobPostService;
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
+        this.jobPostRepository = jobPostRepository;
         this.objectMapper = objectMapper;
         this.resourcePatternResolver = new PathMatchingResourcePatternResolver();
     }
@@ -158,38 +162,18 @@ public class JobPostSeeder implements CommandLineRunner {
                 // Get or create the hiring manager and organization for this company
                 User hiringManager = getOrCreateHiringManagerAndOrganization(request.company());
 
-                // Temporarily set authentication context for JobPostService
-                org.springframework.security.core.userdetails.User principalUser = new org.springframework.security.core.userdetails.User(
-                        hiringManager.getEmail(),
-                        "", // Password not used for this type of authentication
-                        Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + hiringManager.getRole().name()))
-                );
-                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                        principalUser,
-                        null,
-                        principalUser.getAuthorities()
-                );
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                // Check if job post already exists to prevent duplicates
+                boolean exists = jobPostRepository.existsByTitleAndCompany(request.title(), request.company());
 
-                try {
-                    // Check if job post already exists to prevent duplicates
-                    boolean exists = jobPostService.listJobPosts(PageRequest.of(0, 1), null, null, null, null, null) // Fetch one job post to check existence
-                            .stream()
-                            .anyMatch(jp -> jp.title().equals(request.title()) && jp.company().equals(request.company()));
-
-                    if (!exists) {
-                        logger.info("Attempting to create and publish job post: {}", request.title());
-                        JobPostResponse createdJobPost = jobPostService.createJobPost(request, hiringManager.getId());
-                        logger.info("Job post created with ID: {}", createdJobPost.id());
-                        // Publish the job post immediately so it's visible
-                        jobPostService.publishJobPost(createdJobPost.id(), hiringManager.getId());
-                        logger.info("Job post published: {}", createdJobPost.title());
-                    } else {
-                        logger.info("Job post already exists, skipping: {}", request.title());
-                    }
-                } finally {
-                    // Clear authentication context
-                    SecurityContextHolder.clearContext();
+                if (!exists) {
+                    logger.info("Attempting to create and publish job post: {}", request.title());
+                    JobPostResponse createdJobPost = jobPostService.createJobPost(request, hiringManager.getId());
+                    logger.info("Job post created with ID: {}", createdJobPost.id());
+                    // Publish the job post immediately so it's visible
+                    jobPostService.publishJobPost(createdJobPost.id(), hiringManager.getId());
+                    logger.info("Job post published: {}", createdJobPost.title());
+                } else {
+                    logger.info("Job post already exists, skipping: {}", request.title());
                 }
             } catch (Exception e) {
                 logger.error("Failed to seed job post from {}: {}", resource.getFilename(), e.getMessage(), e);
