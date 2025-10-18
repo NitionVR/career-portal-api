@@ -43,7 +43,8 @@ public class TestSecurityConfig {
                                 "/api/auth/**",
                                 "/api/register/**",
                                 "/api/invitations/validate/**",
-                                "/api/invitations/accept/**"
+                                "/api/invitations/accept/**",
+                                "/api/test/**"
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/job-posts", "/api/job-posts/**").permitAll()
                         .anyRequest().authenticated()

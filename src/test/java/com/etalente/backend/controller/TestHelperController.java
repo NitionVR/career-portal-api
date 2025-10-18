@@ -1,6 +1,9 @@
 package com.etalente.backend.controller;
 
-import com.etalente.backend.config.TestTokenStore;
+import com.etalente.backend.model.RecruiterInvitation;
+import com.etalente.backend.model.RegistrationToken;
+import com.etalente.backend.repository.RecruiterInvitationRepository;
+import com.etalente.backend.repository.RegistrationTokenRepository;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,19 +14,30 @@ import java.util.Map;
 @Profile("test")
 public class TestHelperController {
 
-    private final TestTokenStore tokenStore;
+    private final RegistrationTokenRepository registrationTokenRepository;
+    private final RecruiterInvitationRepository recruiterInvitationRepository;
 
-    public TestHelperController(TestTokenStore tokenStore) {
-        this.tokenStore = tokenStore;
+    public TestHelperController(RegistrationTokenRepository registrationTokenRepository, RecruiterInvitationRepository recruiterInvitationRepository) {
+        this.registrationTokenRepository = registrationTokenRepository;
+        this.recruiterInvitationRepository = recruiterInvitationRepository;
     }
 
     @GetMapping("/token")
     public Map<String, String> getToken(@RequestParam String email) {
-        String token = tokenStore.getToken(email);
-        if (token != null) {
-            return Map.of("token", token);
-        }
-        // Return a 404 or a more specific error in a real app
-        throw new RuntimeException("No token found for email: " + email);
+        RegistrationToken token = registrationTokenRepository.findAll().stream()
+                .filter(t -> t.getEmail().equals(email))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("No token found for email: " + email));
+
+        return Map.of("token", token.getToken());
+    }
+
+    @GetMapping("/invitation-token")
+    public Map<String, String> getInvitationToken(@RequestParam String email) {
+        RecruiterInvitation invitation = recruiterInvitationRepository.findByEmail(email).stream()
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("No invitation found for email: " + email));
+
+        return Map.of("token", invitation.getToken());
     }
 }
