@@ -120,8 +120,9 @@ public class JobPostSeeder implements CommandLineRunner {
     }
 
     private User createHiringManager(String companyName, Organization organization) {
-        String email = companyName.toLowerCase().replaceAll("[^a-z0-9]", "") + "@example.com";
-        String username = companyName.toLowerCase().replaceAll("[^a-z0-9]", "") + "hm";
+        String normalizedCompanyName = companyName.toLowerCase().replaceAll("[^a-z0-9]", "");
+        String email = "hm-" + normalizedCompanyName + "@example.com";
+        String username = "hm-" + normalizedCompanyName;
 
         // Check if user with this email already exists
         Optional<User> existingUser = userRepository.findByEmail(email);
