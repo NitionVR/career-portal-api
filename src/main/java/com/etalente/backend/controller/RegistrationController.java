@@ -3,8 +3,7 @@ package com.etalente.backend.controller;
 import com.etalente.backend.dto.CandidateRegistrationDto;
 import com.etalente.backend.dto.HiringManagerRegistrationDto;
 import com.etalente.backend.dto.RegistrationRequest;
-import com.etalente.backend.model.User;
-import com.etalente.backend.service.AuthenticationService;
+import com.etalente.backend.dto.VerifyTokenResponse;
 import com.etalente.backend.service.RegistrationService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -17,40 +16,34 @@ import java.util.Map;
 public class RegistrationController {
 
     private final RegistrationService registrationService;
-    private final AuthenticationService authenticationService;
 
-    public RegistrationController(RegistrationService registrationService, AuthenticationService authenticationService) {
+    public RegistrationController(RegistrationService registrationService) {
         this.registrationService = registrationService;
-        this.authenticationService = authenticationService;
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, String>> initiateRegistration(@Valid @RequestBody RegistrationRequest request) {
+    public ResponseEntity<Void> initiateRegistration(@Valid @RequestBody RegistrationRequest request) {
         registrationService.initiateRegistration(request);
-        return ResponseEntity.ok(Map.of("message", "Registration link sent to your email"));
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/candidate")
-    public ResponseEntity<Map<String, String>> completeCandidateRegistration(
-            @RequestParam String token,
-            @Valid @RequestBody CandidateRegistrationDto dto) {
-        User user = registrationService.completeRegistration(token, dto);
-        String jwt = authenticationService.generateJwtForUser(user);
-        return ResponseEntity.ok(Map.of("token", jwt));
+    public ResponseEntity<VerifyTokenResponse> completeCandidateRegistration(@RequestParam String token,
+                                                                             @Valid @RequestBody CandidateRegistrationDto dto) {
+        VerifyTokenResponse response = registrationService.completeRegistration(token, dto);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/hiring-manager")
-    public ResponseEntity<Map<String, String>> completeHiringManagerRegistration(
-            @RequestParam String token,
-            @Valid @RequestBody HiringManagerRegistrationDto dto) {
-        User user = registrationService.completeRegistration(token, dto);
-        String jwt = authenticationService.generateJwtForUser(user);
-        return ResponseEntity.ok(Map.of("token", jwt));
+    public ResponseEntity<VerifyTokenResponse> completeHiringManagerRegistration(@RequestParam String token,
+                                                                                     @Valid @RequestBody HiringManagerRegistrationDto dto) {
+        VerifyTokenResponse response = registrationService.completeRegistration(token, dto);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/validate-token")
     public ResponseEntity<Map<String, Object>> validateRegistrationToken(@RequestParam String token) {
-        Map<String, Object> tokenInfo = registrationService.validateToken(token);
-        return ResponseEntity.ok(tokenInfo);
+        Map<String, Object> validationResult = registrationService.validateToken(token);
+        return ResponseEntity.ok(validationResult);
     }
 }
