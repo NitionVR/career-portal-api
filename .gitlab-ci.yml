@@ -184,6 +184,7 @@ validate_iac:
     - aws cloudformation validate-template --template-body file://aws/cloudformation/shared/alb.yaml
     - aws cloudformation validate-template --template-body file://aws/cloudformation/shared/ecs-cluster.yaml
     - aws cloudformation validate-template --template-body file://aws/cloudformation/shared/ecr-repositories.yaml
+    - aws cloudformation validate-template --template-body file://aws/cloudformation/shared/s3.yaml
     - aws cloudformation validate-template --template-body file://aws/cloudformation/application/ecs-service.yaml
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
@@ -220,6 +221,8 @@ deploy_infrastructure:
     - aws cloudformation deploy --template-file aws/cloudformation/shared/ecs-cluster.yaml --stack-name ${ProjectName}-EcsClusterStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
     - echo "Deploying Shared ECR Repositories CloudFormation stack..."
     - aws cloudformation deploy --template-file aws/cloudformation/shared/ecr-repositories.yaml --stack-name ${ProjectName}-EcrRepositoriesStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
+    - echo "Deploying Shared S3 Uploads CloudFormation stack..."
+    - aws cloudformation deploy --template-file aws/cloudformation/shared/s3.yaml --stack-name ${ProjectName}-S3UploadsStack --capabilities CAPABILITY_IAM --parameter-overrides ProjectName=$ProjectName --region $AWS_REGION
     
     - echo "--- Listing Available CloudFormation Exports ---"
     - aws cloudformation list-exports
