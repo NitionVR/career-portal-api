@@ -2,6 +2,8 @@ package com.etalente.backend.controller;
 
 import com.etalente.backend.BaseIntegrationTest;
 import com.etalente.backend.dto.VerifyTokenResponse;
+import com.etalente.backend.model.Role;
+import com.etalente.backend.model.User;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.AuthenticationService;
 import org.junit.jupiter.api.Test;
@@ -10,11 +12,15 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.UUID;
+
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class AuthenticationControllerTest extends BaseIntegrationTest {
 
@@ -65,18 +71,28 @@ class AuthenticationControllerTest extends BaseIntegrationTest {
 
     @Test
     void checkSession_shouldReturnAuthenticatedResponse_whenTokenIsValid() throws Exception {
-        String userId = "user-id";
+        String userId = UUID.randomUUID().toString();
         String email = "test@example.com";
         String role = "CANDIDATE";
         String jwt = jwtService.generateToken(userId, email, role, false, null);
+
+        User mockUser = new User();
+        mockUser.setId(UUID.fromString(userId));
+        mockUser.setEmail(email);
+        mockUser.setRole(Role.valueOf(role));
+        mockUser.setFirstName("Test");
+        mockUser.setLastName("User");
+        mockUser.setNewUser(false);
+
+        when(authenticationService.getUserById(any(UUID.class))).thenReturn(mockUser);
 
         mockMvc.perform(get("/api/auth/session")
                         .header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.authenticated").value(true))
-                .andExpect(jsonPath("$.userId").value(userId))
-                .andExpect(jsonPath("$.email").value(email))
-                .andExpect(jsonPath("$.role").value(role));
+                .andExpect(jsonPath("$.user.id").value(userId))
+                .andExpect(jsonPath("$.user.email").value(email))
+                .andExpect(jsonPath("$.user.role").value(role));
     }
 
     @Test
@@ -88,7 +104,7 @@ class AuthenticationControllerTest extends BaseIntegrationTest {
 
     @Test
     void refreshToken_shouldReturnNewToken() throws Exception {
-        String userId = "user-id";
+        String userId = UUID.randomUUID().toString();
         String email = "test@example.com";
         String role = "CANDIDATE";
         String jwt = jwtService.generateToken(userId, email, role, false, "testuser");
