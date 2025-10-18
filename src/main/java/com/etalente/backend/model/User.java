@@ -37,6 +37,8 @@ public class User {
     private String disability;
     private String alternateContactNumber;
     private String summary;
+
+    @Column(name = "profile_image_url")
     private String profileImageUrl;
 
     // Hiring Manager-specific fields
