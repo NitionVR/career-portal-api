@@ -1,7 +1,9 @@
 package com.etalente.backend.controller;
 
 import com.etalente.backend.dto.CandidateRegistrationDto;
+import com.etalente.backend.dto.CandidateRegistrationRequest;
 import com.etalente.backend.dto.HiringManagerRegistrationDto;
+import com.etalente.backend.dto.HiringManagerRegistrationRequest;
 import com.etalente.backend.dto.RegistrationRequest;
 import com.etalente.backend.dto.VerifyTokenResponse;
 import com.etalente.backend.service.RegistrationService;
@@ -29,15 +31,15 @@ public class RegistrationController {
 
     @PostMapping("/candidate")
     public ResponseEntity<VerifyTokenResponse> completeCandidateRegistration(@RequestParam String token,
-                                                                             @Valid @RequestBody CandidateRegistrationDto dto) {
-        VerifyTokenResponse response = registrationService.completeRegistration(token, dto);
+                                                                             @Valid @RequestBody CandidateRegistrationRequest request) {
+        VerifyTokenResponse response = registrationService.completeRegistration(token, request.candidate());
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/hiring-manager")
     public ResponseEntity<VerifyTokenResponse> completeHiringManagerRegistration(@RequestParam String token,
-                                                                                     @Valid @RequestBody HiringManagerRegistrationDto dto) {
-        VerifyTokenResponse response = registrationService.completeRegistration(token, dto);
+                                                                                     @Valid @RequestBody HiringManagerRegistrationRequest request) {
+        VerifyTokenResponse response = registrationService.completeRegistration(token, request.hiringManager());
         return ResponseEntity.ok(response);
     }
 

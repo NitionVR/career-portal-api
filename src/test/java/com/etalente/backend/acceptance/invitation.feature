@@ -29,11 +29,13 @@ Feature: Recruiter Invitation
     And request
     """
     {
-      "username": "hm_user_#(random.nextInt(100000))",
-      "companyName": "Space Corp",
-      "industry": "Aerospace",
-      "contactPerson": "Elon Tusk",
-      "contactNumber": "+1234567890"
+      "hiringManager": {
+        "username": "hm_user_#(random.nextInt(100000))",
+        "companyName": "Space Corp",
+        "industry": "Aerospace",
+        "contactPerson": "Elon Tusk",
+        "contactNumber": "+1234567890"
+      }
     }
     """
     When method POST

@@ -3,7 +3,9 @@ package com.etalente.backend.controller;
 import com.etalente.backend.BaseIntegrationTest;
 import com.etalente.backend.TestHelper;
 import com.etalente.backend.dto.CandidateRegistrationDto;
+import com.etalente.backend.dto.CandidateRegistrationRequest;
 import com.etalente.backend.dto.HiringManagerRegistrationDto;
+import com.etalente.backend.dto.HiringManagerRegistrationRequest;
 import com.etalente.backend.dto.RegistrationRequest;
 import com.etalente.backend.model.RegistrationToken;
 import com.etalente.backend.model.Role;
@@ -58,10 +60,11 @@ class RegistrationControllerTest extends BaseIntegrationTest {
         registrationTokenRepository.save(registrationToken);
 
         CandidateRegistrationDto dto = new CandidateRegistrationDto("candidateuser", "Candidate", "User", null, null, null, "+1234567890", null);
+        CandidateRegistrationRequest request = new CandidateRegistrationRequest(dto);
 
         mockMvc.perform(post("/api/register/candidate").param("token", token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(dto)))
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").exists())
                 .andExpect(jsonPath("$.user.email").value(email))
@@ -78,10 +81,11 @@ class RegistrationControllerTest extends BaseIntegrationTest {
         registrationTokenRepository.save(registrationToken);
 
         HiringManagerRegistrationDto dto = new HiringManagerRegistrationDto("hmuser", "Test Company", "Tech", "HM Contact", "+1234567890");
+        HiringManagerRegistrationRequest request = new HiringManagerRegistrationRequest(dto);
 
         mockMvc.perform(post("/api/register/hiring-manager").param("token", token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(dto)))
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").exists())
                 .andExpect(jsonPath("$.user.email").value(email))

@@ -36,10 +36,12 @@ Feature: User Registration
     And request
     """
     {
-      "username": "#(randomUsername)",
-      "firstName": "Test",
-      "lastName": "User",
-      "contactNumber": "+1234567890"
+      "candidate": {
+        "username": "#(randomUsername)",
+        "firstName": "Test",
+        "lastName": "User",
+        "contactNumber": "+1234567890"
+      }
     }
     """
     When method post
