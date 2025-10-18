@@ -1,5 +1,7 @@
 package com.etalente.backend.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 public class VerifyTokenResponse {
 
     private String token;
@@ -40,6 +42,7 @@ public class VerifyTokenResponse {
         public String getLastName() { return lastName; }
         public void setLastName(String lastName) { this.lastName = lastName; }
 
+        @JsonProperty("isNewUser")
         public boolean isNewUser() { return isNewUser; }
         public void setNewUser(boolean newUser) { isNewUser = newUser; }
     }
