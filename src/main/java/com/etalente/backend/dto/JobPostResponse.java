@@ -22,5 +22,8 @@ public record JobPostResponse(
         JobPostStatus status,
         String createdByEmail,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        int applicantsCount,
+        int newApplicantsCount,
+        String companyLogoUrl
 ) {}

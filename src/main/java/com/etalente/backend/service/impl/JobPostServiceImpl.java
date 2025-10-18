@@ -14,6 +14,7 @@ import com.etalente.backend.model.Organization;
 import com.etalente.backend.model.Role;
 import com.etalente.backend.model.StateTransition;
 import com.etalente.backend.model.User;
+import com.etalente.backend.repository.JobApplicationRepository;
 import com.etalente.backend.repository.JobPostRepository;
 import com.etalente.backend.repository.JobPostSpecification;
 import com.etalente.backend.repository.UserRepository;
@@ -41,6 +42,7 @@ public class JobPostServiceImpl implements JobPostService {
 
     private final JobPostRepository jobPostRepository;
     private final UserRepository userRepository;
+    private final JobApplicationRepository jobApplicationRepository;
     private final ObjectMapper objectMapper;
     private final OrganizationContext organizationContext;
     private final JobPostPermissionService permissionService;
@@ -48,12 +50,14 @@ public class JobPostServiceImpl implements JobPostService {
 
     public JobPostServiceImpl(JobPostRepository jobPostRepository,
                               UserRepository userRepository,
+                              JobApplicationRepository jobApplicationRepository,
                               ObjectMapper objectMapper,
                               OrganizationContext organizationContext,
                               JobPostPermissionService permissionService,
                               JobPostStateMachine stateMachine) {
         this.jobPostRepository = jobPostRepository;
         this.userRepository = userRepository;
+        this.jobApplicationRepository = jobApplicationRepository;
         this.objectMapper = objectMapper;
         this.organizationContext = organizationContext;
         this.permissionService = permissionService;
@@ -82,7 +86,7 @@ public class JobPostServiceImpl implements JobPostService {
         jobPost.setDatePosted(LocalDate.now().toString());
 
         JobPost saved = jobPostRepository.save(jobPost);
-        return mapToResponse(saved);
+        return mapToResponse(saved, 0, 0);
     }
 
     @Override
@@ -92,7 +96,7 @@ public class JobPostServiceImpl implements JobPostService {
 
         // If the job is public, anyone can view it (including unauthenticated users)
         if (jobPost.getStatus() == JobPostStatus.OPEN) {
-            return mapToResponse(jobPost);
+            return mapToResponseWithCounts(jobPost);
         }
 
         // For non-public posts, authentication is required
@@ -105,7 +109,7 @@ public class JobPostServiceImpl implements JobPostService {
             throw new UnauthorizedException("You don't have access to this job post");
         }
 
-        return mapToResponse(jobPost);
+        return mapToResponseWithCounts(jobPost);
     }
 
     @Override
@@ -121,7 +125,7 @@ public class JobPostServiceImpl implements JobPostService {
         if (currentUser == null || currentUser.getRole() == Role.CANDIDATE) {
             return jobPostRepository.findAll(JobPostSpecification.withFilters(search, skillSearch, experienceLevels, jobTypes, workTypes)
                             .and(JobPostSpecification.isPublic()), pageable)
-                    .map(this::mapToResponse);
+                    .map(this::mapToResponseWithCounts);
         }
 
         // For hiring managers and recruiters with organization, show all org jobs, applying filters if present
@@ -130,13 +134,13 @@ public class JobPostServiceImpl implements JobPostService {
             Specification<JobPost> filterSpec = JobPostSpecification.withFilters(search, skillSearch, experienceLevels, jobTypes, workTypes);
             Specification<JobPost> combinedSpec = orgSpec.and(filterSpec);
             return jobPostRepository.findAll(combinedSpec, pageable)
-                    .map(this::mapToResponse);
+                    .map(this::mapToResponseWithCounts);
         }
 
         // Fallback: show public jobs (should not be reached for authenticated users with organization)
         return jobPostRepository.findAll(JobPostSpecification.withFilters(search, skillSearch, experienceLevels, jobTypes, workTypes)
                         .and(JobPostSpecification.isPublic()), pageable)
-                .map(this::mapToResponse);
+                .map(this::mapToResponseWithCounts);
     }
 
     @Override
@@ -153,7 +157,7 @@ public class JobPostServiceImpl implements JobPostService {
         }
 
         return jobPostRepository.findByCreatedByIdAndOrganization(userId, organization, pageable)
-                .map(this::mapToResponse);
+                .map(this::mapToResponseWithCounts);
     }
 
     @Override
@@ -171,7 +175,7 @@ public class JobPostServiceImpl implements JobPostService {
 
         mapRequestToJobPost(request, jobPost);
         JobPost updated = jobPostRepository.save(jobPost);
-        return mapToResponse(updated);
+        return mapToResponseWithCounts(updated);
     }
 
     @Override
@@ -213,7 +217,7 @@ public class JobPostServiceImpl implements JobPostService {
                 request.reason()
         );
 
-        return mapToResponse(updated);
+        return mapToResponseWithCounts(updated);
     }
 
     @Override
@@ -355,7 +359,9 @@ public class JobPostServiceImpl implements JobPostService {
         }
     }
 
-    private JobPostResponse mapToResponse(JobPost jobPost) {
+    private JobPostResponse mapToResponse(JobPost jobPost, int applicantsCount, int newApplicantsCount) {
+        String companyLogoUrl = jobPost.getOrganization() != null ? jobPost.getOrganization().getCompanyLogoUrl() : null;
+
         return new JobPostResponse(
                 jobPost.getId(),
                 jobPost.getTitle(),
@@ -373,7 +379,16 @@ public class JobPostServiceImpl implements JobPostService {
                 jobPost.getStatus(),
                 jobPost.getCreatedBy().getEmail(),
                 jobPost.getCreatedAt(),
-                jobPost.getUpdatedAt()
+                jobPost.getUpdatedAt(),
+                applicantsCount,
+                newApplicantsCount,
+                companyLogoUrl
         );
+    }
+
+    private JobPostResponse mapToResponseWithCounts(JobPost jobPost) {
+        int applicantsCount = jobApplicationRepository.countByJobPostId(jobPost.getId());
+        int newApplicantsCount = jobApplicationRepository.countByJobPostIdAndViewedByEmployerFalse(jobPost.getId());
+        return mapToResponse(jobPost, applicantsCount, newApplicantsCount);
     }
 }
