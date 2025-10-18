@@ -52,12 +52,16 @@ dependencies {
 	testImplementation('com.github.javafaker:javafaker:1.0.2') {
 		exclude group: 'org.yaml', module: 'snakeyaml'
 	}
-	testImplementation 'org.yaml:snakeyaml:2.2'
+    implementation 'org.yaml:snakeyaml:2.2'
+
+    // AWS SDK for S3
+    implementation 'software.amazon.awssdk:s3:2.20.26'
+    implementation 'software.amazon.awssdk:sts:2.20.26'
 }
 
 sourceSets {
-	test {
-		resources {
+    test {
+        resources {
 			srcDir 'src/test/java'
 			exclude '**/*.java'
 		}
