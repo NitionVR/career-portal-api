@@ -3,6 +3,7 @@ package com.etalente.backend.service.impl;
 import com.etalente.backend.exception.ResourceNotFoundException;
 import com.etalente.backend.model.User;
 import com.etalente.backend.repository.UserRepository;
+import com.etalente.backend.security.JwtService;
 import com.github.javafaker.Faker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -20,6 +21,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import com.etalente.backend.service.impl.ProfileServiceImpl;
 
 @ExtendWith(MockitoExtension.class)
 @Tag("unit")
@@ -27,6 +29,9 @@ class ProfileServiceImplTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private JwtService jwtService;
 
     @InjectMocks
     private ProfileServiceImpl profileService;
