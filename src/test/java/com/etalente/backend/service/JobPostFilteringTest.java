@@ -1,6 +1,7 @@
 package com.etalente.backend.service;
 
 import com.etalente.backend.BaseIntegrationTest;
+import com.etalente.backend.TestHelper;
 import com.etalente.backend.dto.JobPostRequest;
 import com.etalente.backend.dto.JobPostResponse;
 import com.etalente.backend.dto.LocationDto;
@@ -15,6 +16,7 @@ import com.etalente.backend.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.javafaker.Faker;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +53,12 @@ public class JobPostFilteringTest extends BaseIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private EntityManager entityManager;
+
+    @Autowired
+    private TestHelper testHelper;
+
     private Faker faker;
 
     private User hmUser1;
@@ -68,16 +76,18 @@ public class JobPostFilteringTest extends BaseIntegrationTest {
     void setUp() {
         faker = new Faker(); // Initialize Faker here
         SecurityContextHolder.clearContext(); // Clear context before each test
-        // Clear database before each test
-        jobPostRepository.deleteAll();
-        userRepository.deleteAll();
-        organizationRepository.deleteAll();
+        testHelper.cleanupDatabase();
 
-        org1 = createOrganization("Tech Solutions Inc.");
-        org2 = createOrganization("Finance Innovations Ltd.");
+        hmUser1 = createUser("hm1@tech.com", "hm1", Role.HIRING_MANAGER, null);
+        org1 = createOrganization("Tech Solutions Inc.", hmUser1);
+        hmUser1.setOrganization(org1);
+        userRepository.save(hmUser1);
 
-        hmUser1 = createUser("hm1@tech.com", "hm1", Role.HIRING_MANAGER, org1);
-        hmUser2 = createUser("hm2@finance.com", "hm2", Role.HIRING_MANAGER, org2);
+        hmUser2 = createUser("hm2@finance.com", "hm2", Role.HIRING_MANAGER, null);
+        org2 = createOrganization("Finance Innovations Ltd.", hmUser2);
+        hmUser2.setOrganization(org2);
+        userRepository.save(hmUser2);
+
         candidateUser = createUser("candidate@test.com", "candidate", Role.CANDIDATE, null);
 
         // Job Posts for Org1
@@ -132,10 +142,11 @@ public class JobPostFilteringTest extends BaseIntegrationTest {
     }
 
     // --- Helper Methods ---
-    private Organization createOrganization(String name) {
+    private Organization createOrganization(String name, User createdBy) {
         Organization org = new Organization();
         org.setName(name);
         org.setIndustry("IT");
+        org.setCreatedBy(createdBy);
         return organizationRepository.save(org);
     }
 

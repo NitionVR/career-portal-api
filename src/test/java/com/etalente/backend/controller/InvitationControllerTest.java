@@ -10,6 +10,7 @@ import com.etalente.backend.repository.RecruiterInvitationRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -50,13 +51,23 @@ class InvitationControllerTest extends BaseIntegrationTest {
     @Autowired
     private TestHelper testHelper;
 
+    @Autowired
+    private EntityManager entityManager;
+
     private final Faker faker = new Faker();
+
+    @BeforeEach
+    void setUp() {
+        testHelper.cleanupDatabase();
+    }
 
     @Test
     @DisplayName("POST /api/invitations/recruiter should return 201 CREATED when inviter is a hiring manager")
     void inviteRecruiter_shouldReturnCreated_whenUserIsHiringManager() throws Exception {
         // Given
-        String hiringManagerJwt = testHelper.createUserAndGetJwt(faker.internet().emailAddress(), Role.HIRING_MANAGER);
+        User hiringManager = testHelper.createUser(faker.internet().emailAddress(), Role.HIRING_MANAGER);
+
+        String hiringManagerJwt = testHelper.generateJwtForUser(hiringManager);
         RecruiterInvitationRequest request = new RecruiterInvitationRequest(faker.internet().emailAddress(), "Welcome!");
 
         // When & Then
@@ -75,7 +86,9 @@ class InvitationControllerTest extends BaseIntegrationTest {
     @DisplayName("POST /api/invitations/bulk-recruiter should return 200 OK when hiring manager invites multiple recruiters")
     void inviteRecruiterBulk_shouldReturnOk_whenHiringManagerInvitesMultipleRecruiters() throws Exception {
         // Given
-        String hiringManagerJwt = testHelper.createUserAndGetJwt(faker.internet().emailAddress(), Role.HIRING_MANAGER);
+        User hiringManager = testHelper.createUser(faker.internet().emailAddress(), Role.HIRING_MANAGER);
+
+        String hiringManagerJwt = testHelper.generateJwtForUser(hiringManager);
         List<RecruiterInvitationRequest> requests = List.of(
                 new RecruiterInvitationRequest(faker.internet().emailAddress(), "Welcome to the team!"),
                 new RecruiterInvitationRequest(faker.internet().emailAddress(), "Join us!")
@@ -97,10 +110,7 @@ class InvitationControllerTest extends BaseIntegrationTest {
     void acceptInvitation_shouldReturnOkAndJwt_whenTokenIsValid() throws Exception {
         // Given
         User hiringManager = testHelper.createUser(faker.internet().emailAddress(), Role.HIRING_MANAGER);
-        Organization org = new Organization();
-        org.setName(faker.company().name());
-        org.setCreatedBy(hiringManager);
-        organizationRepository.save(org);
+        Organization org = hiringManager.getOrganization();
 
         RecruiterInvitation invitation = new RecruiterInvitation();
         invitation.setToken(UUID.randomUUID().toString());

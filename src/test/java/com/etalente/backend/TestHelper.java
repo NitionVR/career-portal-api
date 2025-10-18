@@ -7,7 +7,9 @@ import com.etalente.backend.repository.OrganizationRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
 import com.github.javafaker.Faker;
+import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
@@ -17,12 +19,35 @@ public class TestHelper {
     private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
     private final JwtService jwtService;
+    private final EntityManager entityManager;
     private final Faker faker = new Faker();
 
-    public TestHelper(UserRepository userRepository, OrganizationRepository organizationRepository, JwtService jwtService) {
+    public TestHelper(UserRepository userRepository,
+                     OrganizationRepository organizationRepository,
+                     JwtService jwtService,
+                     EntityManager entityManager) {
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
         this.jwtService = jwtService;
+        this.entityManager = entityManager;
+    }
+
+    @Transactional
+    public void cleanupDatabase() {
+        entityManager.clear();
+
+        // Use native queries to delete with proper cascade handling
+        entityManager.createNativeQuery("DELETE FROM recruiter_invitations").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM job_post_state_audit").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM job_applications").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM job_posts").executeUpdate();
+        entityManager.createNativeQuery("UPDATE organizations SET created_by_id = NULL").executeUpdate();
+        entityManager.createNativeQuery("UPDATE users SET organization_id = NULL, invited_by_id = NULL").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM organizations").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM users").executeUpdate();
+
+        entityManager.flush();
+        entityManager.clear();
     }
 
     public String createUserAndGetJwt(String email, Role role) {
