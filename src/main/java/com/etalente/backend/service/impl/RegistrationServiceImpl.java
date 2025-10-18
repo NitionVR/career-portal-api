@@ -3,30 +3,28 @@ package com.etalente.backend.service.impl;
 import com.etalente.backend.dto.CandidateRegistrationDto;
 import com.etalente.backend.dto.HiringManagerRegistrationDto;
 import com.etalente.backend.dto.RegistrationRequest;
+import com.etalente.backend.dto.VerifyTokenResponse;
 import com.etalente.backend.exception.BadRequestException;
+import com.etalente.backend.model.RegistrationToken;
 import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
 import com.etalente.backend.model.Organization;
 import com.etalente.backend.repository.OrganizationRepository;
+import com.etalente.backend.repository.RegistrationTokenRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.EmailService;
-import com.etalente.backend.service.NovuNotificationService; // New import
+import com.etalente.backend.service.NovuNotificationService;
 import com.etalente.backend.service.RegistrationService;
-import com.etalente.backend.service.TokenStore;
-import io.jsonwebtoken.Claims;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @Transactional
@@ -38,71 +36,59 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final OrganizationRepository organizationRepository;
     private final EmailService emailService;
     private final JwtService jwtService;
-    private final Optional<TokenStore> tokenStore;
-    private final NovuNotificationService novuNotificationService; // New
-
+    private final RegistrationTokenRepository registrationTokenRepository;
+    private final NovuNotificationService novuNotificationService;
 
     @Value("${magic-link.url}")
     private String magicLinkUrl;
 
+    @Value("${ott.expiration-minutes}")
+    private long registrationTokenExpirationMinutes;
+
     public RegistrationServiceImpl(UserRepository userRepository,
-                                  OrganizationRepository organizationRepository,
-                                  EmailService emailService,
-                                  JwtService jwtService,
-                                  @Autowired(required = false) Optional<TokenStore> tokenStore,
-                                  NovuNotificationService novuNotificationService) { // Updated constructor
+                                   OrganizationRepository organizationRepository,
+                                   EmailService emailService,
+                                   JwtService jwtService,
+                                   RegistrationTokenRepository registrationTokenRepository,
+                                   NovuNotificationService novuNotificationService) {
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
         this.emailService = emailService;
         this.jwtService = jwtService;
-        this.tokenStore = tokenStore;
-        this.novuNotificationService = novuNotificationService; // New
+        this.registrationTokenRepository = registrationTokenRepository;
+        this.novuNotificationService = novuNotificationService;
     }
 
     @Override
     public void initiateRegistration(RegistrationRequest request) {
-        // Check if user already exists
         if (userRepository.findByEmail(request.email()).isPresent()) {
             throw new BadRequestException("User with this email already exists");
         }
 
-        // Generate registration token with role
-        UserDetails userDetails = new org.springframework.security.core.userdetails.User(
-                request.email(), "", new ArrayList<>());
+        String token = UUID.randomUUID().toString();
+        LocalDateTime expiryDate = LocalDateTime.now().plusMinutes(registrationTokenExpirationMinutes);
 
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("registration", true);
-        claims.put("role", request.role().name());
-        String token = jwtService.generateToken(claims, userDetails);
+        RegistrationToken registrationToken = new RegistrationToken(token, request.email(), request.role(), expiryDate);
+        registrationTokenRepository.save(registrationToken);
 
-        // Store token for test purposes if the store is present
-        tokenStore.ifPresent(store -> {
-            logger.info("Storing registration token for email: {}", request.email());
-            store.addToken(request.email(), token);
-        });
-
-        // Send magic link
         String magicLink = magicLinkUrl + "?token=" + token + "&action=register";
         emailService.sendRegistrationLink(request.email(), magicLink);
     }
 
     @Override
-    public User completeRegistration(String token, CandidateRegistrationDto dto) {
-        Claims claims = validateRegistrationToken(token);
-        String email = claims.getSubject();
-        String roleStr = claims.get("role", String.class);
+    public VerifyTokenResponse completeRegistration(String token, CandidateRegistrationDto dto) {
+        RegistrationToken registrationToken = validateRegistrationToken(token);
 
-        if (!Role.CANDIDATE.name().equals(roleStr)) {
+        if (registrationToken.getRole() != Role.CANDIDATE) {
             throw new BadRequestException("Invalid registration token for candidate");
         }
 
-        // Check username uniqueness
         if (userRepository.findByUsername(dto.username()).isPresent()) {
             throw new BadRequestException("Username already taken");
         }
 
         User user = new User();
-        user.setEmail(email);
+        user.setEmail(registrationToken.getEmail());
         user.setUsername(dto.username());
         user.setRole(Role.CANDIDATE);
         user.setFirstName(dto.firstName());
@@ -114,30 +100,28 @@ public class RegistrationServiceImpl implements RegistrationService {
         user.setAlternateContactNumber(dto.alternateContactNumber());
         user.setEmailVerified(true);
         user.setProfileComplete(true);
+        user.setNewUser(false); // Profile is complete now
 
         User savedUser = userRepository.save(user);
-        novuNotificationService.sendWelcomeNotification(savedUser); // Trigger welcome notification
+        novuNotificationService.sendWelcomeNotification(savedUser);
 
-        return savedUser;
+        return generateFirstLoginResponse(savedUser);
     }
 
     @Override
-    public User completeRegistration(String token, HiringManagerRegistrationDto dto) {
-        Claims claims = validateRegistrationToken(token);
-        String email = claims.getSubject();
-        String roleStr = claims.get("role", String.class);
+    public VerifyTokenResponse completeRegistration(String token, HiringManagerRegistrationDto dto) {
+        RegistrationToken registrationToken = validateRegistrationToken(token);
 
-        if (!Role.HIRING_MANAGER.name().equals(roleStr)) {
+        if (registrationToken.getRole() != Role.HIRING_MANAGER) {
             throw new BadRequestException("Invalid registration token for hiring manager");
         }
 
-        // Check username uniqueness
         if (userRepository.findByUsername(dto.username()).isPresent()) {
             throw new BadRequestException("Username already taken");
         }
 
         User user = new User();
-        user.setEmail(email);
+        user.setEmail(registrationToken.getEmail());
         user.setUsername(dto.username());
         user.setRole(Role.HIRING_MANAGER);
         user.setCompanyName(dto.companyName());
@@ -146,66 +130,78 @@ public class RegistrationServiceImpl implements RegistrationService {
         user.setContactNumber(dto.contactNumber());
         user.setEmailVerified(true);
         user.setProfileComplete(true);
+        user.setNewUser(false); // Profile is complete now
 
-        User savedUser = userRepository.save(user); // Save user first to get an ID
+        User savedUser = userRepository.save(user);
 
-        // Create Organization for Hiring Manager
         Organization organization = new Organization();
         organization.setName(dto.companyName());
         organization.setIndustry(dto.industry());
-        organization.setCreatedBy(savedUser); // Use the saved user as the creator
+        organization.setCreatedBy(savedUser);
         organizationRepository.save(organization);
 
-        savedUser.setOrganization(organization); // Associate user with the new organization
+        savedUser.setOrganization(organization);
+        User finalSavedUser = userRepository.save(savedUser);
+        novuNotificationService.sendWelcomeNotification(finalSavedUser);
 
-        User finalSavedUser = userRepository.save(savedUser); // Save user again to update the organization
-        novuNotificationService.sendWelcomeNotification(finalSavedUser); // Trigger welcome notification
-
-        return finalSavedUser;
+        return generateFirstLoginResponse(finalSavedUser);
     }
 
-    private Claims validateRegistrationToken(String token) {
-        try {
-            Claims claims = jwtService.extractAllClaims(token);
+    private RegistrationToken validateRegistrationToken(String token) {
+        RegistrationToken registrationToken = registrationTokenRepository.findByToken(token)
+                .orElseThrow(() -> new BadRequestException("Invalid or expired registration token"));
 
-            // Verify it's a registration token
-            Boolean isRegistration = claims.get("registration", Boolean.class);
-            if (!Boolean.TRUE.equals(isRegistration)) {
-                throw new BadRequestException("Invalid registration token");
-            }
-
-            // Check if user already exists
-            String email = claims.getSubject();
-            if (userRepository.findByEmail(email).isPresent()) {
-                throw new BadRequestException("User already registered");
-            }
-
-            return claims;
-        } catch (Exception e) {
+        if (registrationToken.isUsed() || registrationToken.getExpiryDate().isBefore(LocalDateTime.now())) {
             throw new BadRequestException("Invalid or expired registration token");
         }
+
+        if (userRepository.findByEmail(registrationToken.getEmail()).isPresent()) {
+            throw new BadRequestException("User already registered");
+        }
+
+        registrationToken.setUsed(true);
+        return registrationTokenRepository.save(registrationToken);
     }
 
     @Override
     public Map<String, Object> validateToken(String token) {
         try {
-            Claims claims = jwtService.extractAllClaims(token);
+            RegistrationToken registrationToken = registrationTokenRepository.findByToken(token)
+                    .orElseThrow(() -> new BadRequestException("Token not found"));
 
-            Boolean isRegistration = claims.get("registration", Boolean.class);
-            if (!Boolean.TRUE.equals(isRegistration)) {
-                throw new BadRequestException("Invalid registration token");
+            if (registrationToken.isUsed() || registrationToken.getExpiryDate().isBefore(LocalDateTime.now())) {
+                throw new BadRequestException("Token is invalid or expired");
             }
 
-            String email = claims.getSubject();
-            String role = claims.get("role", String.class);
-
             return Map.of(
-                "email", email,
-                "role", role,
-                "valid", true
+                    "email", registrationToken.getEmail(),
+                    "role", registrationToken.getRole().name(),
+                    "valid", true
             );
         } catch (Exception e) {
             return Map.of("valid", false, "error", e.getMessage());
         }
+    }
+
+    private VerifyTokenResponse generateFirstLoginResponse(User user) {
+        String jwt = jwtService.generateToken(
+                user.getId().toString(),
+                user.getEmail(),
+                user.getRole().name(),
+                false, // User is not new anymore
+                user.getUsername()
+        );
+
+        VerifyTokenResponse.UserDto userDto = new VerifyTokenResponse.UserDto(
+                user.getId().toString(),
+                user.getEmail(),
+                user.getRole().name(),
+                user.getFirstName(),
+                user.getLastName(),
+                false // User is not new anymore
+        );
+
+        long expiresIn = jwtService.getTimeUntilExpiration(jwt);
+        return new VerifyTokenResponse(jwt, userDto, expiresIn);
     }
 }
