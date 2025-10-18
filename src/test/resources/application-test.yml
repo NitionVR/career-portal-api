@@ -5,7 +5,7 @@ spring:
     url: jdbc:tc:postgresql:15:///etalente
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: validate
     show-sql: false
   flyway:
     enabled: true
@@ -23,12 +23,25 @@ spring:
   cloud:
     aws:
       ses:
+        from: "test@example.com"
         mail:
           enabled: false # Disable SES JavaMailSender when test profile is active
   security:
     enabled: true
   mvc:
     static-path-pattern: /static/**
+
+aws:
+  s3:
+    access-key-id: "test-key"
+    secret-access-key: "test-secret"
+
+upload:
+  max-file-size: 5242880  # 5MB
+  allowed-content-types:
+    - image/jpeg
+    - image/png
+  presigned-url-expiration-minutes: 15
 
 logging:
   pattern:
@@ -41,7 +54,7 @@ logging:
 
 jwt:
   secret-key: dGhpc2lzYWxvbmdzZWNyZXRrZXlmb3Jqd3R0ZXN0aW5nMTIz
-  expiration: 3600000 # 1 hour for tests
+  expiration-in-ms: 3600000 # 1 hour for tests
 magic-link:
   url: http://localhost:4200/auth/callback
 invitation-link-url: http://localhost:4200/auth/accept-invitation

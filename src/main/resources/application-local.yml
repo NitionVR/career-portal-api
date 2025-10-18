@@ -43,6 +43,7 @@ logging:
 
 jwt:
   secret-key: YW5vdGhlcmxvbmdzZWNyZXRrZXlmb3Jsb2NhbGRldjQ1Ng==
+  expiration-in-ms: 3600000 # 1 hour
 
 magic-link:
   url: http://localhost:4200/auth/callback
@@ -51,7 +52,8 @@ invitation-link-url: http://localhost:4200/auth/accept-invitation
 
 invitation-expiry-hours: 72
 
-cors-allowed-origins: http://localhost:4200
+cors:
+  allowed-origins: http://localhost:4200
 
 ott:
   expiration-minutes: 15 # Local default
@@ -59,3 +61,15 @@ ott:
 novu:
   api-key: ${NOVU_API_KEY:test-api-key-local}
   backend-url: ${NOVU_BACKEND_URL:https://api.novu.co/v1/}
+
+aws:
+  s3:
+    access-key-id: "test-key"
+    secret-access-key: "test-secret"
+
+upload:
+  max-file-size: 5242880  # 5MB
+  allowed-content-types:
+    - image/jpeg
+    - image/png
+  presigned-url-expiration-minutes: 15
