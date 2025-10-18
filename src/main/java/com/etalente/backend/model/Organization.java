@@ -38,6 +38,9 @@ public class Organization {
     @LastModifiedDate
     private LocalDateTime updatedAt;
 
+    @Column(name = "company_logo_url")
+    private String companyLogoUrl;
+
     // Getters and setters
     public UUID getId() {
         return id;
@@ -109,5 +112,13 @@ public class Organization {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getCompanyLogoUrl() {
+        return companyLogoUrl;
+    }
+
+    public void setCompanyLogoUrl(String companyLogoUrl) {
+        this.companyLogoUrl = companyLogoUrl;
     }
 }
