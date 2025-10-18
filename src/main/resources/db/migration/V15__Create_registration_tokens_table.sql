@@ -1,0 +1,8 @@
+CREATE TABLE registration_tokens (
+    id UUID PRIMARY KEY,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL,
+    expiry_date TIMESTAMP NOT NULL,
+    used BOOLEAN NOT NULL DEFAULT FALSE
+);
