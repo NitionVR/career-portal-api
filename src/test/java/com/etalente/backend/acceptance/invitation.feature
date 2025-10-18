@@ -50,16 +50,17 @@ Feature: Recruiter Invitation
     And match response.email == recruiterEmail
     And match response.status == 'PENDING'
 
-    # 5. Get the invitation token for the Recruiter
-    Given path '/api/test/token'
+    # Step 5: Retrieve the invitation token using the test endpoint
+    Given path '/api/test/invitation-token'
     And param email = recruiterEmail
-    When method GET
+    And header Authorization = null
+    When method get
     Then status 200
-    * def recruiterInvToken = response.token
-    * print 'Recruiter Invitation Token:', recruiterInvToken
+    And def invitationToken = response.token
+    * print 'Recruiter Invitation Token:', invitationToken
 
     # 6. Validate the invitation token
-    Given path '/api/invitations/validate/' + recruiterInvToken
+    Given path '/api/invitations/validate/' + invitationToken
     When method GET
     Then status 200
     And match response.valid == true
@@ -67,7 +68,7 @@ Feature: Recruiter Invitation
     And match response.organization == "Space Corp"
 
     # 7. Recruiter accepts the invitation and completes their profile
-    Given path '/api/invitations/accept/' + recruiterInvToken
+    Given path '/api/invitations/accept/' + invitationToken
     And request
     """
     {

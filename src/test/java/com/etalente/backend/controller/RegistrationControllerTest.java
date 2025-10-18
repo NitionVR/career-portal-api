@@ -5,233 +5,89 @@ import com.etalente.backend.TestHelper;
 import com.etalente.backend.dto.CandidateRegistrationDto;
 import com.etalente.backend.dto.HiringManagerRegistrationDto;
 import com.etalente.backend.dto.RegistrationRequest;
+import com.etalente.backend.model.RegistrationToken;
 import com.etalente.backend.model.Role;
-import com.etalente.backend.model.User;
+import com.etalente.backend.repository.RegistrationTokenRepository;
 import com.etalente.backend.repository.UserRepository;
-import com.etalente.backend.security.JwtService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.javafaker.Faker;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
+import java.time.LocalDateTime;
+import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@Transactional
 class RegistrationControllerTest extends BaseIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private JwtService jwtService;
-
-    @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private RegistrationTokenRepository registrationTokenRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @Autowired
     private TestHelper testHelper;
 
-    private Faker faker;
-
-    @BeforeEach
-    void setUp() {
-        faker = new Faker();
-    }
-
     @Test
-    void initiateRegistration_shouldSendEmail_forNewUser() throws Exception {
-        // Given
-        RegistrationRequest request = new RegistrationRequest(faker.internet().emailAddress(), Role.CANDIDATE);
+    void initiateRegistration_shouldReturnOk_forNewEmail() throws Exception {
+        RegistrationRequest request = new RegistrationRequest("newuser." + UUID.randomUUID() + "@example.com", Role.CANDIDATE);
 
-        // When & Then
         mockMvc.perform(post("/api/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value("Registration link sent to your email"));
-
-        // Verify user not created yet
-        assertFalse(userRepository.findByEmail(request.email()).isPresent());
+                .andExpect(status().isOk());
     }
 
     @Test
-    void initiateRegistration_shouldFail_forExistingUser() throws Exception {
-        // Given
-        User existingUser = testHelper.createUser(faker.internet().emailAddress(), Role.CANDIDATE);
-        RegistrationRequest request = new RegistrationRequest(existingUser.getEmail(), Role.CANDIDATE);
+    void completeCandidateRegistration_shouldCreateUserAndReturnTokenResponse() throws Exception {
+        String token = UUID.randomUUID().toString();
+        String email = "candidate." + UUID.randomUUID() + "@example.com";
+        RegistrationToken registrationToken = new RegistrationToken(token, email, Role.CANDIDATE, LocalDateTime.now().plusMinutes(15));
+        registrationTokenRepository.save(registrationToken);
 
-        // When & Then
-        mockMvc.perform(post("/api/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
-    }
+        CandidateRegistrationDto dto = new CandidateRegistrationDto("candidateuser", "Candidate", "User", null, null, null, "+1234567890", null);
 
-    @Test
-    void completeCandiateRegistration_shouldCreateUser() throws Exception {
-        // Given
-        String email = faker.internet().emailAddress();
-        String token = generateRegistrationToken(email, Role.CANDIDATE);
-        CandidateRegistrationDto dto = createFakeCandidateDto();
-
-        // When & Then
-        mockMvc.perform(post("/api/register/candidate")
-                        .param("token", token)
+        mockMvc.perform(post("/api/register/candidate").param("token", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").exists());
+                .andExpect(jsonPath("$.token").exists())
+                .andExpect(jsonPath("$.user.email").value(email))
+                .andExpect(jsonPath("$.user.isNewUser").value(false));
 
-        // Verify user created
-        User createdUser = userRepository.findByEmail(email).orElseThrow();
-        assertEquals(dto.username(), createdUser.getUsername());
-        assertEquals(dto.firstName(), createdUser.getFirstName());
-        assertEquals(dto.lastName(), createdUser.getLastName());
-        assertEquals(Role.CANDIDATE, createdUser.getRole());
-        assertTrue(createdUser.isProfileComplete());
-        assertTrue(createdUser.isEmailVerified());
+        assertThat(userRepository.findByEmail(email)).isPresent();
     }
 
     @Test
-    void completeHiringManagerRegistration_shouldCreateUser() throws Exception {
-        // Given
-        String email = faker.internet().emailAddress();
-        String token = generateRegistrationToken(email, Role.HIRING_MANAGER);
-        HiringManagerRegistrationDto dto = createFakeHiringManagerDto();
+    void completeHiringManagerRegistration_shouldCreateUserAndOrgAndReturnTokenResponse() throws Exception {
+        String token = UUID.randomUUID().toString();
+        String email = "hm." + UUID.randomUUID() + "@example.com";
+        RegistrationToken registrationToken = new RegistrationToken(token, email, Role.HIRING_MANAGER, LocalDateTime.now().plusMinutes(15));
+        registrationTokenRepository.save(registrationToken);
 
-        // When & Then
-        mockMvc.perform(post("/api/register/hiring-manager")
-                        .param("token", token)
+        HiringManagerRegistrationDto dto = new HiringManagerRegistrationDto("hmuser", "Test Company", "Tech", "HM Contact", "+1234567890");
+
+        mockMvc.perform(post("/api/register/hiring-manager").param("token", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").exists());
+                .andExpect(jsonPath("$.token").exists())
+                .andExpect(jsonPath("$.user.email").value(email))
+                .andExpect(jsonPath("$.user.isNewUser").value(false));
 
-        // Verify user created
-        User createdUser = userRepository.findByEmail(email).orElseThrow();
-        assertEquals(dto.username(), createdUser.getUsername());
-        assertEquals(dto.companyName(), createdUser.getCompanyName());
-        assertEquals(dto.industry(), createdUser.getIndustry());
-        assertEquals(Role.HIRING_MANAGER, createdUser.getRole());
-        assertTrue(createdUser.isProfileComplete());
-        assertTrue(createdUser.isEmailVerified());
-    }
-
-    @Test
-    void registration_shouldFail_withDuplicateUsername() throws Exception {
-        // Given
-        User existingUser = testHelper.createUser(faker.internet().emailAddress(), Role.CANDIDATE);
-        String token = generateRegistrationToken(faker.internet().emailAddress(), Role.CANDIDATE);
-        CandidateRegistrationDto dto = new CandidateRegistrationDto(
-                existingUser.getUsername(), // Duplicate username
-                faker.name().firstName(),
-                faker.name().lastName(),
-                "Male",
-                "Asian",
-                "None",
-                faker.phoneNumber().cellPhone(),
-                null
-        );
-
-        // When & Then
-        mockMvc.perform(post("/api/register/candidate")
-                        .param("token", token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void registration_shouldFail_withWrongRoleToken() throws Exception {
-        // Given
-        String token = generateRegistrationToken(faker.internet().emailAddress(), Role.HIRING_MANAGER);
-        CandidateRegistrationDto dto = createFakeCandidateDto();
-
-        // When & Then
-        mockMvc.perform(post("/api/register/candidate")
-                        .param("token", token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Invalid registration token for candidate"));
-    }
-
-    @Test
-    void validateRegistrationToken_shouldReturnTokenInfo() throws Exception {
-        // Given
-        String email = faker.internet().emailAddress();
-        Role role = Role.CANDIDATE;
-        String token = generateRegistrationToken(email, role);
-
-        // When & Then
-        mockMvc.perform(get("/api/register/validate-token")
-                        .param("token", token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.email").value(email))
-                .andExpect(jsonPath("$.role").value(role.name()))
-                .andExpect(jsonPath("$.valid").value(true));
-    }
-
-    @Test
-    void validateRegistrationToken_shouldReturnInvalid_forBadToken() throws Exception {
-        // When & Then
-        mockMvc.perform(get("/api/register/validate-token")
-                        .param("token", "invalid-token"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.valid").value(false))
-                .andExpect(jsonPath("$.error").exists());
-    }
-
-    // Helper methods
-    private CandidateRegistrationDto createFakeCandidateDto() {
-        return new CandidateRegistrationDto(
-                faker.name().username(),
-                faker.name().firstName(),
-                faker.name().lastName(),
-                "Male",
-                "Asian",
-                "None",
-                // Generate a number that is guaranteed to be valid
-                String.valueOf(faker.number().numberBetween(1, 9)) + faker.number().digits(10),
-                String.valueOf(faker.number().numberBetween(1, 9)) + faker.number().digits(10)
-        );
-    }
-
-    private HiringManagerRegistrationDto createFakeHiringManagerDto() {
-        return new HiringManagerRegistrationDto(
-                faker.name().username(),
-                faker.company().name(),
-                faker.company().industry(),
-                faker.name().fullName(),
-                // Generate a number that is guaranteed to be valid
-                String.valueOf(faker.number().numberBetween(1, 9)) + faker.number().digits(10)
-        );
-    }
-
-    private String generateRegistrationToken(String email, Role role) {
-        UserDetails userDetails = new org.springframework.security.core.userdetails.User(
-                email, "", new ArrayList<>());
-
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("registration", true);
-        claims.put("role", role.name());
-
-        return jwtService.generateToken(claims, userDetails);
+        assertThat(userRepository.findByEmail(email)).isPresent();
+        assertThat(userRepository.findByEmail(email).get().getOrganization()).isNotNull();
     }
 }

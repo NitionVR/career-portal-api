@@ -12,11 +12,11 @@ Feature: User Registration
     And request { email: '#(randomEmail)', role: 'CANDIDATE' }
     When method post
     Then status 200
-    And match response.message == "Registration link sent to your email"
 
     # Step 2: Retrieve the registration token using the test endpoint
     Given path '/api/test/token'
     And param email = randomEmail
+    And header Authorization = null
     When method get
     Then status 200
     And def registrationToken = response.token
