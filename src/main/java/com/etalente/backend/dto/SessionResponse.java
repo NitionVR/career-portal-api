@@ -3,22 +3,16 @@ package com.etalente.backend.dto;
 public class SessionResponse {
 
     private boolean authenticated;
-    private String userId;
-    private String email;
-    private String role;
-    private Boolean isNewUser;
+    private VerifyTokenResponse.UserDto user;
     private Long expiresIn;
 
-    // Static factory methods
-    public static SessionResponse authenticated(String userId, String email,
-                                               String role, Boolean isNewUser,
-                                               long expiresIn) {
+    // Private constructor to force use of static factory methods
+    private SessionResponse() {}
+
+    public static SessionResponse authenticated(VerifyTokenResponse.UserDto user, long expiresIn) {
         SessionResponse response = new SessionResponse();
         response.authenticated = true;
-        response.userId = userId;
-        response.email = email;
-        response.role = role;
-        response.isNewUser = isNewUser;
+        response.user = user;
         response.expiresIn = expiresIn;
         return response;
     }
@@ -29,22 +23,16 @@ public class SessionResponse {
         return response;
     }
 
-    // Getters and setters
-    public boolean isAuthenticated() { return authenticated; }
-    public void setAuthenticated(boolean authenticated) { this.authenticated = authenticated; }
+    // Getters
+    public boolean isAuthenticated() {
+        return authenticated;
+    }
 
-    public String getUserId() { return userId; }
-    public void setUserId(String userId) { this.userId = userId; }
+    public VerifyTokenResponse.UserDto getUser() {
+        return user;
+    }
 
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-
-    public String getRole() { return role; }
-    public void setRole(String role) { this.role = role; }
-
-    public Boolean getIsNewUser() { return isNewUser; }
-    public void setIsNewUser(Boolean isNewUser) { this.isNewUser = isNewUser; }
-
-    public Long getExpiresIn() { return expiresIn; }
-    public void setExpiresIn(Long expiresIn) { this.expiresIn = expiresIn; }
+    public Long getExpiresIn() {
+        return expiresIn;
+    }
 }

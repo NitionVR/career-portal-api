@@ -3,6 +3,7 @@ package com.etalente.backend.controller;
 import com.etalente.backend.dto.LoginRequest;
 import com.etalente.backend.dto.SessionResponse;
 import com.etalente.backend.dto.VerifyTokenResponse;
+import com.etalente.backend.model.User;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.AuthenticationService;
 import jakarta.validation.Valid;
@@ -12,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -58,9 +60,7 @@ public class AuthenticationController {
      * GET /api/auth/session
      */
     @GetMapping("/session")
-    public ResponseEntity<SessionResponse> checkSession(
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
-
+    public ResponseEntity<SessionResponse> checkSession(@RequestHeader(value = "Authorization", required = false) String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return ResponseEntity.ok(SessionResponse.unauthenticated());
         }
@@ -69,16 +69,20 @@ public class AuthenticationController {
 
         try {
             String userId = jwtService.extractUserId(token);
-
             if (jwtService.isTokenValid(token, userId)) {
-                String email = jwtService.extractEmail(token);
-                String role = jwtService.extractRole(token);
-                Boolean isNewUser = jwtService.extractIsNewUser(token);
-                long expiresIn = jwtService.getTimeUntilExpiration(token);
+                User user = authenticationService.getUserById(UUID.fromString(userId)); // Fetch the full user
 
-                return ResponseEntity.ok(SessionResponse.authenticated(
-                    userId, email, role, isNewUser, expiresIn
-                ));
+                VerifyTokenResponse.UserDto userDto = new VerifyTokenResponse.UserDto(
+                        user.getId().toString(),
+                        user.getEmail(),
+                        user.getRole().name(),
+                        user.getFirstName(),
+                        user.getLastName(),
+                        user.isNewUser()
+                );
+
+                long expiresIn = jwtService.getTimeUntilExpiration(token);
+                return ResponseEntity.ok(SessionResponse.authenticated(userDto, expiresIn));
             }
         } catch (Exception e) {
             logger.warn("Session check failed: {}", e.getMessage());

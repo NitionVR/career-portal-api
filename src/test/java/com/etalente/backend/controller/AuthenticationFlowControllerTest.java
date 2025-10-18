@@ -93,14 +93,19 @@ public class AuthenticationFlowControllerTest extends BaseIntegrationTest {
 
     @Test
     void session_shouldReturnAuthenticated_whenTokenIsValid() throws Exception {
-        String token = testHelper.createUserAndGetJwt("session-" + UUID.randomUUID() + "@test.com", Role.RECRUITER);
+        User user = testHelper.createUser("session-" + UUID.randomUUID() + "@test.com", Role.RECRUITER);
+        user.setFirstName("Test");
+        user.setLastName("User");
+        userRepository.save(user);
+        String token = testHelper.generateJwtForUser(user);
 
         mockMvc.perform(get("/api/auth/session")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.authenticated").value(true))
-                .andExpect(jsonPath("$.email").value(jwtService.extractEmail(token)))
-                .andExpect(jsonPath("$.role").value("RECRUITER"));
+                .andExpect(jsonPath("$.user.email").value(user.getEmail()))
+                .andExpect(jsonPath("$.user.role").value("RECRUITER"))
+                .andExpect(jsonPath("$.user.firstName").value("Test"));
     }
 
     @Test

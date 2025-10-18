@@ -105,6 +105,12 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     }
 
     @Override
+    public User getUserById(UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+    }
+
+    @Override
     public String generateJwtForUser(User user) {
         return jwtService.generateToken(
                 user.getId().toString(),
