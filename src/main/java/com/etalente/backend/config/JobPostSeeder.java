@@ -2,6 +2,8 @@ package com.etalente.backend.config;
 
 import com.etalente.backend.dto.JobPostRequest;
 import com.etalente.backend.dto.JobPostResponse;
+import com.etalente.backend.dto.LocationDto;
+import com.etalente.backend.dto.SkillDto;
 import com.etalente.backend.model.Organization;
 import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
@@ -9,6 +11,7 @@ import com.etalente.backend.repository.JobPostRepository;
 import com.etalente.backend.repository.OrganizationRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.service.JobPostService;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +20,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.core.io.support.ResourcePatternResolver;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,6 +30,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -140,38 +143,58 @@ public class JobPostSeeder implements CommandLineRunner {
     }
 
 
-    private void seedJobPosts() throws IOException {
+    @Transactional
+    protected void seedJobPosts() throws IOException {
         logger.info("Seeding job posts...");
 
-        // Load all job JSON files from the specified directory
         Resource[] resources = resourcePatternResolver.getResources("classpath:job_seed_jsons/*.json");
 
         for (Resource resource : resources) {
-            if (!resource.exists() || !resource.isReadable()) {
-                logger.warn("Skipping unreadable or non-existent resource: {}", resource.getFilename());
-                continue;
-            }
-            if (resource.getFilename() != null && resource.getFilename().equals("job_12.json")) {
-                logger.info("Skipping empty job_12.json file.");
+            if (!resource.exists() || !resource.isReadable() || (resource.getFilename() != null && resource.getFilename().equals("job_12.json"))) {
+                logger.warn("Skipping resource: {}", resource.getFilename());
                 continue;
             }
 
             try (InputStream inputStream = resource.getInputStream()) {
-                JobPostRequest request = objectMapper.readValue(inputStream, JobPostRequest.class);
+                // Read into a generic map to handle different key names
+                @SuppressWarnings("unchecked")
+                Map<String, Object> jobData = objectMapper.readValue(inputStream, Map.class);
 
-                // Get or create the hiring manager and organization for this company
+                // Manually construct the JobPostRequest, handling old ("type", "experience") and new keys
+                String jobType = (String) jobData.getOrDefault("jobType", jobData.get("type"));
+                String experienceLevel = (String) jobData.getOrDefault("experienceLevel", jobData.get("experience"));
+
+                JobPostRequest request = new JobPostRequest(
+                        (String) jobData.get("title"),
+                        (String) jobData.get("company"),
+                        jobType,
+                        (String) jobData.get("description"),
+                        objectMapper.convertValue(jobData.get("location"), LocationDto.class),
+                        (String) jobData.get("remote"),
+                        (String) jobData.get("salary"),
+                        experienceLevel,
+                        objectMapper.convertValue(jobData.get("responsibilities"), new TypeReference<List<String>>() {}),
+                        objectMapper.convertValue(jobData.get("qualifications"), new TypeReference<List<String>>() {}),
+                        objectMapper.convertValue(jobData.get("skills"), new TypeReference<List<SkillDto>>() {})
+                );
+
                 User hiringManager = getOrCreateHiringManagerAndOrganization(request.company());
 
-                // Check if job post already exists to prevent duplicates
-                boolean exists = jobPostRepository.existsByTitleAndCompany(request.title(), request.company());
-
-                if (!exists) {
+                if (!jobPostRepository.existsByTitleAndCompany(request.title(), request.company())) {
                     logger.info("Attempting to create and publish job post: {}", request.title());
                     JobPostResponse createdJobPost = jobPostService.createJobPost(request, hiringManager.getId());
                     logger.info("Job post created with ID: {}", createdJobPost.id());
-                    // Publish the job post immediately so it's visible
-                    jobPostService.publishJobPost(createdJobPost.id(), hiringManager.getId());
-                    logger.info("Job post published: {}", createdJobPost.title());
+
+                    var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + hiringManager.getRole().name()));
+                    var authentication = new UsernamePasswordAuthenticationToken(hiringManager.getId().toString(), null, authorities);
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                    try {
+                        jobPostService.publishJobPost(createdJobPost.id(), hiringManager.getId());
+                        logger.info("Job post published: {}", createdJobPost.title());
+                    } finally {
+                        SecurityContextHolder.clearContext();
+                    }
                 } else {
                     logger.info("Job post already exists, skipping: {}", request.title());
                 }
