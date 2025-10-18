@@ -64,6 +64,8 @@ public class InvitationServiceImpl implements InvitationService {
         Organization organization = inviter.getOrganization();
         if (organization == null) {
             organization = createOrganizationForUser(inviter);
+            inviter = userRepository.findById(inviterId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         }
         final Organization finalOrganization = organization;
 
