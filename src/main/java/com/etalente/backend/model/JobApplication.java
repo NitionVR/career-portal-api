@@ -32,6 +32,9 @@ public class JobApplication {
     @Column(nullable = false, updatable = false)
     private LocalDateTime applicationDate;
 
+    @Column(name = "viewed_by_employer", nullable = false)
+    private boolean viewedByEmployer = false;
+
     // Getters and Setters
 
     public UUID getId() {
@@ -72,5 +75,13 @@ public class JobApplication {
 
     public void setApplicationDate(LocalDateTime applicationDate) {
         this.applicationDate = applicationDate;
+    }
+
+    public boolean isViewedByEmployer() {
+        return viewedByEmployer;
+    }
+
+    public void setViewedByEmployer(boolean viewedByEmployer) {
+        this.viewedByEmployer = viewedByEmployer;
     }
 }
