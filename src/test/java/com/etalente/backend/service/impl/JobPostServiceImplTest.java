@@ -8,6 +8,7 @@ import com.etalente.backend.model.JobPostStatus;
 import com.etalente.backend.model.Organization;
 import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
+import com.etalente.backend.repository.JobApplicationRepository;
 import com.etalente.backend.repository.JobPostRepository;
 import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.OrganizationContext;
@@ -46,6 +47,9 @@ class JobPostServiceImplTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private JobApplicationRepository jobApplicationRepository;
 
     @Mock
     private OrganizationContext organizationContext;
@@ -115,6 +119,8 @@ class JobPostServiceImplTest {
         // Given
         testJobPost.setStatus(JobPostStatus.OPEN);
         when(jobPostRepository.findById(jobPostId)).thenReturn(Optional.of(testJobPost));
+        when(jobApplicationRepository.countByJobPostId(any(UUID.class))).thenReturn(5); // Example count
+        when(jobApplicationRepository.countByJobPostIdAndViewedByEmployerFalse(any(UUID.class))).thenReturn(2); // Example count
 
         // When
         var response = jobPostService.getJobPost(jobPostId);
@@ -122,6 +128,8 @@ class JobPostServiceImplTest {
         // Then
         assertNotNull(response);
         assertEquals(testJobPost.getTitle(), response.title());
+        assertEquals(5, response.applicantsCount());
+        assertEquals(2, response.newApplicantsCount());
     }
 
     @Test
@@ -141,7 +149,9 @@ class JobPostServiceImplTest {
         JobPostRequest request = createFakeJobPostRequest();
         when(jobPostRepository.findByIdAndOrganization(jobPostId, organization)).thenReturn(Optional.of(testJobPost));
         when(jobPostRepository.save(any(JobPost.class))).thenReturn(testJobPost);
-        doNothing().when(permissionService).verifyCanUpdate(any(User.class), any(JobPost.class)); // ADD THIS
+        doNothing().when(permissionService).verifyCanUpdate(any(User.class), any(JobPost.class));
+        when(jobApplicationRepository.countByJobPostId(any(UUID.class))).thenReturn(0);
+        when(jobApplicationRepository.countByJobPostIdAndViewedByEmployerFalse(any(UUID.class))).thenReturn(0);
 
         // When
         jobPostService.updateJobPost(jobPostId, request, userId);
@@ -215,6 +225,8 @@ class JobPostServiceImplTest {
         candidateUser.setRole(Role.CANDIDATE);
         when(organizationContext.getCurrentUserOrNull()).thenReturn(candidateUser);
         when(jobPostRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
+        when(jobApplicationRepository.countByJobPostId(any(UUID.class))).thenReturn(0);
+        when(jobApplicationRepository.countByJobPostIdAndViewedByEmployerFalse(any(UUID.class))).thenReturn(0);
 
         // When
         var result = jobPostService.listJobPosts(pageable, null, null, null, null, null);
@@ -232,6 +244,8 @@ class JobPostServiceImplTest {
         when(organizationContext.requireOrganization()).thenReturn(organization);
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
         when(jobPostRepository.findByCreatedByIdAndOrganization(userId, organization, pageable)).thenReturn(page);
+        when(jobApplicationRepository.countByJobPostId(any(UUID.class))).thenReturn(0);
+        when(jobApplicationRepository.countByJobPostIdAndViewedByEmployerFalse(any(UUID.class))).thenReturn(0);
 
         // When
         var result = jobPostService.listJobPostsByUser(userId, pageable);
