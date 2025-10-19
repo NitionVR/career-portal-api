@@ -1,6 +1,7 @@
 package com.etalente.backend.dto;
 
 import com.etalente.backend.model.User;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class UserDto {
     private String id;
@@ -9,16 +10,18 @@ public class UserDto {
     private String lastName;
     private String role;
     private String profileImageUrl;
+    private boolean isNewUser;
 
     // Constructor
     public UserDto(String id, String email, String firstName, String lastName,
-                  String role, String profileImageUrl) {
+                  String role, String profileImageUrl, boolean isNewUser) {
         this.id = id;
         this.email = email;
         this.firstName = firstName;
         this.lastName = lastName;
         this.role = role;
         this.profileImageUrl = profileImageUrl;
+        this.isNewUser = isNewUser;
     }
 
     // Factory method
@@ -29,7 +32,8 @@ public class UserDto {
             user.getFirstName(),
             user.getLastName(),
             user.getRole().name(),
-            user.getProfileImageUrl()
+            user.getProfileImageUrl(),
+            user.isNewUser()
         );
     }
 
@@ -51,4 +55,8 @@ public class UserDto {
 
     public String getProfileImageUrl() { return profileImageUrl; }
     public void setProfileImageUrl(String profileImageUrl) { this.profileImageUrl = profileImageUrl; }
+
+    @JsonProperty("isNewUser")
+    public boolean isNewUser() { return isNewUser; }
+    public void setNewUser(boolean newUser) { isNewUser = newUser; }
 }
