@@ -4,6 +4,7 @@ import com.etalente.backend.BaseIntegrationTest;
 import com.etalente.backend.TestHelper;
 import com.etalente.backend.dto.JobPostRequest;
 import com.etalente.backend.dto.LocationDto;
+import com.etalente.backend.dto.SkillDto;
 import com.etalente.backend.model.*;
 import com.etalente.backend.repository.JobPostRepository;
 import com.etalente.backend.repository.OrganizationRepository;
@@ -60,9 +61,14 @@ class JobPostControllerTest extends BaseIntegrationTest {
 
     private Faker faker;
     private Organization organization;
+    private User hiringManager;
+    private String hiringManagerJwt;
 
     @BeforeEach
     void setUp() {
+        testHelper.cleanupDatabase();
+        hiringManager = testHelper.createUser("hm@example.com", Role.HIRING_MANAGER);
+        hiringManagerJwt = testHelper.generateJwtForUser(hiringManager);
         faker = new Faker();
         organization = new Organization();
         organization.setName(faker.company().name());
@@ -72,12 +78,11 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void createJobPost_shouldCreateJobPost_whenHiringManager() throws Exception {
         // Given
-        String token = testHelper.createUserAndGetJwt("hm@example.com", Role.HIRING_MANAGER);
         JobPostRequest request = createFakeJobPostRequest();
 
         // When & Then
         mockMvc.perform(post("/api/job-posts")
-                        .header("Authorization", "Bearer " + token)
+                        .header("Authorization", "Bearer " + hiringManagerJwt)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -104,8 +109,6 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void createJobPost_shouldFail_whenInvalidData() throws Exception {
         // Given
-        String token = testHelper.createUserAndGetJwt("hm@example.com", Role.HIRING_MANAGER);
-
         JobPostRequest request = new JobPostRequest(
                 "", // Invalid: empty title
                 faker.company().name(),
@@ -122,7 +125,7 @@ class JobPostControllerTest extends BaseIntegrationTest {
 
         // When & Then
         mockMvc.perform(post("/api/job-posts")
-                        .header("Authorization", "Bearer " + token)
+                        .header("Authorization", "Bearer " + hiringManagerJwt)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -151,10 +154,9 @@ class JobPostControllerTest extends BaseIntegrationTest {
     @Test
     void listJobPosts_shouldReturnPaginatedResults() throws Exception {
         // Given
-        User user = testHelper.createUser("hm@example.com", Role.HIRING_MANAGER);
-        createAndPublishJobPost(user);
-        createAndPublishJobPost(user);
-        createAndPublishJobPost(user);
+        createAndPublishJobPost(hiringManager);
+        createAndPublishJobPost(hiringManager);
+        createAndPublishJobPost(hiringManager);
 
         // When & Then
         mockMvc.perform(get("/api/job-posts")
@@ -299,5 +301,29 @@ class JobPostControllerTest extends BaseIntegrationTest {
 
     private <T> List<T> generateFakeList(int count, java.util.function.Supplier<T> supplier) {
         return IntStream.range(0, count).mapToObj(i -> supplier.get()).collect(Collectors.toList());
+    }
+
+    @Test
+    void createJobPost_withLowercaseExperienceLevel_shouldSucceed() throws Exception {
+        JobPostRequest request = new JobPostRequest(
+                "Test Title",
+                "Test Company",
+                "Full-time",
+                "A valid description that is at least fifty characters long.",
+                new LocationDto("Test City", "USA", "12345", "CA", "123 Main St"),
+                "Remote",
+                "$100,000",
+                "entry-level",
+                List.of("Responsibility 1"),
+                List.of("Qualification 1"),
+                List.of(new SkillDto("Java", "Expert", List.of("Spring")))
+        );
+
+        mockMvc.perform(post("/api/job-posts")
+                        .header("Authorization", "Bearer " + hiringManagerJwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.experienceLevel").value("Entry-level"));
     }
 }

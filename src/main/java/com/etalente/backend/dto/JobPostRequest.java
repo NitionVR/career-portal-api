@@ -33,7 +33,7 @@ public record JobPostRequest(
 
         String salary,
 
-        @Pattern(regexp = "Entry-level|Mid-level|Senior-level|Executive",
+        @Pattern(regexp = "(?i)Entry-level|Mid-level|Senior-level|Executive",
                 message = "Invalid experience level")
         String experienceLevel,
 

@@ -313,7 +313,9 @@ public class JobPostServiceImpl implements JobPostService {
         jobPost.setDescription(request.description());
         jobPost.setRemote(request.remote());
         jobPost.setSalary(request.salary());
-        jobPost.setExperienceLevel(request.experienceLevel());
+        if (request.experienceLevel() != null) {
+            jobPost.setExperienceLevel(request.experienceLevel().substring(0, 1).toUpperCase() + request.experienceLevel().substring(1).toLowerCase());
+        }
 
         // Convert location to JsonNode
         if (request.location() != null) {
