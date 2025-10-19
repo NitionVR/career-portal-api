@@ -9,6 +9,7 @@ public record ApplicationDetailsDto(
         LocalDateTime applicationDate,
         String status,
         JobPostDto job,
+        CandidateProfileDto candidateProfile,
         List<CommunicationHistoryDto> communicationHistory
 ) {
     public record CommunicationHistoryDto(

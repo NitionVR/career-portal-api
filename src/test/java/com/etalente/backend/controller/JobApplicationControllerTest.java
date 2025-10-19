@@ -7,6 +7,7 @@ import com.etalente.backend.dto.WorkflowTriggerResponse;
 import com.etalente.backend.integration.novu.NovuWorkflowService;
 import com.etalente.backend.model.*;
 import com.etalente.backend.repository.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -48,6 +49,9 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Test
     void getMyApplications_shouldReturn403_whenNotAuthenticated() throws Exception {
@@ -273,6 +277,36 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
                         .header("Authorization", "Bearer " + candidateToken))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", is("Application can only be withdrawn if its status is APPLIED or UNDER_REVIEW.")));
+    }
+
+    @Test
+    void getApplicationDetails_shouldReturnCandidateProfile() throws Exception {
+        // Given
+        User candidate = testHelper.createUser("candidate-profile@test.com", Role.CANDIDATE);
+        candidate.setProfile(objectMapper.readTree("{\"basics\":{\"name\":\"John Doe\"}}"));
+        userRepository.save(candidate);
+        entityManager.flush();
+        String candidateToken = testHelper.generateJwtForUser(candidate);
+        User hiringManager = testHelper.createUser("hm-profile@test.com", Role.HIRING_MANAGER);
+
+        JobPost jobPost1 = new JobPost();
+        jobPost1.setTitle("Java Developer");
+        jobPost1.setCompany("Acme Inc.");
+        jobPost1.setCreatedBy(hiringManager);
+        jobPostRepository.save(jobPost1);
+
+        JobApplication application = new JobApplication();
+        application.setCandidate(candidate);
+        application.setJobPost(jobPost1);
+        application.setStatus(JobApplicationStatus.APPLIED);
+        application = jobApplicationRepository.save(application);
+
+        // When & Then
+        mockMvc.perform(get("/api/applications/{id}", application.getId())
+                        .header("Authorization", "Bearer " + candidateToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidateProfile.firstName", is(candidate.getFirstName())))
+                .andExpect(jsonPath("$.candidateProfile.profile.basics.name", is("John Doe")));
     }
 
     @Test

@@ -5,9 +5,7 @@ import com.etalente.backend.exception.BadRequestException;
 import com.etalente.backend.exception.ResourceNotFoundException;
 import com.etalente.backend.exception.UnauthorizedException;
 import com.etalente.backend.model.*;
-import com.etalente.backend.repository.JobApplicationRepository;
-import com.etalente.backend.repository.JobApplicationSpecification;
-import com.etalente.backend.repository.JobPostRepository;
+import com.etalente.backend.repository.*;
 import com.etalente.backend.security.OrganizationContext;
 import com.etalente.backend.service.JobApplicationService;
 import com.etalente.backend.integration.novu.NovuWorkflowService;
@@ -19,15 +17,18 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 
-import com.etalente.backend.repository.JobApplicationAuditRepository;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 @Transactional
 public class JobApplicationServiceImpl implements JobApplicationService {
+
+    private static final Logger log = LoggerFactory.getLogger(JobApplicationServiceImpl.class);
 
     private final JobApplicationRepository jobApplicationRepository;
     private final JobPostRepository jobPostRepository;
@@ -35,19 +36,22 @@ public class JobApplicationServiceImpl implements JobApplicationService {
     private final JobApplicationAuditRepository jobApplicationAuditRepository;
     private final NovuWorkflowService novuWorkflowService;
     private final JobPostPermissionService permissionService;
+    private final UserRepository userRepository;
 
     public JobApplicationServiceImpl(JobApplicationRepository jobApplicationRepository,
                                      JobPostRepository jobPostRepository,
                                      OrganizationContext organizationContext,
                                      JobApplicationAuditRepository jobApplicationAuditRepository,
                                      NovuWorkflowService novuWorkflowService,
-                                     JobPostPermissionService permissionService) {
+                                     JobPostPermissionService permissionService,
+                                     UserRepository userRepository) {
         this.jobApplicationRepository = jobApplicationRepository;
         this.jobPostRepository = jobPostRepository;
         this.organizationContext = organizationContext;
         this.jobApplicationAuditRepository = jobApplicationAuditRepository;
         this.novuWorkflowService = novuWorkflowService;
         this.permissionService = permissionService;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -59,15 +63,26 @@ public class JobApplicationServiceImpl implements JobApplicationService {
 
     @Override
     public ApplicationDetailsDto getApplicationDetails(UUID applicationId) {
-        User currentUser = organizationContext.getCurrentUser();
+        log.info("Attempting to retrieve application details for ID: {}", applicationId);
+        User currentUser = userRepository.findById(organizationContext.getCurrentUser().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Current user not found"));
         JobApplication application = jobApplicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Application not found"));
 
-        if (!application.getCandidate().getId().equals(currentUser.getId())) {
-            throw new ResourceNotFoundException("Application not found");
+        // Scenario 1: Candidate viewing their own application
+        if (application.getCandidate().getId().equals(currentUser.getId())) {
+            return toDetailsDto(application);
         }
 
-        return toDetailsDto(application);
+        // Scenario 2: Hiring Manager or Recruiter viewing applications for their organization's job posts
+        JobPost jobPost = application.getJobPost();
+        if (currentUser.getRole() == Role.HIRING_MANAGER || currentUser.getRole() == Role.RECRUITER) {
+            if (permissionService.belongsToSameOrganization(currentUser, jobPost)) {
+                return toDetailsDto(application);
+            }
+        }
+
+        throw new UnauthorizedException("You are not authorized to view this application.");
     }
 
     @Override
@@ -159,6 +174,17 @@ public class JobApplicationServiceImpl implements JobApplicationService {
                 ))
                 .collect(Collectors.toList());
 
+        User candidate = application.getCandidate();
+        CandidateProfileDto candidateProfileDto = new CandidateProfileDto(
+                candidate.getId(),
+                candidate.getFirstName(),
+                candidate.getLastName(),
+                candidate.getEmail(),
+                candidate.getProfileImageUrl(),
+                candidate.getSummary(),
+                candidate.getProfile()
+        );
+
         return new ApplicationDetailsDto(
                 application.getId(),
                 application.getApplicationDate(),
@@ -182,6 +208,7 @@ public class JobApplicationServiceImpl implements JobApplicationService {
                         application.getJobPost().getCreatedAt(),
                         application.getJobPost().getUpdatedAt()
                 ),
+                candidateProfileDto,
                 communicationHistory
         );
     }

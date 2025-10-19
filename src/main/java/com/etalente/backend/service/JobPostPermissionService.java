@@ -80,7 +80,7 @@ public class JobPostPermissionService {
     /**
      * Check if user belongs to the same organization as the job post
      */
-    private boolean belongsToSameOrganization(User user, JobPost jobPost) {
+    public boolean belongsToSameOrganization(User user, JobPost jobPost) {
         if (user.getOrganization() == null || jobPost.getOrganization() == null) {
             return false;
         }

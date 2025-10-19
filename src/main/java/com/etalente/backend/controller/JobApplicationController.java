@@ -36,7 +36,7 @@ public class JobApplicationController {
     }
 
     @GetMapping("/applications/{id}")
-    @PreAuthorize("hasRole('CANDIDATE')")
+    @PreAuthorize("hasAnyRole('CANDIDATE', 'HIRING_MANAGER', 'RECRUITER')")
     public ApplicationDetailsDto getApplicationDetails(@PathVariable UUID id) {
         return jobApplicationService.getApplicationDetails(id);
     }
