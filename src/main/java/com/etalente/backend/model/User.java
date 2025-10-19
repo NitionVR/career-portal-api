@@ -1,6 +1,9 @@
 package com.etalente.backend.model;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import io.hypersistence.utils.hibernate.type.json.JsonType;
 import jakarta.persistence.*;
+import org.hibernate.annotations.Type;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -40,6 +43,10 @@ public class User {
 
     @Column(name = "profile_image_url")
     private String profileImageUrl;
+
+    @Type(JsonType.class)
+    @Column(columnDefinition = "jsonb")
+    private JsonNode profile;
 
     // Hiring Manager-specific fields
     private String companyName;
@@ -173,6 +180,14 @@ public class User {
 
     public void setProfileImageUrl(String profileImageUrl) {
         this.profileImageUrl = profileImageUrl;
+    }
+
+    public JsonNode getProfile() {
+        return profile;
+    }
+
+    public void setProfile(JsonNode profile) {
+        this.profile = profile;
     }
 
     public String getCompanyName() {
