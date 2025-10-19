@@ -3,6 +3,7 @@ package com.etalente.backend.service.impl;
 import com.etalente.backend.dto.*;
 import com.etalente.backend.exception.BadRequestException;
 import com.etalente.backend.exception.ResourceNotFoundException;
+import com.etalente.backend.exception.UnauthorizedException;
 import com.etalente.backend.model.*;
 import com.etalente.backend.repository.JobApplicationRepository;
 import com.etalente.backend.repository.JobApplicationSpecification;
@@ -10,6 +11,7 @@ import com.etalente.backend.repository.JobPostRepository;
 import com.etalente.backend.security.OrganizationContext;
 import com.etalente.backend.service.JobApplicationService;
 import com.etalente.backend.integration.novu.NovuWorkflowService;
+import com.etalente.backend.service.JobPostPermissionService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -32,17 +34,20 @@ public class JobApplicationServiceImpl implements JobApplicationService {
     private final OrganizationContext organizationContext;
     private final JobApplicationAuditRepository jobApplicationAuditRepository;
     private final NovuWorkflowService novuWorkflowService;
+    private final JobPostPermissionService permissionService;
 
     public JobApplicationServiceImpl(JobApplicationRepository jobApplicationRepository,
                                      JobPostRepository jobPostRepository,
                                      OrganizationContext organizationContext,
                                      JobApplicationAuditRepository jobApplicationAuditRepository,
-                                     NovuWorkflowService novuWorkflowService) {
+                                     NovuWorkflowService novuWorkflowService,
+                                     JobPostPermissionService permissionService) {
         this.jobApplicationRepository = jobApplicationRepository;
         this.jobPostRepository = jobPostRepository;
         this.organizationContext = organizationContext;
         this.jobApplicationAuditRepository = jobApplicationAuditRepository;
         this.novuWorkflowService = novuWorkflowService;
+        this.permissionService = permissionService;
     }
 
     @Override
@@ -179,5 +184,40 @@ public class JobApplicationServiceImpl implements JobApplicationService {
                 ),
                 communicationHistory
         );
+    }
+
+    @Override
+    public Page<EmployerApplicationSummaryDto> getApplicationsForJob(UUID jobId, UUID userId, Pageable pageable) {
+        User user = organizationContext.getCurrentUser();
+        JobPost jobPost = jobPostRepository.findById(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException("Job post not found"));
+
+        // Use permission service for consistent authorization
+        if (!permissionService.canView(user, jobPost)) {
+            throw new UnauthorizedException("You are not authorized to view applications for this job post.");
+        }
+
+        // Additional check: must be hiring manager or recruiter
+        if (user.getRole() != Role.HIRING_MANAGER && user.getRole() != Role.RECRUITER) {
+            throw new UnauthorizedException("Only hiring managers and recruiters can view applications.");
+        }
+
+        Page<JobApplication> applications = jobApplicationRepository.findByJobPostId(jobId, pageable);
+
+        return applications.map(application -> {
+            User candidate = application.getCandidate();
+            EmployerApplicationSummaryDto.CandidateDto candidateDto = new EmployerApplicationSummaryDto.CandidateDto(
+                    candidate.getId(),
+                    candidate.getFirstName() + " " + candidate.getLastName(),
+                    candidate.getEmail(),
+                    candidate.getProfileImageUrl()
+            );
+            return new EmployerApplicationSummaryDto(
+                    application.getId(),
+                    application.getApplicationDate(),
+                    application.getStatus().name(),
+                    candidateDto
+            );
+        });
     }
 }
