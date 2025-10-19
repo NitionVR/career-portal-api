@@ -23,6 +23,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.springframework.transaction.annotation.Transactional;
+
+@Transactional
 public class JobApplicationControllerTest extends BaseIntegrationTest {
 
     @MockBean
@@ -42,6 +45,9 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
 
     @Autowired
     private TestHelper testHelper;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @Test
     void getMyApplications_shouldReturn403_whenNotAuthenticated() throws Exception {
@@ -267,5 +273,59 @@ public class JobApplicationControllerTest extends BaseIntegrationTest {
                         .header("Authorization", "Bearer " + candidateToken))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", is("Application can only be withdrawn if its status is APPLIED or UNDER_REVIEW.")));
+    }
+
+    @Test
+    void getApplicationsForJob_shouldReturnApplications_whenOwner() throws Exception {
+        // Given
+        User hiringManager = testHelper.createUser("hm-owner@test.com", Role.HIRING_MANAGER);
+        hiringManager = userRepository.findById(hiringManager.getId()).orElseThrow();
+        String hiringManagerJwt = testHelper.generateJwtForUser(hiringManager);
+        JobPost jobPost = new JobPost();
+        jobPost.setTitle("Test Job Post");
+        jobPost.setStatus(JobPostStatus.OPEN);
+        jobPost.setCreatedBy(hiringManager);
+        jobPost.setOrganization(hiringManager.getOrganization()); // Add this too!
+        jobPost = jobPostRepository.save(jobPost);
+
+        User candidate1 = testHelper.createUser("candidate1@example.com", Role.CANDIDATE);
+        candidate1 = userRepository.findById(candidate1.getId()).orElseThrow();
+        User candidate2 = testHelper.createUser("candidate2@example.com", Role.CANDIDATE);
+        candidate2 = userRepository.findById(candidate2.getId()).orElseThrow();
+
+        JobApplication app1 = new JobApplication();
+        app1.setJobPost(jobPost);
+        app1.setCandidate(candidate1);
+        app1.setStatus(JobApplicationStatus.APPLIED);
+        jobApplicationRepository.save(app1);
+
+        JobApplication app2 = new JobApplication();
+        app2.setJobPost(jobPost);
+        app2.setCandidate(candidate2);
+        app2.setStatus(JobApplicationStatus.APPLIED);
+        jobApplicationRepository.save(app2); // ADD THIS LINE!
+
+        // When & Then
+        mockMvc.perform(get("/api/job-posts/{jobId}/applications", jobPost.getId())
+                        .header("Authorization", "Bearer " + hiringManagerJwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2));
+    }
+
+    @Test
+    void getApplicationsForJob_shouldReturnForbidden_whenNotOwner() throws Exception {
+        // Given
+        User owner = testHelper.createUser("owner@example.com", Role.HIRING_MANAGER);
+        JobPost jobPost = new JobPost();
+        jobPost.setCreatedBy(owner);
+        jobPostRepository.save(jobPost);
+
+        User otherHiringManager = testHelper.createUser("otherhm@example.com", Role.HIRING_MANAGER);
+        String otherJwt = testHelper.generateJwtForUser(otherHiringManager);
+
+        // When & Then
+        mockMvc.perform(get("/api/job-posts/{jobId}/applications", jobPost.getId())
+                        .header("Authorization", "Bearer " + otherJwt))
+                .andExpect(status().isForbidden());
     }
 }
