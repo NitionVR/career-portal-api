@@ -10,6 +10,8 @@ import com.etalente.backend.repository.UserRepository;
 import com.etalente.backend.security.JwtService;
 import com.etalente.backend.service.ProfileService;
 import com.etalente.backend.service.S3Service;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -27,11 +29,13 @@ public class ProfileServiceImpl implements ProfileService {
     private final UserRepository userRepository;
     private final JwtService jwtService;
     private final S3Service s3Service;
+    private final ObjectMapper objectMapper;
 
-    public ProfileServiceImpl(UserRepository userRepository, JwtService jwtService, S3Service s3Service) {
+    public ProfileServiceImpl(UserRepository userRepository, JwtService jwtService, S3Service s3Service, ObjectMapper objectMapper) {
         this.userRepository = userRepository;
         this.jwtService = jwtService;
         this.s3Service = s3Service;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -137,10 +141,30 @@ public class ProfileServiceImpl implements ProfileService {
     }
 
     @Override
-    public UserDto getUserProfile(String userId) {
-        User user = userRepository.findById(UUID.fromString(userId))
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-        return UserDto.fromEntity(user);
+        public UserDto getUserProfile(String userId) {
+            User user = userRepository.findById(UUID.fromString(userId))
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    
+            return UserDto.fromEntity(user);
+        }
+    
+        @Override
+        public JsonNode getFullProfile(UUID userId) {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+            if (user.getProfile() == null) {
+                return objectMapper.createObjectNode();
+            }
+            return user.getProfile();
+        }
+    
+        @Override
+        public JsonNode updateFullProfile(UUID userId, JsonNode profile) {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+            user.setProfile(profile);
+            userRepository.save(user);
+            return user.getProfile();
+        }
     }
-}
+    
