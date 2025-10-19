@@ -4,6 +4,7 @@ import com.etalente.backend.dto.*;
 import com.etalente.backend.security.OrganizationContext;
 import com.etalente.backend.service.ProfileService;
 import com.etalente.backend.service.S3Service;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -65,10 +66,32 @@ public class ProfileController {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/me")
-    public ResponseEntity<UserDto> getCurrentUserProfile() {
-        String userId = organizationContext.getCurrentUser().getId().toString();
-        UserDto user = profileService.getUserProfile(userId);
-        return ResponseEntity.ok(user);
+        @GetMapping("/me")
+
+        public ResponseEntity<JsonNode> getCurrentUserProfile() {
+
+            UUID userId = organizationContext.getCurrentUser().getId();
+
+            JsonNode profile = profileService.getFullProfile(userId);
+
+            return ResponseEntity.ok(profile);
+
+        }
+
+    
+
+        @PutMapping("/me")
+
+        public ResponseEntity<JsonNode> updateFullProfile(@RequestBody JsonNode profile) {
+
+            UUID userId = organizationContext.getCurrentUser().getId();
+
+            JsonNode updatedProfile = profileService.updateFullProfile(userId, profile);
+
+            return ResponseEntity.ok(updatedProfile);
+
+        }
+
     }
-}
+
+    
