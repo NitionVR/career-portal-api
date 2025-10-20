@@ -247,6 +247,8 @@ deploy_infrastructure:
           InvitationLinkUrl="dummy-value"
           SpringMailUsername="dummy-user"
           SpringMailPassword="dummy-password"
+          AwsAccessKeyId="dummy-access-key"
+          AwsSecretAccessKey="dummy-secret-key"
         --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
@@ -279,6 +281,8 @@ deploy_app:
           InvitationExpiryHours="72"
           SpringMailUsername=$SPRING_MAIL_USERNAME
           SpringMailPassword=$SPRING_MAIL_PASSWORD
+          AwsAccessKeyId=$AWS_ACCESS_KEY_ID
+          AwsSecretAccessKey=$AWS_SECRET_ACCESS_KEY
         --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
