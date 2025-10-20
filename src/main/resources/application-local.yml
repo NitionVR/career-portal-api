@@ -66,3 +66,8 @@ upload:
     - image/jpeg
     - image/png
   presigned-url-expiration-minutes: 15
+
+app:
+  job:
+    seeding:
+      enabled: true
