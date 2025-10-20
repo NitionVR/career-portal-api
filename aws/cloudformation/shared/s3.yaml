@@ -29,8 +29,6 @@ Resources:
             AllowedOrigins:
               - "http://localhost:4200"
               - "http://etalente-alb-665506398.af-south-1.elb.amazonaws.com"
-            ExposeHeaders:
-              - "ETag"
             MaxAge: 3000
       PublicAccessBlockConfiguration:
         BlockPublicAcls: false
