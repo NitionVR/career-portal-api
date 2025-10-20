@@ -35,6 +35,14 @@ Parameters:
   InvitationExpiryHours:
     Type: String
     Description: The expiry time in hours for invitations.
+  NovuApiKey:
+    Type: String
+    NoEcho: true
+    Description: The Novu API key for notifications
+  CorsAllowedOrigins:
+    Type: String
+    Default: "https://yourdamin.com"
+    Description: Comma-separated list of allowed CORS origins
 
 Conditions:
   ShouldAttachLoadBalancer: !Equals [!Ref AttachLoadBalancer, "true"]
@@ -145,6 +153,12 @@ Resources:
               Value: !Ref InvitationLinkUrl
             - Name: SPRING_PROFILES_ACTIVE
               Value: production
+            - Name: AWS_REGION
+              Value: !Ref "AWS::Region"
+            - Name: NOVU_API_KEY
+              Value: !Ref NovuApiKey
+            - Name: CORS_ALLOWED_ORIGINS
+              Value: !Ref CorsAllowedOrigins
           LogConfiguration:
             LogDriver: awslogs
             Options:
