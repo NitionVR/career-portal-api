@@ -1,0 +1,6 @@
+# AWS SES configuration
+spring:
+  cloud:
+    aws:
+      ses:
+        from: ${SPRING_MAIL_FROM:no-reply@etalente.com}
