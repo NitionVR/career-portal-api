@@ -262,6 +262,8 @@ deploy_app:
   stage: deploy_app
   needs:
     - job: acceptance_tests_e2e
+    - job: deploy_infrastructure
+      optional: true
   script:
     - echo "Updating ECS service via CloudFormation to force a new deployment..."
     - aws cloudformation deploy  
