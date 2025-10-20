@@ -27,7 +27,10 @@ Resources:
               - POST
               - DELETE
             AllowedOrigins:
-              - '*' # In production, restrict this to your actual frontend domain
+              - "http://localhost:4200"
+              - "http://etalente-alb-665506398.af-south-1.elb.amazonaws.com"
+            ExposeHeaders:
+              - "ETag"
             MaxAge: 3000
       PublicAccessBlockConfiguration:
         BlockPublicAcls: false
