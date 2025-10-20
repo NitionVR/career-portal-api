@@ -10,7 +10,7 @@ import software.amazon.awssdk.services.ses.SesClient;
 import software.amazon.awssdk.services.ses.model.*;
 
 @Service
-@Profile("!local & !dev") // Active when not in local or dev profile
+@Profile("ses") // Active when not in local or dev profile
 public class SesEmailSender implements EmailSender {
 
     private static final Logger logger = LoggerFactory.getLogger(SesEmailSender.class);

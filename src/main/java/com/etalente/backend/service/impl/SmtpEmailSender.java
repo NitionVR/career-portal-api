@@ -11,7 +11,7 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 @Service
-@Profile({"local", "dev", "production", "google-smtp-local", "maildev"})
+@Profile({"local", "dev", "smtp", "maildev", "google-smtp"})
 public class SmtpEmailSender implements EmailSender {
 
     private static final Logger logger = LoggerFactory.getLogger(SmtpEmailSender.class);
