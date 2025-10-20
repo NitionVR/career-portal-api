@@ -14,7 +14,15 @@ This document lists all environment variables that need to be set for the Etalen
     *   _Example (Local):_ `password`
     *   _Example (AWS RDS):_ Your secure master password
 
-## 2. JWT (JSON Web Token) Configuration
+## 2. SMTP (Simple Mail Transfer Protocol) Configuration (for Google SMTP)
+
+*   **`SPRING_MAIL_HOST`**: SMTP server host. For Gmail, this is `smtp.gmail.com`.
+*   **`SPRING_MAIL_PORT`**: SMTP server port. For Gmail, this is typically `587` (for TLS) or `465` (for SSL).
+*   **`SPRING_MAIL_USERNAME`**: Your full Gmail address (e.g., `your-email@gmail.com`).
+*   **`SPRING_MAIL_PASSWORD`**: Your Google App Password (recommended) or Gmail password (if less secure app access is enabled). **Critical for security.**
+*   **`SPRING_MAIL_FROM`**: The email address from which emails will be sent (e.g., `no-reply@your-domain.com`).
+
+## 3. JWT (JSON Web Token) Configuration
 
 *   **`JWT_SECRET`**: A strong, unique secret key used for signing and verifying JWTs. **Critical for security.**
     *   _Example:_ `your_super_secret_jwt_key_that_is_at_least_32_characters_long`
