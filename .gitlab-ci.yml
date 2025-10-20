@@ -245,6 +245,8 @@ deploy_infrastructure:
           CorsAllowedOrigins=$CORS_ALLOWED_ORIGINS
           InvitationExpiryHours="72"
           InvitationLinkUrl="dummy-value"
+          SpringMailUsername="dummy-user"
+          SpringMailPassword="dummy-password"
         --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
@@ -275,6 +277,8 @@ deploy_app:
           NovuApiKey=$NOVU_API_KEY
           CorsAllowedOrigins=$CORS_ALLOWED_ORIGINS
           InvitationExpiryHours="72"
+          SpringMailUsername=$SPRING_MAIL_USERNAME
+          SpringMailPassword=$SPRING_MAIL_PASSWORD
         --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
