@@ -239,7 +239,11 @@ deploy_infrastructure:
           DesiredCount=0
           AttachLoadBalancer=false
           DBMasterUserPassword=$DB_MASTER_PASSWORD
-          JwtSecret=$JWT_SECRET MagicLinkUrl="dummy-value"
+          JwtSecret=$JWT_SECRET
+          MagicLinkUrl=$MAGIC_LINK_URL
+          NovuApiKey=$NOVU_API_KEY
+          CorsAllowedOrigins=$CORS_ALLOWED_ORIGINS
+          InvitationExpiryHours="72"
           InvitationLinkUrl="dummy-value"
         --region $AWS_REGION
   rules:
@@ -270,6 +274,7 @@ deploy_app:
           InvitationLinkUrl=$INVITATION_LINK_URL
           NovuApiKey=$NOVU_API_KEY
           CorsAllowedOrigins=$CORS_ALLOWED_ORIGINS
+          InvitationExpiryHours="72"
         --region $AWS_REGION
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'

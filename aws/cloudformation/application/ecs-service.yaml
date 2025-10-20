@@ -110,6 +110,7 @@ Resources:
       Roles:
         - !Ref EcsTaskRole
 
+  # IAM Policy for S3 Uploads - FIXED INDENTATION
   S3UploadsPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -122,9 +123,11 @@ Resources:
               - s3:PutObject
               - s3:GetObject
               - s3:DeleteObject
-            Resource: !Sub
-              - arn:aws:s3:::${BucketName}/*
-              - BucketName: !ImportValue ${ProjectName}-UploadsS3BucketName
+            Resource:
+              Fn::Sub:
+                - "arn:aws:s3:::${BucketName}/*"
+                - BucketName:
+                    Fn::ImportValue: !Sub "${ProjectName}-UploadsS3BucketName"
       Roles:
         - !Ref EcsTaskRole
 
@@ -235,3 +238,8 @@ Outputs:
     Value: !Ref BackendEcsService
     Export:
       Name: !Sub ${ProjectName}-BackendEcsServiceArn
+  EcsTaskExecutionRoleArn:
+    Description: The ARN of the ECS Task Execution Role
+    Value: !GetAtt EcsTaskExecutionRole.Arn
+    Export:
+      Name: !Sub ${ProjectName}-EcsTaskExecutionRoleArn
