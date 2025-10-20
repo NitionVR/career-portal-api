@@ -34,8 +34,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+
 @Component
-@Profile("local") // Only run this seeder in the 'local' profile
+@Profile({"local", "prod"}) // Run this seeder in 'local' or 'prod' profile
 public class JobPostSeeder implements CommandLineRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(JobPostSeeder.class);
@@ -46,6 +49,10 @@ public class JobPostSeeder implements CommandLineRunner {
     private final JobPostRepository jobPostRepository;
     private final ObjectMapper objectMapper;
     private final ResourcePatternResolver resourcePatternResolver;
+    private final Environment environment;
+
+    @Value("${enable.job.seeding:false}") // Control seeding in prod via environment variable
+    private boolean enableJobSeeding;
 
     // Cache for created users to avoid re-creating for the same company
     private final Map<String, User> companyHiringManagers = new HashMap<>();
@@ -54,21 +61,32 @@ public class JobPostSeeder implements CommandLineRunner {
                          UserRepository userRepository,
                          OrganizationRepository organizationRepository,
                          JobPostRepository jobPostRepository,
-                         ObjectMapper objectMapper) {
+                         ObjectMapper objectMapper,
+                         Environment environment) {
         this.jobPostService = jobPostService;
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
         this.jobPostRepository = jobPostRepository;
         this.objectMapper = objectMapper;
         this.resourcePatternResolver = new PathMatchingResourcePatternResolver();
+        this.environment = environment;
     }
 
     @Override
     public void run(String... args) {
         logger.info("Starting JobPostSeeder...");
         try {
-            seedJobPosts();
-            logger.info("JobPostSeeder finished successfully.");
+            boolean isLocalProfile = environment.acceptsProfiles(org.springframework.core.env.Profiles.of("local"));
+            boolean isProdProfile = environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod"));
+
+            if (isLocalProfile || (isProdProfile && enableJobSeeding)) {
+                seedJobPosts();
+                logger.info("JobPostSeeder finished successfully.");
+            } else if (isProdProfile && !enableJobSeeding) {
+                logger.info("JobPostSeeder skipped in 'prod' profile as 'enable.job.seeding' is false.");
+            } else {
+                logger.info("JobPostSeeder skipped (neither 'local' nor 'prod' profile active, or 'prod' active without seeding enabled).");
+            }
         } catch (Exception e) {
             logger.error("JobPostSeeder failed to complete: {}", e.getMessage(), e);
         }
