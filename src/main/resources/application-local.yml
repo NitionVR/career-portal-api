@@ -20,6 +20,7 @@ spring:
       mail.smtp.auth: false
       mail.smtp.starttls.enable: false
       mail.debug: true
+    from: no-reply@etalente.com
   autoconfigure:
     exclude:
       - io.awspring.cloud.autoconfigure.ses.SesAutoConfiguration

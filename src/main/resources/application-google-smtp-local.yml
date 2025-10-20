@@ -1,0 +1,16 @@
+# Configuration for local development with Google SMTP
+spring:
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME}
+    password: ${SPRING_MAIL_PASSWORD}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.smtp.ssl.trust: smtp.gmail.com
+    from: ${SPRING_MAIL_FROM:your-gmail-address@gmail.com}
+  autoconfigure:
+    exclude:
+      - io.awspring.cloud.autoconfigure.ses.SesAutoConfiguration # Exclude SES auto-config when using SMTP

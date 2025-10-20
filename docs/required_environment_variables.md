@@ -67,6 +67,16 @@ This document lists all environment variables that need to be set for the Etalen
 *   **`INVITATION_EXPIRY_HOURS`**: (Optional) Expiry time for invitations in hours. Defaults to 72 hours.
 *   **`OTT_EXPIRATION_MINUTES`**: (Optional) Expiration time for One-Time Tokens in minutes. Defaults to 15 minutes.
 
+## 9. Local Profiles for Email Sending
+
+To easily switch between Maildev and Google SMTP for local testing:
+
+*   **Maildev (default local profile):** No special profile needed. Just run the application with the `local` profile (e.g., `spring.profiles.active=local`).
+*   **Google SMTP (`google-smtp-local` profile):** To use Google SMTP for local testing, activate the `google-smtp-local` profile (e.g., `spring.profiles.active=google-smtp-local`). When this profile is active, you will need to set the following environment variables:
+    *   `SPRING_MAIL_USERNAME`
+    *   `SPRING_MAIL_PASSWORD`
+    *   `SPRING_MAIL_FROM`
+
 ---
 
 **Note:** When deploying to AWS ECS, these environment variables are typically passed to the ECS tasks via the Task Definition. For sensitive variables like `DB_MASTER_PASSWORD`, `JWT_SECRET`, and `NOVU_API_KEY`, it is highly recommended to use AWS Secrets Manager and reference them in your CloudFormation templates or ECS Task Definitions.
