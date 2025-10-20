@@ -247,6 +247,7 @@ deploy_infrastructure:
           InvitationLinkUrl="dummy-value"
           SpringMailUsername="dummy-user"
           SpringMailPassword="dummy-password"
+          SpringMailFrom="dummy-email"
           AwsAccessKeyId="dummy-access-key"
           AwsSecretAccessKey="dummy-secret-key"
         --region $AWS_REGION
@@ -281,6 +282,7 @@ deploy_app:
           InvitationExpiryHours="72"
           SpringMailUsername=$SPRING_MAIL_USERNAME
           SpringMailPassword=$SPRING_MAIL_PASSWORD
+          SpringMailFrom=$SPRING_MAIL_FROM
           AwsAccessKeyId=$AWS_ACCESS_KEY_ID
           AwsSecretAccessKey=$AWS_SECRET_ACCESS_KEY
         --region $AWS_REGION

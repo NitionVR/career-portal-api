@@ -63,6 +63,11 @@ Parameters:
     NoEcho: true
     Description: The password for the SMTP server
 
+  SpringMailFrom:
+    Type: String
+    NoEcho: true
+    Description: The from email for the SMTP server
+
   AwsAccessKeyId:
     Type: String
     NoEcho: true
@@ -200,6 +205,8 @@ Resources:
               Value: !Ref SpringMailUsername
             - Name: SPRING_MAIL_PASSWORD
               Value: !Ref SpringMailPassword
+            - Name: SPRING_MAIL_FROM
+              Value: !Ref SpringMailFrom
             - Name: AWS_ACCESS_KEY_ID
               Value: !Ref AwsAccessKeyId
             - Name: AWS_SECRET_ACCESS_KEY
