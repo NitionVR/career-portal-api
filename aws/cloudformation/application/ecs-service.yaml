@@ -6,42 +6,56 @@ Parameters:
     Type: String
     Default: etalente
     Description: Name of the project
+
   BackendImageUri:
     Type: String
     Description: ECR URI for the backend Docker image
+
   DesiredCount:
     Type: Number
     Default: 1
     Description: The desired number of tasks for the service.
+
   DBMasterUserPassword:
     Type: String
     NoEcho: true
     Description: Master password for the database
+
   JwtSecret:
     Type: String
     NoEcho: true
     Description: The secret key for signing JWTs
+
   AttachLoadBalancer:
     Type: String
     Default: "true"
     AllowedValues: ["true", "false"]
     Description: Whether to attach the service to the Application Load Balancer.
+
   MagicLinkUrl:
     Type: String
+    Default: "http://localhost:4200/auth/verify"
     Description: The base URL for magic links.
+
   InvitationLinkUrl:
     Type: String
+    Default: "http://localhost:4200/invitations/accept"
     Description: The base URL for invitation links.
+
   InvitationExpiryHours:
     Type: String
+    Default: "72"
     Description: The expiry time in hours for invitations.
+
   NovuApiKey:
     Type: String
     NoEcho: true
+    Default: "dummy-novu-key"
     Description: The Novu API key for notifications
+
   CorsAllowedOrigins:
     Type: String
-    Default: "https://yourdamin.com"
+    Default: "http://localhost:4200"
     Description: Comma-separated list of allowed CORS origins
 
 Conditions:
