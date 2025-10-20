@@ -11,7 +11,7 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 @Service
-@Profile({"local", "dev", "production", "google-smtp-local"})
+@Profile({"local", "dev", "production", "google-smtp-local", "maildev"})
 public class SmtpEmailSender implements EmailSender {
 
     private static final Logger logger = LoggerFactory.getLogger(SmtpEmailSender.class);
@@ -19,24 +19,47 @@ public class SmtpEmailSender implements EmailSender {
     private final JavaMailSender javaMailSender;
     private final String fromEmail;
 
-    public SmtpEmailSender(JavaMailSender javaMailSender, @Value("${spring.mail.from}") String fromEmail) {
+    public SmtpEmailSender(JavaMailSender javaMailSender,
+                          @Value("${spring.mail.from}") String fromEmail,
+                          @Value("${spring.mail.host}") String host,
+                          @Value("${spring.mail.port}") int port,
+                          @Value("${spring.mail.username}") String username) {
         this.javaMailSender = javaMailSender;
         this.fromEmail = fromEmail;
+        logger.info("========================================");
+        logger.info("SmtpEmailSender initialized with:");
+        logger.info("Host: {}", host);
+        logger.info("Port: {}", port);
+        logger.info("Username: {}", username);
+        logger.info("From Email: {}", fromEmail);
+        logger.info("========================================");
     }
 
     @Override
     public void send(String to, String subject, String htmlBody) {
+        logger.info("========================================");
+        logger.info("Attempting to send email:");
+        logger.info("To: {}", to);
+        logger.info("Subject: {}", subject);
+        logger.info("From: {}", fromEmail);
+        logger.info("========================================");
+
         try {
             MimeMessage message = javaMailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setFrom(fromEmail); // This can be configured
+            helper.setFrom(fromEmail);
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(htmlBody, true);
+
+            logger.info("Sending email via JavaMailSender...");
             javaMailSender.send(message);
-            logger.info("SMTP Email sent successfully to {}", to);
+            logger.info("✅ SMTP Email sent successfully to {}", to);
+            logger.info("========================================");
         } catch (Exception e) {
-            logger.error("Failed to send SMTP email to {}", to, e);
+            logger.error("❌ Failed to send SMTP email to {}", to);
+            logger.error("Error details:", e);
+            logger.error("========================================");
             throw new RuntimeException("Failed to send SMTP email", e);
         }
     }

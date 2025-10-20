@@ -13,14 +13,6 @@ spring:
     show-sql: true
   flyway:
     enabled: true
-  mail:
-    host: localhost
-    port: 1025
-    properties:
-      mail.smtp.auth: false
-      mail.smtp.starttls.enable: false
-      mail.debug: true
-    from: no-reply@etalente.com
   autoconfigure:
     exclude:
       - io.awspring.cloud.autoconfigure.ses.SesAutoConfiguration
@@ -43,7 +35,7 @@ logging:
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
 
 jwt:
-  secret-key: YW5vdGhlcmxvbmdzZWNyZXRrZXlmb3Jsb2NhbGRldjQ1Ng==
+  secret-key: ${JWT_SECRET:YW5vdGhlcmxvbmdzZWNyZXRrZXlmb3Jsb2NhbGRldjQ1Ng==} # Use placeholder with default
   expiration-in-ms: 3600000 # 1 hour
 
 magic-link:

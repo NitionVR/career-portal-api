@@ -71,8 +71,8 @@ This document lists all environment variables that need to be set for the Etalen
 
 To easily switch between Maildev and Google SMTP for local testing:
 
-*   **Maildev (default local profile):** No special profile needed. Just run the application with the `local` profile (e.g., `spring.profiles.active=local`).
-*   **Google SMTP (`google-smtp-local` profile):** To use Google SMTP for local testing, activate the `google-smtp-local` profile (e.g., `spring.profiles.active=google-smtp-local`). When this profile is active, you will need to set the following environment variables:
+*   **Maildev (`maildev` profile):** To use Maildev for local testing, activate the `local,maildev` profiles (e.g., `spring.profiles.active=local,maildev`).
+*   **Google SMTP (`google-smtp` profile):** To use Google SMTP for local testing, activate the `local,google-smtp` profiles (e.g., `spring.profiles.active=local,google-smtp`). When this profile is active, you will need to set the following environment variables:
     *   `SPRING_MAIL_USERNAME`
     *   `SPRING_MAIL_PASSWORD`
     *   `SPRING_MAIL_FROM`

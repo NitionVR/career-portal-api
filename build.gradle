@@ -103,3 +103,8 @@ tasks.register('acceptanceTest', Test) {
 tasks.named('check') {
 	dependsOn unitTest, integrationTest, acceptanceTest
 }
+
+tasks.named('bootRun') {
+    systemProperties = System.properties
+}
+
