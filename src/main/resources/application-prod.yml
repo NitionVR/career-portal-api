@@ -15,28 +15,19 @@ spring:
     properties:
       hibernate:
         generate_statistics: false
+  config:
+    import: optional:application-smtp.yml
   mail:
-    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
-    port: ${SPRING_MAIL_PORT:587}
-    username: ${SPRING_MAIL_USERNAME}
-    password: ${SPRING_MAIL_PASSWORD}
-    properties:
-      mail.smtp.auth: true
-      mail.smtp.starttls.enable: true
-      mail.smtp.starttls.required: true
-      mail.smtp.ssl.trust: smtp.gmail.com
     from: ${SPRING_MAIL_FROM:no-reply@etalente.com}
   autoconfigure:
     exclude:
       - io.awspring.cloud.autoconfigure.ses.SesAutoConfiguration # Exclude SES auto-config when using SMTP
-
 server:
   port: ${SERVER_PORT:8080}
   compression:
     enabled: true
     mime-types: text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json
     min-response-size: 1024
-
 logging:
   pattern:
     exception-conversion-word: '%xEx{short}'
@@ -44,28 +35,22 @@ logging:
     root: WARN
     com.etalente.backend: INFO
     org.springframework.web: WARN
-
 jwt:
   secret-key: ${JWT_SECRET}
   expiration-in-ms: ${JWT_EXPIRATION_MS:3600000} # 1 hour
-
 magic-link:
   url: ${MAGIC_LINK_URL}
-
 invitation-link-url: ${INVITATION_LINK_URL}
 invitation-expiry-hours: ${INVITATION_EXPIRY_HOURS:72}
 cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:https://etalente.com,https://www.etalente.com}
 ott:
   expiration-minutes: ${OTT_EXPIRATION_MINUTES:15} # Default for prod
-
 novu:
   api-key: ${NOVU_API_KEY}
   backend-url: ${NOVU_BACKEND_URL:https://api.novu.co/v1/}
-
 aws:
   s3:
     region: ${AWS_REGION} # Rely on IAM roles for credentials
-
 upload:
   max-file-size: ${UPLOAD_MAX_FILE_SIZE:5242880}  # 5MB
   allowed-content-types:
