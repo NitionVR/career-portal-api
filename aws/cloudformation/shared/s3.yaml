@@ -12,7 +12,10 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub ${ProjectName}-uploads-${AWS::AccountId}
-      AccessControl: PublicRead
+      # REMOVED: AccessControl: PublicRead (deprecated)
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
       CorsConfiguration:
         CorsRules:
           - AllowedHeaders:
@@ -21,6 +24,8 @@ Resources:
               - PUT
               - GET
               - HEAD
+              - POST
+              - DELETE
             AllowedOrigins:
               - '*' # In production, restrict this to your actual frontend domain
             MaxAge: 3000
@@ -53,3 +58,8 @@ Outputs:
     Value: !Ref UploadsS3Bucket
     Export:
       Name: !Sub ${ProjectName}-UploadsS3BucketName
+  UploadsS3BucketArn:
+    Description: The ARN of the S3 bucket for uploads
+    Value: !GetAtt UploadsS3Bucket.Arn
+    Export:
+      Name: !Sub ${ProjectName}-UploadsS3BucketArn
