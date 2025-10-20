@@ -20,22 +20,17 @@ public class SmtpEmailSender implements EmailSender {
     private final String fromEmail;
 
     public SmtpEmailSender(JavaMailSender javaMailSender,
-                          @Value("${spring.mail.from}") String fromEmail,
-                          @Value("${spring.mail.host}") String host,
-                          @Value("${spring.mail.port}") int port,
-                          @Value("${spring.mail.username}") String username) {
+                          @Value("${spring.mail.from}") String fromEmail) {
         this.javaMailSender = javaMailSender;
         this.fromEmail = fromEmail;
         logger.info("========================================");
         logger.info("SmtpEmailSender initialized with:");
-        logger.info("Host: {}", host);
-        logger.info("Port: {}", port);
-        logger.info("Username: {}", username);
         logger.info("From Email: {}", fromEmail);
         logger.info("========================================");
     }
 
     @Override
+    @org.springframework.scheduling.annotation.Async
     public void send(String to, String subject, String htmlBody) {
         logger.info("========================================");
         logger.info("Attempting to send email:");

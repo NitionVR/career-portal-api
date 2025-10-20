@@ -44,7 +44,10 @@ public class MailConfig {
         props.put("mail.smtp.starttls.enable", "true");
         props.put("mail.smtp.starttls.required", "true");
         props.put("mail.smtp.ssl.trust", "smtp.gmail.com");
-        props.put("mail.debug", "true");
+        // Connection pooling properties for better performance
+        props.put("mail.smtp.connectiontimeout", "5000"); // 5 seconds
+        props.put("mail.smtp.timeout", "5000"); // 5 seconds
+        props.put("mail.smtp.writetimeout", "5000"); // 5 seconds
 
         return mailSender;
     }
