@@ -62,6 +62,16 @@ Parameters:
     Type: String
     NoEcho: true
     Description: The password for the SMTP server
+
+  AwsAccessKeyId:
+    Type: String
+    NoEcho: true
+    Description: The AWS Access Key ID for S3 access
+
+  AwsSecretAccessKey:
+    Type: String
+    NoEcho: true
+    Description: The AWS Secret Access Key for S3 access
     
   CorsAllowedOrigins:
     Type: String
@@ -190,6 +200,10 @@ Resources:
               Value: !Ref SpringMailUsername
             - Name: SPRING_MAIL_PASSWORD
               Value: !Ref SpringMailPassword
+            - Name: AWS_ACCESS_KEY_ID
+              Value: !Ref AwsAccessKeyId
+            - Name: AWS_SECRET_ACCESS_KEY
+              Value: !Ref AwsSecretAccessKey
           LogConfiguration:
             LogDriver: awslogs
             Options:
