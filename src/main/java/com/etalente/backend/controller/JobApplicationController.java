@@ -2,6 +2,7 @@ package com.etalente.backend.controller;
 
 import com.etalente.backend.dto.ApplicationDetailsDto;
 import com.etalente.backend.dto.ApplicationSummaryDto;
+import com.etalente.backend.dto.ApplicationTransitionRequest;
 import com.etalente.backend.dto.EmployerApplicationSummaryDto;
 import com.etalente.backend.service.JobApplicationService;
 import org.springframework.data.domain.Page;
@@ -63,5 +64,16 @@ public class JobApplicationController {
             Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
         return jobApplicationService.getApplicationsForJob(jobId, userId, pageable);
+    }
+
+    @PostMapping("/applications/{applicationId}/transition")
+    @PreAuthorize("hasAnyRole('HIRING_MANAGER', 'RECRUITER')")
+    public ResponseEntity<ApplicationDetailsDto> transitionApplicationStatus(
+            @PathVariable UUID applicationId,
+            @RequestBody ApplicationTransitionRequest request,
+            Authentication authentication) {
+        UUID userId = UUID.fromString(authentication.getName());
+        ApplicationDetailsDto updatedApplication = jobApplicationService.transitionApplicationStatus(applicationId, request.targetStatus(), userId);
+        return ResponseEntity.ok(updatedApplication);
     }
 }
