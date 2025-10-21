@@ -128,9 +128,9 @@ public class JobPostSeeder implements CommandLineRunner {
         return hiringManager;
     }
 
-    private User createHiringManager(String companyName, Organization organization) {
+    private User createHiringManager(String companyName, Organization organization, String specificEmail) {
         String normalizedCompanyName = companyName.toLowerCase().replaceAll("[^a-z0-9]", "");
-        String email = "hm-" + normalizedCompanyName + "@example.com";
+        String email = specificEmail != null ? specificEmail : "hm-" + normalizedCompanyName + "@example.com";
         String username = "hm-" + normalizedCompanyName;
 
         // Check if user with this email already exists
@@ -188,7 +188,13 @@ public class JobPostSeeder implements CommandLineRunner {
                         objectMapper.convertValue(jobData.get("skills"), new TypeReference<List<SkillDto>>() {})
                 );
 
-                User hiringManager = getOrCreateHiringManagerAndOrganization(request.company());
+                String companyName = request.company();
+                String specificEmail = null;
+                if ("Enviro365 I.T Solutions".equals(companyName)) {
+                    specificEmail = "maganyaneamos2@gmail.com";
+                }
+
+                User hiringManager = getOrCreateHiringManagerAndOrganization(companyName, specificEmail);
 
                 if (!jobPostRepository.existsByTitleAndCompany(request.title(), request.company())) {
                     logger.info("Attempting to create and publish job post: {}", request.title());
