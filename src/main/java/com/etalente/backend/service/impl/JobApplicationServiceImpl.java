@@ -247,4 +247,41 @@ public class JobApplicationServiceImpl implements JobApplicationService {
             );
         });
     }
+
+    @Override
+    public ApplicationDetailsDto transitionApplicationStatus(UUID applicationId, JobApplicationStatus targetStatus, UUID userId) {
+        User currentUser = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        JobApplication application = jobApplicationRepository.findById(applicationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Job application not found"));
+
+        // Authorization: Only Hiring Managers or Recruiters of the job post's organization can transition status
+        JobPost jobPost = application.getJobPost();
+        if (currentUser.getRole() != Role.HIRING_MANAGER && currentUser.getRole() != Role.RECRUITER) {
+            throw new UnauthorizedException("Only Hiring Managers and Recruiters can transition application status.");
+        }
+        if (!permissionService.belongsToSameOrganization(currentUser, jobPost)) {
+            throw new UnauthorizedException("You are not authorized to transition this application.");
+        }
+
+        // State Transition Validation
+        if (!JobApplicationStateTransition.isValidTransition(application.getStatus(), targetStatus)) {
+            throw new BadRequestException(String.format("Invalid application status transition from %s to %s",
+                    application.getStatus(), targetStatus));
+        }
+
+        // Update status
+        application.setStatus(targetStatus);
+        JobApplication updatedApplication = jobApplicationRepository.save(application);
+
+        // Audit the transition
+        String auditMessage = String.format("Application status transitioned from %s to %s by user %s.",
+                application.getStatus(), targetStatus, currentUser.getEmail());
+        jobApplicationAuditRepository.save(new JobApplicationAudit(updatedApplication, targetStatus, auditMessage));
+
+        // TODO: Trigger Novu notification for candidate about status change
+
+        return toDetailsDto(updatedApplication);
+    }
 }

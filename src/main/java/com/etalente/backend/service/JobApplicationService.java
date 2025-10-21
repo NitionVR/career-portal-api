@@ -6,6 +6,7 @@ import com.etalente.backend.dto.EmployerApplicationSummaryDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import com.etalente.backend.model.JobApplicationStatus;
 import java.util.UUID;
 
 public interface JobApplicationService {
@@ -19,4 +20,6 @@ public interface JobApplicationService {
     void withdrawApplication(UUID applicationId);
 
     Page<EmployerApplicationSummaryDto> getApplicationsForJob(UUID jobId, UUID userId, Pageable pageable);
+
+    ApplicationDetailsDto transitionApplicationStatus(UUID applicationId, JobApplicationStatus targetStatus, UUID userId);
 }
