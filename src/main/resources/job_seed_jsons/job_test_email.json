@@ -1,0 +1,53 @@
+{
+  "title": "C# Developer (Fixed Term - Ref C002) - Test Email",
+  "company": "Enviro365 I.T Solutions - Test Email",
+  "type": "Fixed Term",
+  "date": "2025-03",
+  "description": "Enviro365 I.T Solutions is looking for a creative and driven individual with strong technical skills, proven problem solving ability and excellent communication skills to develop cloud friendly software applications",
+  "location": {
+    "address": "",
+    "postalCode": "",
+    "city": "Centurion",
+    "countryCode": "ZA",
+    "region": "Gauteng"
+  },
+  "remote": "On-site",
+  "salary": "Market Related",
+  "experience": "Intermediate/Senior",
+  "responsibilities": [
+    "Design & develop Enterprise applications",
+    "Develop unit tests",
+    "Design and write application specifications",
+    "Respect for design patterns",
+    "Working closely with agile teams (developers, product owners, business analysts, etc.) to find solutions and solve business problems using software",
+    "Perform minimal manual testing",
+    "Application deployment"
+  ],
+  "qualifications": [],
+  "skills": [
+    {
+      "name": "C# Development",
+      "level": "Intermediate",
+      "keywords": [
+        "C#",
+        "Enterprise applications",
+        "Cloud friendly software",
+        "Unit testing"
+      ]
+    },
+    {
+      "name": "Version Control",
+      "level": "Intermediate",
+      "keywords": [
+        "Git"
+      ]
+    },
+    {
+      "name": "Database Management",
+      "level": "Intermediate",
+      "keywords": [
+        "Microsoft SQL Server"
+      ]
+    }
+  ]
+}

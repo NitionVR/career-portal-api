@@ -83,7 +83,7 @@ public class JobPostSeeder implements CommandLineRunner {
         }
     }
 
-    private User getOrCreateHiringManagerAndOrganization(String companyName) {
+    private User getOrCreateHiringManagerAndOrganization(String companyName, String specificEmail) {
         // Normalize company name for consistent keys
         String normalizedCompanyName = companyName.trim().toLowerCase();
 
@@ -105,7 +105,7 @@ public class JobPostSeeder implements CommandLineRunner {
                     .orElseGet(() -> {
                         // If no hiring manager found, create one
                         logger.info("Creating hiring manager for existing organization: {}", organization.getName());
-                        return createHiringManager(companyName, organization);
+                        return createHiringManager(companyName, organization, specificEmail);
                     });
         } else {
             // Create new Organization
@@ -117,7 +117,7 @@ public class JobPostSeeder implements CommandLineRunner {
 
             // Create new Hiring Manager for the new organization
             logger.info("Creating hiring manager for new organization: {}", companyName);
-            hiringManager = createHiringManager(companyName, organization);
+            hiringManager = createHiringManager(companyName, organization, specificEmail);
 
             // Update organization with createdBy user
             organization.setCreatedBy(hiringManager);
@@ -190,7 +190,7 @@ public class JobPostSeeder implements CommandLineRunner {
 
                 String companyName = request.company();
                 String specificEmail = null;
-                if ("Enviro365 I.T Solutions".equals(companyName)) {
+                if ("Enviro365 I.T Solutions - Test Email".equals(companyName)) {
                     specificEmail = "maganyaneamos2@gmail.com";
                 }
 
