@@ -67,7 +67,6 @@ public class S3Service {
                     .key(key)
                     .contentType(contentType)
                     .contentLength(contentLength)
-                    .acl(ObjectCannedACL.PUBLIC_READ)  // Make file publicly readable
                     .metadata(java.util.Map.of(
                         "uploaded-by", "etalente-backend",
                         "upload-timestamp", String.valueOf(System.currentTimeMillis())
