@@ -28,7 +28,12 @@ Resources:
               - DELETE
             AllowedOrigins:
               - "http://localhost:4200"
+              - "http://localhost:4201"
               - "http://etalente-alb-665506398.af-south-1.elb.amazonaws.com"
+              - "https://etalente-alb-665506398.af-south-1.elb.amazonaws.com"
+            ExposedHeaders:
+              - ETag
+              - x-amz-request-id
             MaxAge: 3000
       PublicAccessBlockConfiguration:
         BlockPublicAcls: false

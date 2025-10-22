@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -15,10 +16,10 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 @Profile("!test")
 public class S3Config {
 
-    @Value("${AWS_ACCESS_KEY_ID}")
+    @Value("${AWS_ACCESS_KEY_ID:}")
     private String accessKeyId;
 
-    @Value("${AWS_SECRET_ACCESS_KEY}")
+    @Value("${AWS_SECRET_ACCESS_KEY:}")
     private String secretAccessKey;
 
     @Value("${aws.s3.region}")
@@ -26,21 +27,39 @@ public class S3Config {
 
     @Bean
     public S3Client s3Client() {
-        AwsCredentials credentials = AwsBasicCredentials.create(accessKeyId, secretAccessKey);
-
-        return S3Client.builder()
-                .region(Region.of(region))
-                .credentialsProvider(StaticCredentialsProvider.create(credentials))
-                .build();
+        // Use IAM role credentials in production (ECS)
+        // Use access keys in local development
+        if (accessKeyId != null && !accessKeyId.isEmpty()
+            && secretAccessKey != null && !secretAccessKey.isEmpty()) {
+            // Local development with access keys
+            AwsCredentials credentials = AwsBasicCredentials.create(accessKeyId, secretAccessKey);
+            return S3Client.builder()
+                    .region(Region.of(region))
+                    .credentialsProvider(StaticCredentialsProvider.create(credentials))
+                    .build();
+        } else {
+            // Production with IAM role (DefaultCredentialsProvider)
+            return S3Client.builder()
+                    .region(Region.of(region))
+                    .credentialsProvider(DefaultCredentialsProvider.create())
+                    .build();
+        }
     }
 
     @Bean
     public S3Presigner s3Presigner() {
-        AwsCredentials credentials = AwsBasicCredentials.create(accessKeyId, secretAccessKey);
-
-        return S3Presigner.builder()
-                .region(Region.of(region))
-                .credentialsProvider(StaticCredentialsProvider.create(credentials))
-                .build();
+        if (accessKeyId != null && !accessKeyId.isEmpty()
+            && secretAccessKey != null && !secretAccessKey.isEmpty()) {
+            AwsCredentials credentials = AwsBasicCredentials.create(accessKeyId, secretAccessKey);
+            return S3Presigner.builder()
+                    .region(Region.of(region))
+                    .credentialsProvider(StaticCredentialsProvider.create(credentials))
+                    .build();
+        } else {
+            return S3Presigner.builder()
+                    .region(Region.of(region))
+                    .credentialsProvider(DefaultCredentialsProvider.create())
+                    .build();
+        }
     }
 }

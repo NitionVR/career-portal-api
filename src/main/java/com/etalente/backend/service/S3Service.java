@@ -50,43 +50,36 @@ public class S3Service {
      * @return UploadUrlResponse with uploadUrl and fileUrl
      */
     public UploadUrlResponse generatePresignedUploadUrl(String folder, String contentType, long contentLength) {
-        // Validate content type
         validateContentType(contentType);
-
-        // Validate file size
         validateFileSize(contentLength);
 
-        // Generate unique file name
         String fileName = generateFileName(contentType);
         String key = folder + "/" + fileName;
 
         try {
-            // Create PutObjectRequest
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                     .bucket(bucketName)
                     .key(key)
-                    .contentType(contentType)
-                    .contentLength(contentLength)
-                    .metadata(java.util.Map.of(
-                        "uploaded-by", "etalente-backend",
-                        "upload-timestamp", String.valueOf(System.currentTimeMillis())
-                    ))
                     .build();
 
-            // Create presign request
+            logger.info("PutObjectRequest details:");
+            logger.info("  Bucket: {}", putObjectRequest.bucket());
+            logger.info("  Key: {}", putObjectRequest.key());
+            logger.info("  ContentType: {}", putObjectRequest.contentType());
+            logger.info("  Metadata: {}", putObjectRequest.metadata());
+
             PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
                     .signatureDuration(Duration.ofMinutes(uploadProperties.getPresignedUrlExpirationMinutes()))
                     .putObjectRequest(putObjectRequest)
                     .build();
 
-            // Generate presigned URL
             PresignedPutObjectRequest presignedRequest = s3Presigner.presignPutObject(presignRequest);
             String uploadUrl = presignedRequest.url().toString();
 
-            // Generate public file URL
-            String fileUrl = generateFileUrl(key);
+            logger.info("Generated presigned URL: {}", uploadUrl);
+            logger.info("Signed headers: {}", presignedRequest.signedHeaders());
 
-            logger.info("Generated presigned upload URL for key: {}", key);
+            String fileUrl = generateFileUrl(key);
 
             return new UploadUrlResponse(uploadUrl, fileUrl, key);
 
