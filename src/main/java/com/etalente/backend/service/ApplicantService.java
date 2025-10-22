@@ -1,6 +1,8 @@
 package com.etalente.backend.service;
 
 import com.etalente.backend.dto.ApplicantSummaryDto;
+import com.etalente.backend.dto.BulkActionResponse;
+import com.etalente.backend.dto.BulkStatusUpdateRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -18,4 +20,6 @@ public interface ApplicantService {
                                             String location,
                                             Integer aiMatchScoreMin,
                                             UUID organizationId);
+
+    BulkActionResponse bulkUpdateStatus(BulkStatusUpdateRequest request, UUID userId);
 }
