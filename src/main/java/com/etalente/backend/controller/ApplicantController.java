@@ -1,7 +1,14 @@
 package com.etalente.backend.controller;
 
 import com.etalente.backend.dto.ApplicantSummaryDto;
+import com.etalente.backend.dto.BulkActionResponse;
+import com.etalente.backend.dto.BulkStatusUpdateRequest;
+import com.etalente.backend.model.ExportFormat;
+import com.etalente.backend.service.ExportService;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import com.etalente.backend.dto.ErrorResponse;
+import com.etalente.backend.dto.PageApplicantSummaryDto;
 import com.etalente.backend.exception.BadRequestException;
 import com.etalente.backend.security.OrganizationContext;
 import com.etalente.backend.service.ApplicantService;
@@ -14,6 +21,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
@@ -30,6 +38,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -46,11 +55,14 @@ public class ApplicantController {
 
     private final ApplicantService applicantService;
     private final OrganizationContext organizationContext;
+    private final ExportService exportService;
 
     public ApplicantController(ApplicantService applicantService,
-                              OrganizationContext organizationContext) {
+                              OrganizationContext organizationContext,
+                              ExportService exportService) {
         this.applicantService = applicantService;
         this.organizationContext = organizationContext;
+        this.exportService = exportService;
     }
 
     @GetMapping
@@ -63,7 +75,7 @@ public class ApplicantController {
         @ApiResponse(
             responseCode = "200",
             description = "Successfully retrieved applicants",
-            content = @Content(schema = @Schema(implementation = Page.class))
+            content = @Content(schema = @Schema(implementation = PageApplicantSummaryDto.class))
         ),
         @ApiResponse(
             responseCode = "400",
@@ -194,5 +206,90 @@ public class ApplicantController {
         );
 
         return ResponseEntity.badRequest().body(errorResponse);
+    }
+    @PostMapping("/bulk-update-status")
+    @PreAuthorize("hasAnyRole('HIRING_MANAGER', 'RECRUITER')")
+    @Operation(
+        summary = "Bulk update application status",
+        description = "Update the status of multiple job applications at once"
+    )
+    public ResponseEntity<BulkActionResponse> bulkUpdateStatus(
+            @Valid @RequestBody BulkStatusUpdateRequest request) {
+
+        log.info("Bulk status update requested for {} applications",
+                request.getApplicationIds().size());
+
+        BulkActionResponse response = applicantService.bulkUpdateStatus(
+            request,
+            organizationContext.getCurrentUser().getId()
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/export")
+    @PreAuthorize("hasAnyRole('HIRING_MANAGER', 'RECRUITER')")
+    @Operation(
+        summary = "Export applicants",
+        description = "Export filtered applicants to CSV, Excel, or PDF"
+    )
+    public void exportApplicants(
+            @RequestParam(defaultValue = "CSV") ExportFormat format,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String skillSearch,
+            @RequestParam(required = false) String jobId,
+            @RequestParam(required = false) List<String> statuses,
+            @RequestParam(required = false) Integer experienceMin,
+            @RequestParam(required = false) List<String> education,
+            @RequestParam(required = false) String location,
+            HttpServletResponse response) throws IOException {
+
+        log.info("Export requested in format: {}", format);
+
+        UUID organizationId = organizationContext.getCurrentUser().getOrganization().getId();
+
+        // Get all matching applicants (use unpaged query)
+        Pageable unpaged = Pageable.unpaged();
+        Page<ApplicantSummaryDto> applicants = applicantService.getApplicants(
+            unpaged, search, skillSearch, jobId, statuses,
+            experienceMin, education, location, null, organizationId
+        );
+
+        // Limit export size
+        if (applicants.getTotalElements() > 10000) {
+            throw new BadRequestException("Cannot export more than 10,000 records. Please refine your filters.");
+        }
+
+        // Set response headers
+        String filename = String.format("applicants_export_%s.%s",
+            LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE),
+            format.name().toLowerCase()
+        );
+
+        response.setContentType(getContentType(format));
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+
+        // Export
+        switch (format) {
+            case CSV:
+                exportService.exportToCsv(applicants.getContent(), response.getOutputStream());
+                break;
+            case EXCEL:
+                exportService.exportToExcel(applicants.getContent(), response.getOutputStream());
+                break;
+            case PDF:
+                exportService.exportToPdf(applicants.getContent(), response.getOutputStream());
+                break;
+        }
+
+        response.getOutputStream().flush();
+    }
+
+    private String getContentType(ExportFormat format) {
+        return switch (format) {
+            case CSV -> "text/csv";
+            case EXCEL -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            case PDF -> "application/pdf";
+        };
     }
 }

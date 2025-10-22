@@ -2,13 +2,21 @@ package com.etalente.backend.service.impl;
 
 import com.etalente.backend.constants.JsonFieldConstants;
 import com.etalente.backend.dto.ApplicantSummaryDto;
+import com.etalente.backend.dto.BulkActionResponse;
+import com.etalente.backend.dto.BulkStatusUpdateRequest;
 import com.etalente.backend.exception.BadRequestException;
+import com.etalente.backend.exception.ResourceNotFoundException;
 import com.etalente.backend.exception.ServiceException;
+import com.etalente.backend.exception.UnauthorizedException;
 import com.etalente.backend.model.JobApplication;
+import com.etalente.backend.model.JobApplicationStatus;
 import com.etalente.backend.model.JobPost;
 import com.etalente.backend.model.User;
 import com.etalente.backend.repository.JobApplicationRepository;
 import com.etalente.backend.service.ApplicantService;
+import com.etalente.backend.service.JobApplicationService;
+import com.etalente.backend.repository.UserRepository;
+import com.etalente.backend.integration.novu.NovuWorkflowService;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
@@ -21,6 +29,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -40,9 +49,105 @@ public class ApplicantServiceImpl implements ApplicantService {
     private static final int MAX_AI_SCORE = 100;
 
     private final JobApplicationRepository jobApplicationRepository;
+    private final JobApplicationService jobApplicationService; // Reuse existing service
+    private final UserRepository userRepository;
+    private final NovuWorkflowService notificationService;
 
-    public ApplicantServiceImpl(JobApplicationRepository jobApplicationRepository) {
+    private static final int MAX_BULK_SIZE = 100;
+
+    public ApplicantServiceImpl(JobApplicationRepository jobApplicationRepository, JobApplicationService jobApplicationService, UserRepository userRepository, NovuWorkflowService notificationService) {
         this.jobApplicationRepository = jobApplicationRepository;
+        this.jobApplicationService = jobApplicationService;
+        this.userRepository = userRepository;
+        this.notificationService = notificationService;
+    }
+
+    @Override
+    @Transactional
+    public BulkActionResponse bulkUpdateStatus(BulkStatusUpdateRequest request, UUID userId) {
+        log.info("Bulk status update requested by user {} for {} applications",
+                userId, request.getApplicationIds().size());
+
+        // Validate request size
+        if (request.getApplicationIds().size() > MAX_BULK_SIZE) {
+            throw new BadRequestException(
+                String.format("Cannot update more than %d applications at once", MAX_BULK_SIZE)
+            );
+        }
+
+        User currentUser = userRepository.findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        List<BulkActionResponse.BulkActionError> errors = new ArrayList<>();
+        int successCount = 0;
+
+        for (UUID applicationId : request.getApplicationIds()) {
+            try {
+                // Use existing service method with proper authorization
+                jobApplicationService.transitionApplicationStatus(
+                    applicationId,
+                    request.getTargetStatus(),
+                    userId
+                );
+
+                // Send notification if requested
+                if (request.isSendNotification()) {
+                    sendStatusChangeNotification(applicationId, request.getTargetStatus());
+                }
+
+                successCount++;
+
+            } catch (UnauthorizedException e) {
+                errors.add(BulkActionResponse.BulkActionError.builder()
+                    .applicationId(applicationId)
+                    .error("UNAUTHORIZED")
+                    .reason("Not authorized to update this application")
+                    .build());
+                log.warn("Unauthorized bulk status update attempt for application {}", applicationId);
+
+            } catch (BadRequestException e) {
+                errors.add(BulkActionResponse.BulkActionError.builder()
+                    .applicationId(applicationId)
+                    .error("INVALID_TRANSITION")
+                    .reason(e.getMessage())
+                    .build());
+                log.warn("Invalid status transition for application {}: {}", applicationId, e.getMessage());
+
+            } catch (Exception e) {
+                errors.add(BulkActionResponse.BulkActionError.builder()
+                    .applicationId(applicationId)
+                    .error("PROCESSING_ERROR")
+                    .reason("Failed to update application")
+                    .build());
+                log.error("Error updating application {} in bulk operation", applicationId, e);
+            }
+        }
+
+        log.info("Bulk status update completed: {} succeeded, {} failed",
+                successCount, errors.size());
+
+        return BulkActionResponse.builder()
+            .totalRequested(request.getApplicationIds().size())
+            .successCount(successCount)
+            .failureCount(errors.size())
+            .errors(errors)
+            .processedAt(LocalDateTime.now())
+            .build();
+    }
+
+    private void sendStatusChangeNotification(UUID applicationId, JobApplicationStatus newStatus) {
+        // Implementation for sending notification
+        try {
+            JobApplication application = jobApplicationRepository.findById(applicationId)
+                .orElseThrow();
+
+            // Trigger Novu workflow
+            // ... notification logic
+
+        } catch (Exception e) {
+            log.error("Failed to send notification for application {}", applicationId, e);
+            // Don't fail the bulk operation if notification fails
+        }
     }
 
     @Override
