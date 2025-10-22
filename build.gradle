@@ -63,6 +63,7 @@ dependencies {
     // AWS SDK for S3
     implementation 'software.amazon.awssdk:s3'
     implementation 'software.amazon.awssdk:sts'
+    implementation 'com.github.ben-manes.caffeine:caffeine'
 }
 
 sourceSets {

@@ -1,0 +1,233 @@
+The issue is that SQLFunctionTemplate was removed in Hibernate 6.x. Here's the corrected CustomPostgreSQLDialect:
+
+java
+package com.etalente.backend.config;
+
+import org.hibernate.boot.model.FunctionContributions;
+import org.hibernate.dialect.PostgreSQLDialect;
+import org.hibernate.query.sqm.function.PatternFunctionDescriptorBuilder;
+import org.hibernate.type.BasicTypeReference;
+import org.hibernate.type.StandardBasicTypes;
+
+public class CustomPostgreSQLDialect extends PostgreSQLDialect {
+
+    @Override
+    public void initializeFunctionRegistry(FunctionContributions functionContributions) {
+        super.initializeFunctionRegistry(functionContributions);
+
+        var typeConfiguration = functionContributions.getTypeConfiguration();
+        var functionRegistry = functionContributions.getFunctionRegistry();
+
+        // Register jsonb_extract_path_text function
+        functionRegistry.registerPattern(
+                "jsonb_extract_path_text",
+                "jsonb_extract_path_text(?1, ?2)",
+                typeConfiguration.getBasicTypeRegistry().resolve(StandardBasicTypes.STRING)
+        );
+
+        // Register cast_to_integer function using PostgreSQL's ::integer syntax
+        functionRegistry.registerPattern(
+                "cast_to_integer",
+                "(?1)::integer",
+                typeConfiguration.getBasicTypeRegistry().resolve(StandardBasicTypes.INTEGER)
+        );
+
+        // Register cast_to_text function using PostgreSQL's ::text syntax
+        functionRegistry.registerPattern(
+                "cast_to_text",
+                "(?1)::text",
+                typeConfiguration.getBasicTypeRegistry().resolve(StandardBasicTypes.STRING)
+        );
+    }
+}
+However, you also need to register this dialect. Update your application.properties or application.yml:
+
+For application.properties:
+
+properties
+spring.jpa.properties.hibernate.dialect=com.etalente.backend.config.CustomPostgreSQLDialect
+Or for application.yml:
+
+yaml
+spring:
+  jpa:
+    properties:
+      hibernate:
+        dialect: com.etalente.backend.config.CustomPostgreSQLDialect
+If the issue persists, here's an alternative approach that uses native PostgreSQL operators directly in the service without custom functions:
+
+Update ApplicantServiceImpl.java:
+
+java
+package com.etalente.backend.service.impl;
+
+import com.etalente.backend.dto.ApplicantSummaryDto;
+import com.etalente.backend.model.JobApplication;
+import com.etalente.backend.repository.JobApplicationRepository;
+import com.etalente.backend.service.ApplicantService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+@Service
+@Transactional(readOnly = true)
+public class ApplicantServiceImpl implements ApplicantService {
+
+    private final JobApplicationRepository jobApplicationRepository;
+    private final ObjectMapper objectMapper;
+
+    public ApplicantServiceImpl(JobApplicationRepository jobApplicationRepository, ObjectMapper objectMapper) {
+        this.jobApplicationRepository = jobApplicationRepository;
+        this.objectMapper = objectMapper;
+    }
+
+    @Override
+    public Page<ApplicantSummaryDto> getApplicants(Pageable pageable,
+                                                   String search,
+                                                   String skillSearch,
+                                                   String jobId,
+                                                   List<String> statuses,
+                                                   Integer experienceMin,
+                                                   List<String> education,
+                                                   String location,
+                                                   Integer aiMatchScoreMin,
+                                                   UUID organizationId) {
+
+        Specification<JobApplication> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            // Filter by organizationId (mandatory for employer views)
+            Join<Object, Object> jobPostJoin = root.join("jobPost");
+            predicates.add(cb.equal(jobPostJoin.get("organization").get("id"), organizationId));
+
+            // Filter by jobId
+            if (jobId != null && !jobId.isEmpty()) {
+                predicates.add(cb.equal(jobPostJoin.get("id"), UUID.fromString(jobId)));
+            }
+
+            // Filter by status
+            if (statuses != null && !statuses.isEmpty()) {
+                predicates.add(root.get("status").as(String.class).in(statuses));
+            }
+
+            // General search (candidate name, job title)
+            if (search != null && !search.isEmpty()) {
+                String lowerCaseSearch = search.toLowerCase();
+                Join<Object, Object> candidateJoin = root.join("candidate");
+                Predicate candidateNameMatch = cb.or(
+                        cb.like(cb.lower(candidateJoin.get("firstName")), "%" + lowerCaseSearch + "%"),
+                        cb.like(cb.lower(candidateJoin.get("lastName")), "%" + lowerCaseSearch + "%")
+                );
+                Predicate jobTitleMatch = cb.like(cb.lower(jobPostJoin.get("title")), "%" + lowerCaseSearch + "%");
+                predicates.add(cb.or(candidateNameMatch, jobTitleMatch));
+            }
+
+            // Skill search (within JobPost's skills JSONB)
+            if (skillSearch != null && !skillSearch.isEmpty()) {
+                predicates.add(cb.like(
+                    cb.lower(cb.function("cast", String.class, jobPostJoin.get("skills"), cb.literal(String.class))),
+                    "%" + skillSearch.toLowerCase() + "%"
+                ));
+            }
+
+            // Experience Min (within User's profile JSONB)
+            if (experienceMin != null) {
+                Join<Object, Object> candidateJoin = root.join("candidate");
+                predicates.add(cb.greaterThanOrEqualTo(
+                    cb.function("cast", Integer.class,
+                        cb.function("jsonb_extract_path_text", String.class,
+                            candidateJoin.get("profile"),
+                            cb.literal("experienceYears")
+                        ),
+                        cb.literal(Integer.class)
+                    ),
+                    experienceMin
+                ));
+            }
+
+            // Education (within User's profile JSONB)
+            if (education != null && !education.isEmpty()) {
+                Join<Object, Object> candidateJoin = root.join("candidate");
+                for (String edu : education) {
+                    predicates.add(cb.like(
+                        cb.lower(cb.function("cast", String.class, candidateJoin.get("profile"), cb.literal(String.class))),
+                        "%" + edu.toLowerCase() + "%"
+                    ));
+                }
+            }
+
+            // Location (within JobPost's location JSONB)
+            if (location != null && !location.isEmpty()) {
+                predicates.add(cb.like(
+                    cb.lower(cb.function("cast", String.class, jobPostJoin.get("location"), cb.literal(String.class))),
+                    "%" + location.toLowerCase() + "%"
+                ));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        return jobApplicationRepository.findAll(spec, pageable)
+                .map(this::convertToDto);
+    }
+
+    private ApplicantSummaryDto convertToDto(JobApplication jobApplication) {
+        // Extract skills from JobPost JSONB
+        List<String> skills = new ArrayList<>();
+        JsonNode skillsNode = jobApplication.getJobPost().getSkills();
+        if (skillsNode != null && skillsNode.isArray()) {
+            for (JsonNode skill : skillsNode) {
+                if (skill.has("name")) {
+                    skills.add(skill.get("name").asText());
+                }
+            }
+        }
+
+        // Extract experienceYears from Candidate's profile JSONB
+        Integer experienceYears = null;
+        JsonNode candidateProfileNode = jobApplication.getCandidate().getProfile();
+        if (candidateProfileNode != null && candidateProfileNode.has("experienceYears")) {
+            experienceYears = candidateProfileNode.get("experienceYears").asInt();
+        }
+
+        // Extract location from JobPost JSONB
+        String location = null;
+        JsonNode jobLocationNode = jobApplication.getJobPost().getLocation();
+        if (jobLocationNode != null && jobLocationNode.has("city")) {
+            location = jobLocationNode.get("city").asText();
+        }
+
+        Integer aiMatchScore = null;
+
+        return new ApplicantSummaryDto(
+                jobApplication.getId().toString(),
+                jobApplication.getCandidate().getFirstName() + " " + jobApplication.getCandidate().getLastName(),
+                jobApplication.getJobPost().getTitle(),
+                jobApplication.getJobPost().getId().toString(),
+                jobApplication.getCandidate().getProfileImageUrl(),
+                aiMatchScore,
+                skills,
+                experienceYears,
+                location,
+                jobApplication.getApplicationDate(),
+                jobApplication.getStatus().name()
+        );
+    }
+}
+The key changes:
+
+✅ Fixed CustomPostgreSQLDialect to use Hibernate 6.x API (initializeFunctionRegistry and registerPattern)
+✅ Used PostgreSQL's native casting syntax (::text, ::integer)
+✅ Alternative approach using standard cast function in the service
+Try the first approach first (with the updated dialect). If it still doesn't work, use the alternative service implementation with standard cast function.
+

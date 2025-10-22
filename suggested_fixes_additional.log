@@ -1,0 +1,134 @@
+he issue is in your test setup. The createCandidateWithProfile method doesn't set the firstName and lastName on the User object, so when you search for "Alice", there's no candidate with that name in the database.
+
+Fix the Test
+Update the createCandidateWithProfile helper method in your test to actually set the candidate's names:
+
+java
+private User createCandidateWithProfile(String email, Integer experience,
+                                       String education, String location) {
+    User candidate = testHelper.createUser(email, Role.CANDIDATE);
+
+    // FIX: Set the first name and last name
+    // Extract name from email or pass as parameters
+    String firstName = email.split("@")[0]; // e.g., "candidate1" from "candidate1@test.com"
+
+    // For the failing test, we need actual names like "Alice", "Bob"
+    // So let's make the method more flexible
+
+    candidate.setFirstName(firstName); // This won't work for "Alice"
+    candidate.setLastName("TestUser");
+
+    ObjectNode profile = objectMapper.createObjectNode();
+    profile.put("experienceYears", experience);
+
+    ArrayNode educationArray = objectMapper.createArrayNode();
+    ObjectNode eduNode = objectMapper.createObjectNode();
+    eduNode.put("degree", education);
+    educationArray.add(eduNode);
+    profile.set("education", educationArray);
+
+    candidate.setProfile(profile);
+    return userRepository.save(candidate);
+}
+Better solution: Update the method signature to accept names as parameters:
+
+java
+private User createCandidateWithProfile(String email, String firstName, String lastName,
+                                       Integer experience, String education, String location) {
+    User candidate = testHelper.createUser(email, Role.CANDIDATE);
+
+    // Set the names explicitly
+    candidate.setFirstName(firstName);
+    candidate.setLastName(lastName);
+
+    ObjectNode profile = objectMapper.createObjectNode();
+    profile.put("experienceYears", experience);
+
+    ArrayNode educationArray = objectMapper.createArrayNode();
+    ObjectNode eduNode = objectMapper.createObjectNode();
+    eduNode.put("degree", education);
+    educationArray.add(eduNode);
+    profile.set("education", educationArray);
+
+    candidate.setProfile(profile);
+    return userRepository.save(candidate);
+}
+Then update your setUp() method:
+
+java
+@BeforeEach
+void setUp() {
+    testHelper.cleanupDatabase();
+
+    // Setup organization and users
+    hiringManager = testHelper.createUser("hm@test.com", Role.HIRING_MANAGER);
+    organization = hiringManager.getOrganization();
+
+    recruiter = testHelper.createUser("recruiter@test.com", Role.RECRUITER);
+    recruiter.setOrganization(organization);
+    recruiter = userRepository.save(recruiter);
+
+    // Create candidates with different profiles - NOW WITH NAMES
+    candidate1 = createCandidateWithProfile(
+        "candidate1@test.com",
+        "Alice",      // firstName
+        "Smith",      // lastName
+        5,            // experience
+        "Bachelor",   // education
+        "New York"    // location
+    );
+
+    candidate2 = createCandidateWithProfile(
+        "candidate2@test.com",
+        "Bob",        // firstName
+        "Johnson",    // lastName
+        3,            // experience
+        "Master",     // education
+        "San Francisco" // location
+    );
+
+    // Create job post
+    authenticateAsWithRoles(hiringManager);
+    jobPost = createJobPost("Senior Java Developer", organization);
+
+    // Create applications
+    createApplication(candidate1, jobPost, JobApplicationStatus.APPLIED);
+    createApplication(candidate2, jobPost, JobApplicationStatus.UNDER_REVIEW);
+}
+Alternative: Check what testHelper.createUser does
+If testHelper.createUser is supposed to set names but doesn't, you might want to check that method. It might look like this:
+
+java
+// In TestHelper.java
+public User createUser(String email, Role role) {
+    User user = new User();
+    user.setEmail(email);
+    user.setRole(role);
+    // Missing: firstName and lastName!
+    user.setEmailVerified(true);
+    user.setProfileComplete(true);
+    return userRepository.save(user);
+}
+If that's the case, you could either:
+
+Update testHelper.createUser to accept names as parameters
+Or set the names manually after calling testHelper.createUser (as shown above)
+Quick Test to Verify
+Add a debug log in your test to see what's actually in the database:
+
+java
+@Test
+void getApplicants_withSearchFilter_shouldReturnMatchingResults() throws Exception {
+    // Given
+    authenticateAsWithRoles(hiringManager);
+
+    // Debug: Print all candidates
+    List<JobApplication> allApps = jobApplicationRepository.findAll();
+    allApps.forEach(app -> {
+        User c = app.getCandidate();
+        System.out.println("Candidate: " + c.getFirstName() + " " + c.getLastName() + " (email: " + c.getEmail() + ")");
+    });
+
+    // When & Then
+    mockMvc.perform(get("/api/applicants")
+            .param("search", "Alice")

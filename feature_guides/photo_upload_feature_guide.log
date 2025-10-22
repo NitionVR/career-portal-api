@@ -1,0 +1,3777 @@
+🖼️ Complete Guide: File Upload with AWS S3
+Profile Pictures & Company Logos for Spring Boot + Angular
+📋 Table of Contents
+Architecture Decision: Why S3?
+Backend Implementation (Spring Boot)
+Frontend Implementation (Angular)
+Security Best Practices
+Testing Strategy
+Deployment & Production
+1. Architecture Decision: Why S3?
+Should You Use S3?
+✅ YES - Use S3 if:
+You need scalable, reliable storage
+You want CDN integration (CloudFront)
+You're already on AWS
+You need automatic backups
+You want to offload file serving from your backend
+❌ NO - Don't use S3 if:
+You're building a small prototype/MVP (use local storage initially)
+You have strict data residency requirements (use on-premises)
+Cost is a major concern for a hobby project (use free alternatives like Supabase Storage)
+Storage Options Comparison
+Option	Cost	Complexity	Scalability	Best For
+AWS S3	$0.023/GB/month	Medium	Excellent	Production apps
+Local Filesystem	Free	Low	Poor	Development/Testing
+Cloudinary	Free tier, then $$$	Low	Good	Image-heavy apps
+DigitalOcean Spaces	$5/250GB	Medium	Good	Budget-conscious
+Azure Blob	Similar to S3	Medium	Excellent	Azure ecosystem
+Supabase Storage	Free tier	Low	Good	Startups/MVPs
+Recommended Architecture: Pre-Signed URLs
+Why Pre-Signed URLs?
+text
+Traditional Upload (❌ Not Recommended):
+┌────────┐    1. Upload    ┌─────────┐    2. Upload    ┌─────┐
+│ Client │ ──────────────> │ Backend │ ──────────────> │ S3  │
+└────────┘    File Data     └─────────┘    File Data    └─────┘
+                            (Bottleneck!)
+
+Pre-Signed URL (✅ Recommended):
+┌────────┐  1. Request URL  ┌─────────┐
+│ Client │ ──────────────>  │ Backend │
+└────┬───┘                  └────┬────┘
+     │   2. Return Signed       │
+     │   <──────────────────────┘
+     │
+     │   3. Upload Directly
+     └──────────────────────────> ┌─────┐
+                                   │ S3  │
+                                   └─────┘
+Benefits:
+
+✅ No file data passes through backend (saves bandwidth)
+✅ Faster uploads (direct to S3)
+✅ Backend doesn't handle large files
+✅ Secure (time-limited, scoped URLs)
+✅ Scalable (no backend bottleneck)
+2. Backend Implementation (Spring Boot)
+Step 1: Add Dependencies
+build.gradle
+gradle
+dependencies {
+    // Existing dependencies...
+
+    // AWS SDK for S3
+    implementation 'software.amazon.awssdk:s3:2.20.26'
+    implementation 'software.amazon.awssdk:sts:2.20.26'
+
+    // For image validation
+    implementation 'commons-io:commons-io:2.11.0'
+    implementation 'org.apache.tika:tika-core:2.9.1'
+}
+pom.xml (if using Maven)
+xml
+<dependencies>
+    <!-- AWS SDK for S3 -->
+    <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>s3</artifactId>
+        <version>2.20.26</version>
+    </dependency>
+    <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>sts</artifactId>
+        <version>2.20.26</version>
+    </dependency>
+
+    <!-- Image validation -->
+    <dependency>
+        <groupId>commons-io</groupId>
+        <artifactId>commons-io</artifactId>
+        <version>2.11.0</version>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.tika</groupId>
+        <artifactId>tika-core</artifactId>
+        <version>2.9.1</version>
+    </dependency>
+</dependencies>
+Step 2: Configuration
+application.yml
+yaml
+# AWS S3 Configuration
+aws:
+  s3:
+    bucket-name: ${AWS_S3_BUCKET_NAME:etalente-uploads}
+    region: ${AWS_REGION:us-east-1}
+    access-key-id: ${AWS_ACCESS_KEY_ID}
+    secret-access-key: ${AWS_SECRET_ACCESS_KEY}
+    cloudfront-domain: ${CLOUDFRONT_DOMAIN:} # Optional CDN
+
+upload:
+  max-file-size: 5242880  # 5MB in bytes
+  allowed-content-types:
+    - image/jpeg
+    - image/png
+    - image/webp
+  presigned-url-expiration-minutes: 15
+
+---
+# Production profile
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+aws:
+  s3:
+    bucket-name: etalente-prod-uploads
+    region: us-east-1
+Step 3: AWS S3 Configuration Class
+File: S3Config.java
+java
+package com.etalente.backend.config;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+
+@Configuration
+public class S3Config {
+
+    @Value("${aws.s3.access-key-id}")
+    private String accessKeyId;
+
+    @Value("${aws.s3.secret-access-key}")
+    private String secretAccessKey;
+
+    @Value("${aws.s3.region}")
+    private String region;
+
+    @Bean
+    public S3Client s3Client() {
+        AwsCredentials credentials = AwsBasicCredentials.create(accessKeyId, secretAccessKey);
+
+        return S3Client.builder()
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(credentials))
+                .build();
+    }
+
+    @Bean
+    public S3Presigner s3Presigner() {
+        AwsCredentials credentials = AwsBasicCredentials.create(accessKeyId, secretAccessKey);
+
+        return S3Presigner.builder()
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(credentials))
+                .build();
+    }
+}
+Step 4: S3 Service
+File: S3Service.java
+java
+package com.etalente.backend.service;
+
+import com.etalente.backend.dto.UploadUrlResponse;
+import com.etalente.backend.exception.BadRequestException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
+
+@Service
+public class S3Service {
+
+    private static final Logger logger = LoggerFactory.getLogger(S3Service.class);
+
+    private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
+
+    @Value("${aws.s3.bucket-name}")
+    private String bucketName;
+
+    @Value("${aws.s3.cloudfront-domain:}")
+    private String cloudFrontDomain;
+
+    @Value("${upload.max-file-size}")
+    private long maxFileSize;
+
+    @Value("${upload.allowed-content-types}")
+    private List<String> allowedContentTypes;
+
+    @Value("${upload.presigned-url-expiration-minutes}")
+    private int presignedUrlExpirationMinutes;
+
+    public S3Service(S3Client s3Client, S3Presigner s3Presigner) {
+        this.s3Client = s3Client;
+        this.s3Presigner = s3Presigner;
+    }
+
+    /**
+     * Generate pre-signed URL for uploading a file
+     *
+     * @param folder - Folder in S3 (e.g., "avatars", "company-logos")
+     * @param contentType - MIME type of the file
+     * @param contentLength - File size in bytes
+     * @return UploadUrlResponse with uploadUrl and fileUrl
+     */
+    public UploadUrlResponse generatePresignedUploadUrl(String folder, String contentType, long contentLength) {
+        // Validate content type
+        validateContentType(contentType);
+
+        // Validate file size
+        validateFileSize(contentLength);
+
+        // Generate unique file name
+        String fileName = generateFileName(contentType);
+        String key = folder + "/" + fileName;
+
+        try {
+            // Create PutObjectRequest
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .contentType(contentType)
+                    .contentLength(contentLength)
+                    .acl(ObjectCannedACL.PUBLIC_READ)  // Make file publicly readable
+                    .metadata(java.util.Map.of(
+                        "uploaded-by", "etalente-backend",
+                        "upload-timestamp", String.valueOf(System.currentTimeMillis())
+                    ))
+                    .build();
+
+            // Create presign request
+            PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
+                    .signatureDuration(Duration.ofMinutes(presignedUrlExpirationMinutes))
+                    .putObjectRequest(putObjectRequest)
+                    .build();
+
+            // Generate presigned URL
+            PresignedPutObjectRequest presignedRequest = s3Presigner.presignPutObject(presignRequest);
+            String uploadUrl = presignedRequest.url().toString();
+
+            // Generate public file URL
+            String fileUrl = generateFileUrl(key);
+
+            logger.info("Generated presigned upload URL for key: {}", key);
+
+            return new UploadUrlResponse(uploadUrl, fileUrl, key);
+
+        } catch (Exception e) {
+            logger.error("Failed to generate presigned URL for folder: {}", folder, e);
+            throw new RuntimeException("Failed to generate upload URL", e);
+        }
+    }
+
+    /**
+     * Delete a file from S3
+     *
+     * @param fileUrl - The public URL of the file
+     */
+    public void deleteFile(String fileUrl) {
+        try {
+            // Extract key from URL
+            String key = extractKeyFromUrl(fileUrl);
+
+            if (key == null) {
+                logger.warn("Could not extract key from URL: {}", fileUrl);
+                return;
+            }
+
+            DeleteObjectRequest deleteRequest = DeleteObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .build();
+
+            s3Client.deleteObject(deleteRequest);
+            logger.info("Deleted file from S3: {}", key);
+
+        } catch (Exception e) {
+            logger.error("Failed to delete file: {}", fileUrl, e);
+            throw new RuntimeException("Failed to delete file", e);
+        }
+    }
+
+    /**
+     * Check if file exists in S3
+     */
+    public boolean fileExists(String fileUrl) {
+        try {
+            String key = extractKeyFromUrl(fileUrl);
+            if (key == null) return false;
+
+            HeadObjectRequest headRequest = HeadObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .build();
+
+            s3Client.headObject(headRequest);
+            return true;
+
+        } catch (NoSuchKeyException e) {
+            return false;
+        } catch (Exception e) {
+            logger.error("Error checking if file exists: {}", fileUrl, e);
+            return false;
+        }
+    }
+
+    /**
+     * Validate content type
+     */
+    private void validateContentType(String contentType) {
+        if (!allowedContentTypes.contains(contentType)) {
+            throw new BadRequestException(
+                "Invalid content type: " + contentType +
+                ". Allowed types: " + String.join(", ", allowedContentTypes)
+            );
+        }
+    }
+
+    /**
+     * Validate file size
+     */
+    private void validateFileSize(long contentLength) {
+        if (contentLength > maxFileSize) {
+            throw new BadRequestException(
+                "File size exceeds maximum allowed size of " +
+                (maxFileSize / 1024 / 1024) + "MB"
+            );
+        }
+
+        if (contentLength <= 0) {
+            throw new BadRequestException("Invalid file size");
+        }
+    }
+
+    /**
+     * Generate unique file name
+     */
+    private String generateFileName(String contentType) {
+        String extension = getFileExtension(contentType);
+        return UUID.randomUUID().toString() + extension;
+    }
+
+    /**
+     * Get file extension from content type
+     */
+    private String getFileExtension(String contentType) {
+        switch (contentType) {
+            case "image/jpeg":
+                return ".jpg";
+            case "image/png":
+                return ".png";
+            case "image/webp":
+                return ".webp";
+            default:
+                return ".bin";
+        }
+    }
+
+    /**
+     * Generate public file URL
+     */
+    private String generateFileUrl(String key) {
+        if (cloudFrontDomain != null && !cloudFrontDomain.isEmpty()) {
+            // Use CloudFront CDN if configured
+            return "https://" + cloudFrontDomain + "/" + key;
+        } else {
+            // Use direct S3 URL
+            return String.format("https://%s.s3.%s.amazonaws.com/%s",
+                bucketName,
+                s3Client.serviceClientConfiguration().region().id(),
+                key
+            );
+        }
+    }
+
+    /**
+     * Extract S3 key from public URL
+     */
+    private String extractKeyFromUrl(String fileUrl) {
+        try {
+            if (fileUrl.contains(cloudFrontDomain)) {
+                // CloudFront URL: https://cdn.example.com/avatars/file.jpg
+                return fileUrl.substring(fileUrl.indexOf(cloudFrontDomain) + cloudFrontDomain.length() + 1);
+            } else if (fileUrl.contains(".s3.")) {
+                // S3 URL: https://bucket.s3.region.amazonaws.com/avatars/file.jpg
+                return fileUrl.substring(fileUrl.indexOf(".amazonaws.com/") + 15);
+            }
+            return null;
+        } catch (Exception e) {
+            logger.error("Failed to extract key from URL: {}", fileUrl, e);
+            return null;
+        }
+    }
+}
+Step 5: DTOs
+File: UploadUrlRequest.java
+java
+package com.etalente.backend.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
+
+public class UploadUrlRequest {
+
+    @NotBlank(message = "Content type is required")
+    private String contentType;
+
+    @Positive(message = "Content length must be positive")
+    private long contentLength;
+
+    public UploadUrlRequest() {}
+
+    public UploadUrlRequest(String contentType, long contentLength) {
+        this.contentType = contentType;
+        this.contentLength = contentLength;
+    }
+
+    // Getters and setters
+    public String getContentType() {
+        return contentType;
+    }
+
+    public void setContentType(String contentType) {
+        this.contentType = contentType;
+    }
+
+    public long getContentLength() {
+        return contentLength;
+    }
+
+    public void setContentLength(long contentLength) {
+        this.contentLength = contentLength;
+    }
+}
+File: UploadUrlResponse.java
+java
+package com.etalente.backend.dto;
+
+public class UploadUrlResponse {
+
+    private String uploadUrl;  // Pre-signed URL for uploading
+    private String fileUrl;     // Final public URL of the file
+    private String key;         // S3 key (for backend reference)
+
+    public UploadUrlResponse() {}
+
+    public UploadUrlResponse(String uploadUrl, String fileUrl, String key) {
+        this.uploadUrl = uploadUrl;
+        this.fileUrl = fileUrl;
+        this.key = key;
+    }
+
+    // Getters and setters
+    public String getUploadUrl() {
+        return uploadUrl;
+    }
+
+    public void setUploadUrl(String uploadUrl) {
+        this.uploadUrl = uploadUrl;
+    }
+
+    public String getFileUrl() {
+        return fileUrl;
+    }
+
+    public void setFileUrl(String fileUrl) {
+        this.fileUrl = fileUrl;
+    }
+
+    public String getKey() {
+        return key;
+    }
+
+    public void setKey(String key) {
+        this.key = key;
+    }
+}
+File: UpdateAvatarRequest.java
+java
+package com.etalente.backend.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+
+public class UpdateAvatarRequest {
+
+    @NotBlank(message = "Profile image URL is required")
+    @Pattern(regexp = "^https://.*", message = "Profile image URL must be HTTPS")
+    private String profileImageUrl;
+
+    public UpdateAvatarRequest() {}
+
+    public UpdateAvatarRequest(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
+    }
+
+    public String getProfileImageUrl() {
+        return profileImageUrl;
+    }
+
+    public void setProfileImageUrl(String profileImageUrl) {
+        this.profileImageUrl =
+Claude Sonnet 4.5
+continue
+
+
+Thought Process
+expand
+The user wants me to continue the guide. I was in the middle of the UpdateAvatarRequest.java class and need to continue with the rest of the backend implementation, then move on to the frontend implementation, and complete all the remaining sections.
+
+java
+    public void setProfileImageUrl(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
+    }
+}
+File: UpdateCompanyLogoRequest.java
+java
+package com.etalente.backend.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+
+public class UpdateCompanyLogoRequest {
+
+    @NotBlank(message = "Company logo URL is required")
+    @Pattern(regexp = "^https://.*", message = "Company logo URL must be HTTPS")
+    private String companyLogoUrl;
+
+    public UpdateCompanyLogoRequest() {}
+
+    public UpdateCompanyLogoRequest(String companyLogoUrl) {
+        this.companyLogoUrl = companyLogoUrl;
+    }
+
+    public String getCompanyLogoUrl() {
+        return companyLogoUrl;
+    }
+
+    public void setCompanyLogoUrl(String companyLogoUrl) {
+        this.companyLogoUrl = companyLogoUrl;
+    }
+}
+Step 6: Update User Entity
+File: User.java (Update)
+java
+@Entity
+@Table(name = "users")
+public class User {
+    // ... existing fields
+
+    @Column(name = "profile_image_url")
+    private String profileImageUrl;
+
+    // Getters and setters
+    public String getProfileImageUrl() {
+        return profileImageUrl;
+    }
+
+    public void setProfileImageUrl(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
+    }
+}
+Step 7: Update Organization Entity
+File: Organization.java (Update)
+java
+@Entity
+@Table(name = "organizations")
+public class Organization {
+    // ... existing fields
+
+    @Column(name = "company_logo_url")
+    private String companyLogoUrl;
+
+    // Getters and setters
+    public String getCompanyLogoUrl() {
+        return companyLogoUrl;
+    }
+
+    public void setCompanyLogoUrl(String companyLogoUrl) {
+        this.companyLogoUrl = companyLogoUrl;
+    }
+}
+Step 8: Database Migration
+File: V10__add_profile_image_and_company_logo.sql
+sql
+-- Add profile image URL to users table
+ALTER TABLE users
+ADD COLUMN profile_image_url VARCHAR(500);
+
+-- Add company logo URL to organizations table
+ALTER TABLE organizations
+ADD COLUMN company_logo_url VARCHAR(500);
+
+-- Add indexes for faster lookups (optional)
+CREATE INDEX idx_users_profile_image ON users(profile_image_url);
+CREATE INDEX idx_organizations_logo ON organizations(company_logo_url);
+Step 9: Profile Controller
+File: ProfileController.java (Update)
+java
+package com.etalente.backend.controller;
+
+import com.etalente.backend.dto.*;
+import com.etalente.backend.security.OrganizationContext;
+import com.etalente.backend.service.ProfileService;
+import com.etalente.backend.service.S3Service;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/profile")
+public class ProfileController {
+
+    private final ProfileService profileService;
+    private final S3Service s3Service;
+    private final OrganizationContext organizationContext;
+
+    public ProfileController(ProfileService profileService,
+                            S3Service s3Service,
+                            OrganizationContext organizationContext) {
+        this.profileService = profileService;
+        this.s3Service = s3Service;
+        this.organizationContext = organizationContext;
+    }
+
+    /**
+     * P1: Get pre-signed URL for avatar upload
+     * POST /api/profile/me/avatar/upload-url
+     */
+    @PostMapping("/me/avatar/upload-url")
+    public ResponseEntity<UploadUrlResponse> getAvatarUploadUrl(
+            @Valid @RequestBody UploadUrlRequest request) {
+
+        UploadUrlResponse response = s3Service.generatePresignedUploadUrl(
+            "avatars",
+            request.getContentType(),
+            request.getContentLength()
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * P1: Update user profile with avatar URL
+     * PUT /api/profile/me/avatar
+     */
+    @PutMapping("/me/avatar")
+    public ResponseEntity<UserDto> updateAvatar(
+            @Valid @RequestBody UpdateAvatarRequest request) {
+
+        String userId = organizationContext.getCurrentUser().getId().toString();
+        UserDto updatedUser = profileService.updateProfileImage(userId, request.getProfileImageUrl());
+
+        return ResponseEntity.ok(updatedUser);
+    }
+
+    /**
+     * P1: Delete user avatar
+     * DELETE /api/profile/me/avatar
+     */
+    @DeleteMapping("/me/avatar")
+    public ResponseEntity<Void> deleteAvatar() {
+        String userId = organizationContext.getCurrentUser().getId().toString();
+        profileService.deleteProfileImage(userId);
+
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Get current user profile (existing endpoint - update to include profileImageUrl)
+     * GET /api/profile/me
+     */
+    @GetMapping("/me")
+    public ResponseEntity<UserDto> getCurrentUserProfile() {
+        String userId = organizationContext.getCurrentUser().getId().toString();
+        UserDto user = profileService.getUserProfile(userId);
+
+        return ResponseEntity.ok(user);
+    }
+}
+Step 10: Organization Controller
+File: OrganizationController.java
+java
+package com.etalente.backend.controller;
+
+import com.etalente.backend.dto.*;
+import com.etalente.backend.security.OrganizationContext;
+import com.etalente.backend.service.OrganizationService;
+import com.etalente.backend.service.S3Service;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/organization")
+public class OrganizationController {
+
+    private final OrganizationService organizationService;
+    private final S3Service s3Service;
+    private final OrganizationContext organizationContext;
+
+    public OrganizationController(OrganizationService organizationService,
+                                 S3Service s3Service,
+                                 OrganizationContext organizationContext) {
+        this.organizationService = organizationService;
+        this.s3Service = s3Service;
+        this.organizationContext = organizationContext;
+    }
+
+    /**
+     * P2: Get pre-signed URL for company logo upload
+     * POST /api/organization/logo/upload-url
+     */
+    @PostMapping("/logo/upload-url")
+    @PreAuthorize("hasRole('HIRING_MANAGER')")
+    public ResponseEntity<UploadUrlResponse> getLogoUploadUrl(
+            @Valid @RequestBody UploadUrlRequest request) {
+
+        UploadUrlResponse response = s3Service.generatePresignedUploadUrl(
+            "company-logos",
+            request.getContentType(),
+            request.getContentLength()
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * P2: Update organization with logo URL
+     * PUT /api/organization/logo
+     */
+    @PutMapping("/logo")
+    @PreAuthorize("hasRole('HIRING_MANAGER')")
+    public ResponseEntity<OrganizationDto> updateLogo(
+            @Valid @RequestBody UpdateCompanyLogoRequest request) {
+
+        String userId = organizationContext.getCurrentUser().getId().toString();
+        OrganizationDto updatedOrg = organizationService.updateCompanyLogo(
+            userId,
+            request.getCompanyLogoUrl()
+        );
+
+        return ResponseEntity.ok(updatedOrg);
+    }
+
+    /**
+     * P2: Delete company logo
+     * DELETE /api/organization/logo
+     */
+    @DeleteMapping("/logo")
+    @PreAuthorize("hasRole('HIRING_MANAGER')")
+    public ResponseEntity<Void> deleteLogo() {
+        String userId = organizationContext.getCurrentUser().getId().toString();
+        organizationService.deleteCompanyLogo(userId);
+
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Get current organization
+     * GET /api/organization/me
+     */
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('HIRING_MANAGER') or hasRole('RECRUITER')")
+    public ResponseEntity<OrganizationDto> getCurrentOrganization() {
+        String userId = organizationContext.getCurrentUser().getId().toString();
+        OrganizationDto org = organizationService.getOrganizationByUserId(userId);
+
+        return ResponseEntity.ok(org);
+    }
+}
+Step 11: Service Layer
+File: ProfileService.java
+java
+package com.etalente.backend.service;
+
+import com.etalente.backend.dto.UserDto;
+import com.etalente.backend.exception.ResourceNotFoundException;
+import com.etalente.backend.model.User;
+import com.etalente.backend.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
+
+@Service
+@Transactional
+public class ProfileService {
+
+    private static final Logger logger = LoggerFactory.getLogger(ProfileService.class);
+
+    private final UserRepository userRepository;
+    private final S3Service s3Service;
+
+    public ProfileService(UserRepository userRepository, S3Service s3Service) {
+        this.userRepository = userRepository;
+        this.s3Service = s3Service;
+    }
+
+    /**
+     * Update user's profile image
+     */
+    public UserDto updateProfileImage(String userId, String profileImageUrl) {
+        User user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        // Delete old image if exists
+        if (user.getProfileImageUrl() != null && !user.getProfileImageUrl().isEmpty()) {
+            try {
+                s3Service.deleteFile(user.getProfileImageUrl());
+            } catch (Exception e) {
+                logger.error("Failed to delete old profile image: {}", user.getProfileImageUrl(), e);
+            }
+        }
+
+        user.setProfileImageUrl(profileImageUrl);
+        user = userRepository.save(user);
+
+        logger.info("Profile image updated for user: {}", userId);
+
+        return UserDto.fromEntity(user);
+    }
+
+    /**
+     * Delete user's profile image
+     */
+    public void deleteProfileImage(String userId) {
+        User user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (user.getProfileImageUrl() != null) {
+            s3Service.deleteFile(user.getProfileImageUrl());
+            user.setProfileImageUrl(null);
+            userRepository.save(user);
+
+            logger.info("Profile image deleted for user: {}", userId);
+        }
+    }
+
+    /**
+     * Get user profile
+     */
+    public UserDto getUserProfile(String userId) {
+        User user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        return UserDto.fromEntity(user);
+    }
+}
+File: OrganizationService.java (Update)
+java
+package com.etalente.backend.service;
+
+import com.etalente.backend.dto.OrganizationDto;
+import com.etalente.backend.exception.ResourceNotFoundException;
+import com.etalente.backend.model.Organization;
+import com.etalente.backend.model.User;
+import com.etalente.backend.repository.OrganizationRepository;
+import com.etalente.backend.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
+
+@Service
+@Transactional
+public class OrganizationService {
+
+    private static final Logger logger = LoggerFactory.getLogger(OrganizationService.class);
+
+    private final OrganizationRepository organizationRepository;
+    private final UserRepository userRepository;
+    private final S3Service s3Service;
+
+    public OrganizationService(OrganizationRepository organizationRepository,
+                              UserRepository userRepository,
+                              S3Service s3Service) {
+        this.organizationRepository = organizationRepository;
+        this.userRepository = userRepository;
+        this.s3Service = s3Service;
+    }
+
+    /**
+     * Update company logo
+     */
+    public OrganizationDto updateCompanyLogo(String userId, String companyLogoUrl) {
+        User user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        Organization organization = user.getOrganization();
+        if (organization == null) {
+            throw new ResourceNotFoundException("Organization not found for user");
+        }
+
+        // Delete old logo if exists
+        if (organization.getCompanyLogoUrl() != null && !organization.getCompanyLogoUrl().isEmpty()) {
+            try {
+                s3Service.deleteFile(organization.getCompanyLogoUrl());
+            } catch (Exception e) {
+                logger.error("Failed to delete old company logo: {}", organization.getCompanyLogoUrl(), e);
+            }
+        }
+
+        organization.setCompanyLogoUrl(companyLogoUrl);
+        organization = organizationRepository.save(organization);
+
+        logger.info("Company logo updated for organization: {}", organization.getId());
+
+        return OrganizationDto.fromEntity(organization);
+    }
+
+    /**
+     * Delete company logo
+     */
+    public void deleteCompanyLogo(String userId) {
+        User user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        Organization organization = user.getOrganization();
+        if (organization == null) {
+            throw new ResourceNotFoundException("Organization not found for user");
+        }
+
+        if (organization.getCompanyLogoUrl() != null) {
+            s3Service.deleteFile(organization.getCompanyLogoUrl());
+            organization.setCompanyLogoUrl(null);
+            organizationRepository.save(organization);
+
+            logger.info("Company logo deleted for organization: {}", organization.getId());
+        }
+    }
+
+    /**
+     * Get organization by user ID
+     */
+    public OrganizationDto getOrganizationByUserId(String userId) {
+        User user = userRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        Organization organization = user.getOrganization();
+        if (organization == null) {
+            throw new ResourceNotFoundException("Organization not found for user");
+        }
+
+        return OrganizationDto.fromEntity(organization);
+    }
+}
+Step 12: Update DTOs to Include Image URLs
+File: UserDto.java (Update)
+java
+package com.etalente.backend.dto;
+
+import com.etalente.backend.model.User;
+
+public class UserDto {
+    private String id;
+    private String email;
+    private String firstName;
+    private String lastName;
+    private String role;
+    private String profileImageUrl;  // Add this field
+
+    // Constructor
+    public UserDto(String id, String email, String firstName, String lastName,
+                  String role, String profileImageUrl) {
+        this.id = id;
+        this.email = email;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.role = role;
+        this.profileImageUrl = profileImageUrl;
+    }
+
+    // Factory method
+    public static UserDto fromEntity(User user) {
+        return new UserDto(
+            user.getId().toString(),
+            user.getEmail(),
+            user.getFirstName(),
+            user.getLastName(),
+            user.getRole().name(),
+            user.getProfileImageUrl()
+        );
+    }
+
+    // Getters and setters
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
+    public String getFirstName() { return firstName; }
+    public void setFirstName(String firstName) { this.firstName = firstName; }
+
+    public String getLastName() { return lastName; }
+    public void setLastName(String lastName) { this.lastName = lastName; }
+
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+
+    public String getProfileImageUrl() { return profileImageUrl; }
+    public void setProfileImageUrl(String profileImageUrl) { this.profileImageUrl = profileImageUrl; }
+}
+File: OrganizationDto.java (Update)
+java
+package com.etalente.backend.dto;
+
+import com.etalente.backend.model.Organization;
+
+public class OrganizationDto {
+    private String id;
+    private String name;
+    private String industry;
+    private String companyLogoUrl;  // Add this field
+
+    // Constructor
+    public OrganizationDto(String id, String name, String industry, String companyLogoUrl) {
+        this.id = id;
+        this.name = name;
+        this.industry = industry;
+        this.companyLogoUrl = companyLogoUrl;
+    }
+
+    // Factory method
+    public static OrganizationDto fromEntity(Organization org) {
+        return new OrganizationDto(
+            org.getId().toString(),
+            org.getName(),
+            org.getIndustry(),
+            org.getCompanyLogoUrl()
+        );
+    }
+
+    // Getters and setters
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
+    public String getIndustry() { return industry; }
+    public void setIndustry(String industry) { this.industry = industry; }
+
+    public String getCompanyLogoUrl() { return companyLogoUrl; }
+    public void setCompanyLogoUrl(String companyLogoUrl) { this.companyLogoUrl = companyLogoUrl; }
+}
+Step 13: P0 - Add Applicant Counts to JobPostResponse
+File: JobPostResponse.java (Update)
+java
+package com.etalente.backend.dto;
+
+import com.etalente.backend.model.JobPost;
+import com.fasterxml.jackson.databind.JsonNode;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+public class JobPostResponse {
+    private UUID id;
+    private String title;
+    private String company;
+    private String jobType;
+    private String datePosted;
+    private String description;
+    private JsonNode location;
+    private String remote;
+    private String salary;
+    private String experienceLevel;
+    private JsonNode responsibilities;
+    private JsonNode qualifications;
+    private JsonNode skills;
+    private String status;
+    private String createdByEmail;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+
+    // P0: New fields for employer dashboard
+    private int applicantsCount;
+    private int newApplicantsCount;
+    private String companyLogoUrl;
+
+    // Constructor
+    public JobPostResponse(UUID id, String title, String company, String jobType,
+                          String datePosted, String description, JsonNode location,
+                          String remote, String salary, String experienceLevel,
+                          JsonNode responsibilities, JsonNode qualifications,
+                          JsonNode skills, String status, String createdByEmail,
+                          LocalDateTime createdAt, LocalDateTime updatedAt,
+                          int applicantsCount, int newApplicantsCount, String companyLogoUrl) {
+        this.id = id;
+        this.title = title;
+        this.company = company;
+        this.jobType = jobType;
+        this.datePosted = datePosted;
+        this.description = description;
+        this.location = location;
+        this.remote = remote;
+        this.salary = salary;
+        this.experienceLevel = experienceLevel;
+        this.responsibilities = responsibilities;
+        this.qualifications = qualifications;
+        this.skills = skills;
+        this.status = status;
+        this.createdByEmail = createdByEmail;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+        this.applicantsCount = applicantsCount;
+        this.newApplicantsCount = newApplicantsCount;
+        this.companyLogoUrl = companyLogoUrl;
+    }
+
+    // Factory method
+    public static JobPostResponse fromEntity(JobPost jobPost, int applicantsCount,
+                                            int newApplicantsCount) {
+        String companyLogoUrl = jobPost.getCreatedBy() != null &&
+                               jobPost.getCreatedBy().getOrganization() != null
+                ? jobPost.getCreatedBy().getOrganization().getCompanyLogoUrl()
+                : null;
+
+        return new JobPostResponse(
+            jobPost.getId(),
+            jobPost.getTitle(),
+            jobPost.getCompany(),
+            jobPost.getJobType(),
+            jobPost.getDatePosted(),
+            jobPost.getDescription(),
+            jobPost.getLocation(),
+            jobPost.getRemote(),
+            jobPost.getSalary(),
+            jobPost.getExperienceLevel(),
+            jobPost.getResponsibilities(),
+            jobPost.getQualifications(),
+            jobPost.getSkills(),
+            jobPost.getStatus().name(),
+            jobPost.getCreatedBy().getEmail(),
+            jobPost.getCreatedAt(),
+            jobPost.getUpdatedAt(),
+            applicantsCount,
+            newApplicantsCount,
+            companyLogoUrl
+        );
+    }
+
+    // Getters and setters
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+
+    // ... (existing getters/setters)
+
+    public int getApplicantsCount() { return applicantsCount; }
+    public void setApplicantsCount(int applicantsCount) { this.applicantsCount = applicantsCount; }
+
+    public int getNewApplicantsCount() { return newApplicantsCount; }
+    public void setNewApplicantsCount(int newApplicantsCount) { this.newApplicantsCount = newApplicantsCount; }
+
+    public String getCompanyLogoUrl() { return companyLogoUrl; }
+    public void setCompanyLogoUrl(String companyLogoUrl) { this.companyLogoUrl = companyLogoUrl; }
+}
+Step 14: Update JobPostService
+File: JobPostService.java (Update)
+java
+@Service
+@Transactional
+public class JobPostServiceImpl implements JobPostService {
+
+    private final JobPostRepository jobPostRepository;
+    private final JobApplicationRepository jobApplicationRepository;
+
+    // ... other methods
+
+    /**
+     * P0: Get my job posts with applicant counts
+     */
+    @Override
+    public Page<JobPostResponse> getMyJobPosts(Pageable pageable) {
+        User currentUser = organizationContext.getCurrentUser();
+        Organization organization = currentUser.getOrganization();
+
+        if (organization == null) {
+            throw new BadRequestException("User is not associated with an organization");
+        }
+
+        Page<JobPost> jobPosts = jobPostRepository.findByOrganizationId(
+            organization.getId(),
+            pageable
+        );
+
+        return jobPosts.map(jobPost -> {
+            // P0: Calculate applicants count
+            int applicantsCount = jobApplicationRepository.countByJobPostId(jobPost.getId());
+
+            // P0: Calculate new applicants count (applications not yet viewed)
+            int newApplicantsCount = jobApplicationRepository
+                .countByJobPostIdAndViewedByEmployerFalse(jobPost.getId());
+
+            return JobPostResponse.fromEntity(jobPost, applicantsCount, newApplicantsCount);
+        });
+    }
+}
+Step 15: Update JobApplicationRepository
+File: JobApplicationRepository.java (Update)
+java
+package com.etalente.backend.repository;
+
+import com.etalente.backend.model.JobApplication;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.UUID;
+
+@Repository
+public interface JobApplicationRepository extends JpaRepository<JobApplication, UUID> {
+
+    // Existing methods...
+
+    // P0: Count total applicants for a job post
+    int countByJobPostId(UUID jobPostId);
+
+    // P0: Count new (unviewed) applicants for a job post
+    int countByJobPostIdAndViewedByEmployerFalse(UUID jobPostId);
+}
+Step 16: Add "viewed" field to JobApplication
+File: JobApplication.java (Update)
+java
+@Entity
+@Table(name = "job_applications")
+public class JobApplication {
+    // ... existing fields
+
+    @Column(name = "viewed_by_employer", nullable = false)
+    private boolean viewedByEmployer = false;
+
+    // Getters and setters
+    public boolean isViewedByEmployer() {
+        return viewedByEmployer;
+    }
+
+    public void setViewedByEmployer(boolean viewedByEmployer) {
+        this.viewedByEmployer = viewedByEmployer;
+    }
+}
+Migration: V11__add_viewed_by_employer.sql
+sql
+ALTER TABLE job_applications
+ADD COLUMN viewed_by_employer BOOLEAN NOT NULL DEFAULT FALSE
+Claude Sonnet 4.5
+continue
+
+
+Thought Process
+expand
+The user wants me to continue the guide. I was in the middle of showing the database migration for adding the viewed_by_employer field. Let me continue with the rest of the implementation, focusing on:
+
+Finishing the migration
+Testing the endpoints
+Frontend implementation (Angular)
+Security best practices
+AWS S3 setup guide
+Testing strategy
+Deployment
+Let me continue from where I left off.
+
+sql
+ALTER TABLE job_applications
+ADD COLUMN viewed_by_employer BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX idx_job_applications_viewed ON job_applications(viewed_by_employer);
+3. Frontend Implementation (Angular)
+Step 1: Create Upload Service
+File: src/app/core/services/upload.service.ts
+typescript
+import { Injectable } from '@angular/core';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { Observable, from } from 'rxjs';
+import { switchMap, tap } from 'rxjs/operators';
+import { environment } from '../../../environments/environment';
+
+export interface UploadUrlRequest {
+  contentType: string;
+  contentLength: number;
+}
+
+export interface UploadUrlResponse {
+  uploadUrl: string;
+  fileUrl: string;
+  key: string;
+}
+
+export interface UpdateAvatarRequest {
+  profileImageUrl: string;
+}
+
+export interface UpdateCompanyLogoRequest {
+  companyLogoUrl: string;
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class UploadService {
+  private readonly API_URL = environment.apiUrl;
+  private readonly MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+  private readonly ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+  constructor(private http: HttpClient) {}
+
+  /**
+   * Upload profile avatar (2-step process)
+   * 1. Get pre-signed URL from backend
+   * 2. Upload file directly to S3
+   */
+  uploadAvatar(file: File): Observable<string> {
+    return this.uploadFile(file, 'avatar');
+  }
+
+  /**
+   * Upload company logo (2-step process)
+   */
+  uploadCompanyLogo(file: File): Observable<string> {
+    return this.uploadFile(file, 'company-logo');
+  }
+
+  /**
+   * Generic file upload method
+   */
+  private uploadFile(file: File, type: 'avatar' | 'company-logo'): Observable<string> {
+    // Validate file
+    this.validateFile(file);
+
+    const request: UploadUrlRequest = {
+      contentType: file.type,
+      contentLength: file.size
+    };
+
+    // Step 1: Get pre-signed URL
+    const endpoint = type === 'avatar'
+      ? '/profile/me/avatar/upload-url'
+      : '/organization/logo/upload-url';
+
+    return this.http.post<UploadUrlResponse>(`${this.API_URL}${endpoint}`, request)
+      .pipe(
+        switchMap(response => {
+          // Step 2: Upload file to S3
+          return from(this.uploadToS3(file, response.uploadUrl))
+            .pipe(
+              tap(() => {
+                console.log('File uploaded successfully to S3');
+              }),
+              switchMap(() => {
+                // Step 3: Update backend with file URL
+                return this.updateBackend(type, response.fileUrl);
+              })
+            );
+        })
+      );
+  }
+
+  /**
+   * Upload file to S3 using pre-signed URL
+   */
+  private async uploadToS3(file: File, uploadUrl: string): Promise<void> {
+    const headers = new HttpHeaders({
+      'Content-Type': file.type
+    });
+
+    // Use XMLHttpRequest for better progress tracking
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const percentComplete = (e.loaded / e.total) * 100;
+          console.log(`Upload progress: ${percentComplete.toFixed(2)}%`);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200) {
+          resolve();
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        reject(new Error('Upload failed'));
+      });
+
+      xhr.open('PUT', uploadUrl);
+      xhr.setRequestHeader('Content-Type', file.type);
+      xhr.send(file);
+    });
+  }
+
+  /**
+   * Update backend with final file URL
+   */
+  private updateBackend(type: 'avatar' | 'company-logo', fileUrl: string): Observable<string> {
+    if (type === 'avatar') {
+      const request: UpdateAvatarRequest = { profileImageUrl: fileUrl };
+      return this.http.put<any>(`${this.API_URL}/profile/me/avatar`, request)
+        .pipe(
+          tap(() => console.log('Avatar updated in backend')),
+          switchMap(() => from([fileUrl]))
+        );
+    } else {
+      const request: UpdateCompanyLogoRequest = { companyLogoUrl: fileUrl };
+      return this.http.put<any>(`${this.API_URL}/organization/logo`, request)
+        .pipe(
+          tap(() => console.log('Company logo updated in backend')),
+          switchMap(() => from([fileUrl]))
+        );
+    }
+  }
+
+  /**
+   * Delete avatar
+   */
+  deleteAvatar(): Observable<void> {
+    return this.http.delete<void>(`${this.API_URL}/profile/me/avatar`);
+  }
+
+  /**
+   * Delete company logo
+   */
+  deleteCompanyLogo(): Observable<void> {
+    return this.http.delete<void>(`${this.API_URL}/organization/logo`);
+  }
+
+  /**
+   * Validate file before upload
+   */
+  private validateFile(file: File): void {
+    // Check file type
+    if (!this.ALLOWED_TYPES.includes(file.type)) {
+      throw new Error(
+        `Invalid file type. Allowed types: ${this.ALLOWED_TYPES.join(', ')}`
+      );
+    }
+
+    // Check file size
+    if (file.size > this.MAX_FILE_SIZE) {
+      throw new Error(
+        `File size exceeds maximum allowed size of ${this.MAX_FILE_SIZE / 1024 / 1024}MB`
+      );
+    }
+
+    // Check if file is an actual image
+    if (!file.type.startsWith('image/')) {
+      throw new Error('File must be an image');
+    }
+  }
+
+  /**
+   * Compress image before upload (optional but recommended)
+   */
+  async compressImage(file: File, maxWidth: number = 800): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+
+      reader.onload = (event: any) => {
+        const img = new Image();
+        img.src = event.target.result;
+
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Calculate new dimensions
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name, {
+                type: file.type,
+                lastModified: Date.now()
+              });
+              resolve(compressedFile);
+            } else {
+              reject(new Error('Failed to compress image'));
+            }
+          }, file.type, 0.8); // 0.8 quality
+        };
+
+        img.onerror = () => {
+          reject(new Error('Failed to load image'));
+        };
+      };
+
+      reader.onerror = () => {
+        reject(new Error('Failed to read file'));
+      };
+    });
+  }
+}
+Step 2: Create Image Upload Component
+File: src/app/shared/components/image-upload/image-upload.component.ts
+typescript
+import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
+import { UploadService } from '../../../core/services/upload.service';
+
+@Component({
+  selector: 'app-image-upload',
+  templateUrl: './image-upload.component.html',
+  styleUrls: ['./image-upload.component.scss']
+})
+export class ImageUploadComponent implements OnInit {
+  @Input() currentImageUrl?: string;
+  @Input() uploadType: 'avatar' | 'company-logo' = 'avatar';
+  @Input() label: string = 'Upload Image';
+  @Input() aspectRatio: '1:1' | '16:9' = '1:1';
+
+  @Output() uploadSuccess = new EventEmitter<string>();
+  @Output() uploadError = new EventEmitter<string>();
+  @Output() deleteSuccess = new EventEmitter<void>();
+
+  imagePreview?: string;
+  uploading = false;
+  uploadProgress = 0;
+  error?: string;
+
+  constructor(private uploadService: UploadService) {}
+
+  ngOnInit(): void {
+    if (this.currentImageUrl) {
+      this.imagePreview = this.currentImageUrl;
+    }
+  }
+
+  /**
+   * Handle file selection
+   */
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+
+    if (!input.files || input.files.length === 0) {
+      return;
+    }
+
+    const file = input.files[0];
+    this.error = undefined;
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      this.imagePreview = e.target.result;
+    };
+    reader.readAsDataURL(file);
+
+    // Upload file
+    this.uploadFile(file);
+  }
+
+  /**
+   * Upload file to S3
+   */
+  private async uploadFile(file: File): Promise<void> {
+    this.uploading = true;
+    this.uploadProgress = 0;
+
+    try {
+      // Optional: Compress image before upload
+      const compressedFile = await this.uploadService.compressImage(file, 800);
+
+      // Upload
+      const uploadObservable = this.uploadType === 'avatar'
+        ? this.uploadService.uploadAvatar(compressedFile)
+        : this.uploadService.uploadCompanyLogo(compressedFile);
+
+      uploadObservable.subscribe({
+        next: (fileUrl) => {
+          this.uploading = false;
+          this.uploadProgress = 100;
+          this.imagePreview = fileUrl;
+          this.uploadSuccess.emit(fileUrl);
+        },
+        error: (error) => {
+          this.uploading = false;
+          this.uploadProgress = 0;
+          this.error = error.message || 'Upload failed';
+          this.uploadError.emit(this.error);
+          console.error('Upload error:', error);
+        }
+      });
+
+    } catch (error: any) {
+      this.uploading = false;
+      this.error = error.message || 'Failed to process image';
+      this.uploadError.emit(this.error);
+    }
+  }
+
+  /**
+   * Delete current image
+   */
+  deleteImage(): void {
+    if (!confirm('Are you sure you want to delete this image?')) {
+      return;
+    }
+
+    const deleteObservable = this.uploadType === 'avatar'
+      ? this.uploadService.deleteAvatar()
+      : this.uploadService.deleteCompanyLogo();
+
+    deleteObservable.subscribe({
+      next: () => {
+        this.imagePreview = undefined;
+        this.currentImageUrl = undefined;
+        this.deleteSuccess.emit();
+      },
+      error: (error) => {
+        this.error = 'Failed to delete image';
+        this.uploadError.emit(this.error);
+        console.error('Delete error:', error);
+      }
+    });
+  }
+
+  /**
+   * Trigger file input click
+   */
+  triggerFileInput(): void {
+    const fileInput = document.getElementById('file-input-' + this.uploadType);
+    fileInput?.click();
+  }
+}
+File: src/app/shared/components/image-upload/image-upload.component.html
+html
+<div class="image-upload-container">
+  <!-- Label -->
+  <label class="upload-label">{{ label }}</label>
+
+  <!-- Image Preview -->
+  <div class="image-preview" [class.round]="aspectRatio === '1:1'">
+    <img
+      *ngIf="imagePreview"
+      [src]="imagePreview"
+      alt="Preview"
+      class="preview-image"
+    />
+
+    <!-- Placeholder -->
+    <div *ngIf="!imagePreview" class="placeholder">
+      <mat-icon>{{ uploadType === 'avatar' ? 'person' : 'business' }}</mat-icon>
+      <p>No image uploaded</p>
+    </div>
+
+    <!-- Upload Progress -->
+    <div *ngIf="uploading" class="upload-overlay">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Uploading... {{ uploadProgress }}%</p>
+    </div>
+  </div>
+
+  <!-- Error Message -->
+  <div *ngIf="error" class="error-message">
+    <mat-icon>error</mat-icon>
+    <span>{{ error }}</span>
+  </div>
+
+  <!-- Action Buttons -->
+  <div class="actions">
+    <input
+      type="file"
+      [id]="'file-input-' + uploadType"
+      accept="image/jpeg,image/png,image/webp"
+      (change)="onFileSelected($event)"
+      hidden
+    />
+
+    <button
+      mat-raised-button
+      color="primary"
+      (click)="triggerFileInput()"
+      [disabled]="uploading"
+    >
+      <mat-icon>upload</mat-icon>
+      {{ imagePreview ? 'Change Image' : 'Upload Image' }}
+    </button>
+
+    <button
+      *ngIf="imagePreview"
+      mat-stroked-button
+      color="warn"
+      (click)="deleteImage()"
+      [disabled]="uploading"
+    >
+      <mat-icon>delete</mat-icon>
+      Delete
+    </button>
+  </div>
+
+  <!-- Guidelines -->
+  <div class="guidelines">
+    <p class="guideline-text">
+      <mat-icon class="info-icon">info</mat-icon>
+      Accepted formats: JPEG, PNG, WebP • Max size: 5MB
+    </p>
+  </div>
+</div>
+File: src/app/shared/components/image-upload/image-upload.component.scss
+scss
+.image-upload-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 400px;
+}
+
+.upload-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+}
+
+.image-preview {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &.round {
+    border-radius: 50%;
+  }
+
+  .preview-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #999;
+    text-align: center;
+
+    mat-icon {
+      font-size: 64px;
+      width: 64px;
+      height: 64px;
+      margin-bottom: 8px;
+    }
+
+    p {
+      font-size: 12px;
+      margin: 0;
+    }
+  }
+
+  .upload-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+
+    p {
+      margin-top: 8px;
+      font-size: 14px;
+    }
+  }
+}
+
+.error-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background-color: #ffebee;
+  border-radius: 4px;
+  color: #c62828;
+  font-size: 14px;
+
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+.guidelines {
+  .guideline-text {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #666;
+    margin: 0;
+
+    .info-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+      color: #2196f3;
+    }
+  }
+}
+Step 3: Use in Profile Component
+File: src/app/features/profile/profile-edit/profile-edit.component.html
+html
+<div class="profile-edit-container">
+  <h2>Edit Profile</h2>
+
+  <form [formGroup]="profileForm" (ngSubmit)="onSubmit()">
+    <!-- Profile Picture Upload -->
+    <div class="form-section">
+      <h3>Profile Picture</h3>
+      <app-image-upload
+        [currentImageUrl]="currentUser?.profileImageUrl"
+        uploadType="avatar"
+        label="Profile Picture"
+        aspectRatio="1:1"
+        (uploadSuccess)="onAvatarUploadSuccess($event)"
+        (uploadError)="onUploadError($event)"
+        (deleteSuccess)="onAvatarDeleteSuccess()"
+      ></app-image-upload>
+    </div>
+
+    <!-- Other Profile Fields -->
+    <div class="form-section">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>First Name</mat-label>
+        <input matInput formControlName="firstName" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Last Name</mat-label>
+        <input matInput formControlName="lastName" />
+      </mat-form-field>
+
+      <!-- Add more fields as needed -->
+    </div>
+
+    <!-- Submit Button -->
+    <div class="form-actions">
+      <button mat-raised-button color="primary" type="submit" [disabled]="!profileForm.valid">
+        Save Changes
+      </button>
+      <button mat-stroked-button type="button" routerLink="/profile">
+        Cancel
+      </button>
+    </div>
+  </form>
+</div>
+File: src/app/features/profile/profile-edit/profile-edit.component.ts
+typescript
+import { Component, OnInit } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { AuthService } from '../../../core/services/auth.service';
+import { Router } from '@angular/router';
+import { MatSnackBar } from '@angular/material/snack-bar';
+
+@Component({
+  selector: 'app-profile-edit',
+  templateUrl: './profile-edit.component.html',
+  styleUrls: ['./profile-edit.component.scss']
+})
+export class ProfileEditComponent implements OnInit {
+  profileForm: FormGroup;
+  currentUser: any;
+  loading = false;
+
+  constructor(
+    private fb: FormBuilder,
+    private authService: AuthService,
+    private router: Router,
+    private snackBar: MatSnackBar
+  ) {
+    this.profileForm = this.fb.group({
+      firstName: ['', Validators.required],
+      lastName: ['', Validators.required],
+      // Add more fields as needed
+    });
+  }
+
+  ngOnInit(): void {
+    this.currentUser = this.authService.getCurrentUser();
+
+    if (this.currentUser) {
+      this.profileForm.patchValue({
+        firstName: this.currentUser.firstName,
+        lastName: this.currentUser.lastName
+      });
+    }
+  }
+
+  onAvatarUploadSuccess(fileUrl: string): void {
+    console.log('Avatar uploaded:', fileUrl);
+    this.snackBar.open('Profile picture updated successfully!', 'Close', {
+      duration: 3000
+    });
+
+    // Update current user in auth service
+    // You might want to fetch the updated user from the backend
+  }
+
+  onAvatarDeleteSuccess(): void {
+    console.log('Avatar deleted');
+    this.snackBar.open('Profile picture removed', 'Close', {
+      duration: 3000
+    });
+  }
+
+  onUploadError(error: string): void {
+    console.error('Upload error:', error);
+    this.snackBar.open(error, 'Close', {
+      duration: 5000
+    });
+  }
+
+  onSubmit(): void {
+    if (this.profileForm.valid) {
+      this.loading = true;
+
+      // Save profile changes
+      // this.profileService.updateProfile(this.profileForm.value).subscribe(...)
+
+      this.snackBar.open('Profile updated successfully!', 'Close', {
+        duration: 3000
+      });
+
+      this.router.navigate(['/profile']);
+    }
+  }
+}
+Step 4: Company Logo Upload (For Hiring Managers)
+File: src/app/features/organization/organization-settings/organization-settings.component.html
+html
+<div class="organization-settings-container">
+  <h2>Organization Settings</h2>
+
+  <form [formGroup]="organizationForm" (ngSubmit)="onSubmit()">
+    <!-- Company Logo Upload -->
+    <div class="form-section">
+      <h3>Company Logo</h3>
+      <app-image-upload
+        [currentImageUrl]="currentOrganization?.companyLogoUrl"
+        uploadType="company-logo"
+        label="Company Logo"
+        aspectRatio="16:9"
+        (uploadSuccess)="onLogoUploadSuccess($event)"
+        (uploadError)="onUp
+Claude Sonnet 4.5
+continue
+
+
+Thought Process
+expand
+The user wants me to continue from where I left off in the organization settings component HTML file. I was in the middle of showing the company logo upload implementation.
+
+html
+        (uploadSuccess)="onLogoUploadSuccess($event)"
+        (uploadError)="onUploadError($event)"
+        (deleteSuccess)="onLogoDeleteSuccess()"
+      ></app-image-upload>
+    </div>
+
+    <!-- Company Information -->
+    <div class="form-section">
+      <h3>Company Information</h3>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Company Name</mat-label>
+        <input matInput formControlName="companyName" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Industry</mat-label>
+        <input matInput formControlName="industry" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Description</mat-label>
+        <textarea matInput formControlName="description" rows="4"></textarea>
+      </mat-form-field>
+    </div>
+
+    <!-- Submit Button -->
+    <div class="form-actions">
+      <button mat-raised-button color="primary" type="submit" [disabled]="!organizationForm.valid || loading">
+        Save Changes
+      </button>
+      <button mat-stroked-button type="button" (click)="cancel()">
+        Cancel
+      </button>
+    </div>
+  </form>
+</div>
+File: src/app/features/organization/organization-settings/organization-settings.component.ts
+typescript
+import { Component, OnInit } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { OrganizationService } from '../../../core/services/organization.service';
+
+@Component({
+  selector: 'app-organization-settings',
+  templateUrl: './organization-settings.component.html',
+  styleUrls: ['./organization-settings.component.scss']
+})
+export class OrganizationSettingsComponent implements OnInit {
+  organizationForm: FormGroup;
+  currentOrganization: any;
+  loading = false;
+
+  constructor(
+    private fb: FormBuilder,
+    private organizationService: OrganizationService,
+    private router: Router,
+    private snackBar: MatSnackBar
+  ) {
+    this.organizationForm = this.fb.group({
+      companyName: ['', Validators.required],
+      industry: ['', Validators.required],
+      description: ['']
+    });
+  }
+
+  ngOnInit(): void {
+    this.loadOrganization();
+  }
+
+  loadOrganization(): void {
+    this.organizationService.getCurrentOrganization().subscribe({
+      next: (org) => {
+        this.currentOrganization = org;
+        this.organizationForm.patchValue({
+          companyName: org.name,
+          industry: org.industry,
+          description: org.description
+        });
+      },
+      error: (error) => {
+        console.error('Failed to load organization:', error);
+        this.snackBar.open('Failed to load organization details', 'Close', {
+          duration: 3000
+        });
+      }
+    });
+  }
+
+  onLogoUploadSuccess(fileUrl: string): void {
+    console.log('Company logo uploaded:', fileUrl);
+    this.snackBar.open('Company logo updated successfully!', 'Close', {
+      duration: 3000
+    });
+
+    // Reload organization data to get updated logo
+    this.loadOrganization();
+  }
+
+  onLogoDeleteSuccess(): void {
+    console.log('Company logo deleted');
+    this.snackBar.open('Company logo removed', 'Close', {
+      duration: 3000
+    });
+
+    // Reload organization data
+    this.loadOrganization();
+  }
+
+  onUploadError(error: string): void {
+    console.error('Upload error:', error);
+    this.snackBar.open(error, 'Close', {
+      duration: 5000
+    });
+  }
+
+  onSubmit(): void {
+    if (this.organizationForm.valid) {
+      this.loading = true;
+
+      this.organizationService.updateOrganization(this.organizationForm.value).subscribe({
+        next: () => {
+          this.loading = false;
+          this.snackBar.open('Organization updated successfully!', 'Close', {
+            duration: 3000
+          });
+          this.router.navigate(['/hiring-manager/dashboard']);
+        },
+        error: (error) => {
+          this.loading = false;
+          console.error('Update error:', error);
+          this.snackBar.open('Failed to update organization', 'Close', {
+            duration: 3000
+          });
+        }
+      });
+    }
+  }
+
+  cancel(): void {
+    this.router.navigate(['/hiring-manager/dashboard']);
+  }
+}
+Step 5: Organization Service
+File: src/app/core/services/organization.service.ts
+typescript
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { environment } from '../../../environments/environment';
+
+export interface Organization {
+  id: string;
+  name: string;
+  industry: string;
+  description?: string;
+  companyLogoUrl?: string;
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class OrganizationService {
+  private readonly API_URL = environment.apiUrl;
+
+  constructor(private http: HttpClient) {}
+
+  /**
+   * Get current organization
+   */
+  getCurrentOrganization(): Observable<Organization> {
+    return this.http.get<Organization>(`${this.API_URL}/organization/me`);
+  }
+
+  /**
+   * Update organization
+   */
+  updateOrganization(data: Partial<Organization>): Observable<Organization> {
+    return this.http.put<Organization>(`${this.API_URL}/organization/me`, data);
+  }
+}
+4. Security Best Practices
+4.1 Backend Security
+File: S3SecurityConfig.java
+java
+package com.etalente.backend.config;
+
+import org.springframework.context.annotation.Configuration;
+import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
+
+@Configuration
+public class S3SecurityConfig {
+
+    /**
+     * Security best practices for S3 uploads
+     */
+
+    // 1. Use pre-signed URLs with short expiration (15 minutes)
+    // 2. Validate file types on backend before generating URL
+    // 3. Validate file size on backend before generating URL
+    // 4. Use separate folders for different upload types
+    // 5. Set ACL to public-read only for necessary files
+    // 6. Use CloudFront for CDN and DDoS protection
+    // 7. Enable S3 bucket versioning for recovery
+    // 8. Enable S3 bucket logging for audit trail
+    // 9. Use IAM roles with minimal permissions
+    // 10. Never expose AWS credentials in frontend
+
+    /**
+     * Recommended S3 bucket policy
+     */
+    public String getRecommendedBucketPolicy() {
+        return """
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "PublicReadGetObject",
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::your-bucket-name/avatars/*"
+                },
+                {
+                    "Sid": "PublicReadGetObject",
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::your-bucket-name/company-logos/*"
+                }
+            ]
+        }
+        """;
+    }
+
+    /**
+     * Recommended IAM policy for backend application
+     */
+    public String getRecommendedIAMPolicy() {
+        return """
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "s3:PutObject",
+                        "s3:PutObjectAcl",
+                        "s3:GetObject",
+                        "s3:DeleteObject"
+                    ],
+                    "Resource": "arn:aws:s3:::your-bucket-name/*"
+                }
+            ]
+        }
+        """;
+    }
+}
+4.2 File Validation Interceptor
+File: FileValidationAspect.java
+java
+package com.etalente.backend.security;
+
+import com.etalente.backend.dto.UploadUrlRequest;
+import com.etalente.backend.exception.BadRequestException;
+import org.apache.tika.Tika;
+import org.aspectj.lang.JoinPoint;
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Before;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+import java.util.Arrays;
+import java.util.List;
+
+@Aspect
+@Component
+public class FileValidationAspect {
+
+    private static final Logger logger = LoggerFactory.getLogger(FileValidationAspect.class);
+    private static final List<String> ALLOWED_MIME_TYPES = Arrays.asList(
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+    );
+    private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+    @Before("execution(* com.etalente.backend.controller.ProfileController.getAvatarUploadUrl(..)) || " +
+            "execution(* com.etalente.backend.controller.OrganizationController.getLogoUploadUrl(..))")
+    public void validateUploadRequest(JoinPoint joinPoint) {
+        Object[] args = joinPoint.getArgs();
+
+        if (args.length > 0 && args[0] instanceof UploadUrlRequest) {
+            UploadUrlRequest request = (UploadUrlRequest) args[0];
+
+            // Validate content type
+            if (!ALLOWED_MIME_TYPES.contains(request.getContentType())) {
+                logger.warn("Invalid content type attempted: {}", request.getContentType());
+                throw new BadRequestException(
+                    "Invalid content type. Allowed types: " + String.join(", ", ALLOWED_MIME_TYPES)
+                );
+            }
+
+            // Validate file size
+            if (request.getContentLength() > MAX_FILE_SIZE) {
+                logger.warn("File size exceeds limit: {} bytes", request.getContentLength());
+                throw new BadRequestException(
+                    "File size exceeds maximum allowed size of " + (MAX_FILE_SIZE / 1024 / 1024) + "MB"
+                );
+            }
+
+            if (request.getContentLength() <= 0) {
+                logger.warn("Invalid file size: {}", request.getContentLength());
+                throw new BadRequestException("Invalid file size");
+            }
+
+            logger.info("File validation passed: type={}, size={}",
+                request.getContentType(), request.getContentLength());
+        }
+    }
+}
+4.3 Frontend Security
+File: src/app/core/guards/file-upload.guard.ts
+typescript
+import { Injectable } from '@angular/core';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class FileUploadGuard {
+  private readonly ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+  private readonly MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+  /**
+   * Validate file before upload
+   */
+  validateFile(file: File): { valid: boolean; error?: string } {
+    // Check file type
+    if (!this.ALLOWED_TYPES.includes(file.type)) {
+      return {
+        valid: false,
+        error: `Invalid file type. Allowed types: ${this.ALLOWED_TYPES.join(', ')}`
+      };
+    }
+
+    // Check file size
+    if (file.size > this.MAX_FILE_SIZE) {
+      return {
+        valid: false,
+        error: `File size exceeds maximum allowed size of ${this.MAX_FILE_SIZE / 1024 / 1024}MB`
+      };
+    }
+
+    if (file.size <= 0) {
+      return {
+        valid: false,
+        error: 'Invalid file size'
+      };
+    }
+
+    // Additional check: verify file extension matches MIME type
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    const expectedExtensions: Record<string, string[]> = {
+      'image/jpeg': ['jpg', 'jpeg'],
+      'image/png': ['png'],
+      'image/webp': ['webp']
+    };
+
+    const allowedExtensions = expectedExtensions[file.type] || [];
+    if (extension && !allowedExtensions.includes(extension)) {
+      return {
+        valid: false,
+        error: 'File extension does not match file type'
+      };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Sanitize file name
+   */
+  sanitizeFileName(fileName: string): string {
+    return fileName
+      .toLowerCase()
+      .replace(/[^a-z0-9.-]/g, '_')
+      .replace(/_{2,}/g, '_');
+  }
+
+  /**
+   * Check if file is actually an image
+   */
+  async validateImageFile(file: File): Promise<{ valid: boolean; error?: string }> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+
+      reader.onload = (e: any) => {
+        const img = new Image();
+
+        img.onload = () => {
+          // Image loaded successfully
+          resolve({ valid: true });
+        };
+
+        img.onerror = () => {
+          // Failed to load as image
+          resolve({
+            valid: false,
+            error: 'File is not a valid image'
+          });
+        };
+
+        img.src = e.target.result;
+      };
+
+      reader.onerror = () => {
+        resolve({
+          valid: false,
+          error: 'Failed to read file'
+        });
+      };
+
+      reader.readAsDataURL(file);
+    });
+  }
+}
+5. Testing Strategy
+5.1 Backend Tests
+File: S3ServiceTest.java
+java
+package com.etalente.backend.service;
+
+import com.etalente.backend.dto.UploadUrlResponse;
+import com.etalente.backend.exception.BadRequestException;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class S3ServiceTest {
+
+    @Mock
+    private S3Client s3Client;
+
+    @Mock
+    private S3Presigner s3Presigner;
+
+    private S3Service s3Service;
+
+    @BeforeEach
+    void setUp() {
+        s3Service = new S3Service(s3Client, s3Presigner);
+        // Set test configuration values
+        ReflectionTestUtils.setField(s3Service, "bucketName", "test-bucket");
+        ReflectionTestUtils.setField(s3Service, "maxFileSize", 5242880L);
+        ReflectionTestUtils.setField(s3Service, "allowedContentTypes",
+            Arrays.asList("image/jpeg", "image/png", "image/webp"));
+    }
+
+    @Test
+    void shouldGeneratePresignedUploadUrl() {
+        // Given
+        String folder = "avatars";
+        String contentType = "image/jpeg";
+        long contentLength = 1048576; // 1MB
+
+        // When
+        UploadUrlResponse response = s3Service.generatePresignedUploadUrl(
+            folder, contentType, contentLength
+        );
+
+        // Then
+        assertThat(response).isNotNull();
+        assertThat(response.getUploadUrl()).isNotEmpty();
+        assertThat(response.getFileUrl()).isNotEmpty();
+        assertThat(response.getKey()).contains(folder);
+    }
+
+    @Test
+    void shouldRejectInvalidContentType() {
+        // Given
+        String folder = "avatars";
+        String contentType = "application/pdf"; // Not allowed
+        long contentLength = 1048576;
+
+        // When & Then
+        assertThatThrownBy(() ->
+            s3Service.generatePresignedUploadUrl(folder, contentType, contentLength)
+        )
+        .isInstanceOf(BadRequestException.class)
+        .hasMessageContaining("Invalid content type");
+    }
+
+    @Test
+    void shouldRejectOversizedFile() {
+        // Given
+        String folder = "avatars";
+        String contentType = "image/jpeg";
+        long contentLength = 10485760; // 10MB (exceeds 5MB limit)
+
+        // When & Then
+        assertThatThrownBy(() ->
+            s3Service.generatePresignedUploadUrl(folder, contentType, contentLength)
+        )
+        .isInstanceOf(BadRequestException.class)
+        .hasMessageContaining("File size exceeds maximum");
+    }
+
+    @Test
+    void shouldDeleteFile() {
+        // Given
+        String fileUrl = "https://test-bucket.s3.us-east-1.amazonaws.com/avatars/test.jpg";
+
+        // When
+        s3Service.deleteFile(fileUrl);
+
+        // Then
+        verify(s3Client, times(1)).deleteObject(any());
+    }
+}
+5.2 Integration Test
+File: FileUploadIntegrationTest.java
+java
+package com.etalente.backend.integration;
+
+import com.etalente.backend.dto.UploadUrlRequest;
+import com.etalente.backend.dto.UploadUrlResponse;
+import com.etalente.backend.dto.UpdateAvatarRequest;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
+class FileUploadIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Test
+    void shouldGetAvatarUploadUrl() throws Exception {
+        // Given
+        UploadUrlRequest request = new UploadUrlRequest("image/jpeg", 1048576);
+        String jwt = generateTestJwt();
+
+        // When & Then
+        mockMvc.perform(post("/api/profile/me/avatar/upload-url")
+                .header("Authorization", "Bearer " + jwt)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uploadUrl").exists())
+                .andExpect(jsonPath("$.fileUrl").exists());
+    }
+
+    @Test
+    void shouldUpdateAvatar() throws Exception {
+        // Given
+        UpdateAvatarRequest request = new UpdateAvatarRequest(
+            "https://test-bucket.s3.us-east-1.amazonaws.com/avatars/test.jpg"
+        );
+        String jwt = generateTestJwt();
+
+        // When & Then
+        mockMvc.perform(put("/api/profile/me/avatar")
+                .header("Authorization", "Bearer " + jwt)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.profileImageUrl").value(request.getProfileImageUrl()));
+    }
+
+    @Test
+    void shouldRejectInvalidContentType() throws Exception {
+        // Given
+        UploadUrlRequest request = new UploadUrlRequest("application/pdf", 1048576);
+        String jwt = generateTestJwt();
+
+        // When & Then
+        mockMvc.perform(post("/api/profile/me/avatar/upload-url")
+                .header("Authorization", "Bearer " + jwt)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+}
+5.3 Frontend Tests
+File: upload.service.spec.ts
+typescript
+import { TestBed } from '@angular/core/testing';
+import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
+import { UploadService } from './upload.service';
+
+describe('UploadService', () => {
+  let service: UploadService;
+  let httpMock: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [HttpClientTestingModule],
+      providers: [UploadService]
+    });
+
+    service = TestBed.inject(UploadService);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpMock.verify();
+  });
+
+  it('should validate file type', () => {
+    const invalidFile = new File(['content'], 'test.pdf', { type: 'application/pdf' });
+
+    expect(() => service['validateFile'](invalidFile)).toThrow();
+  });
+
+  it('should validate file size', () => {
+    const oversizedFile = new File([new ArrayBuffer(10 * 1024 * 1024)], 'test.jpg', {
+      type: 'image/jpeg'
+    });
+
+    expect(() => service['validateFile'](oversizedFile)).toThrow();
+  });
+
+  it('should upload avatar successfully', (done) => {
+    const file = new File(['content'], 'test.jpg', { type: 'image/jpeg' });
+    const mockResponse = {
+      uploadUrl: 'https://s3.amazonaws.com/...',
+      fileUrl: 'https://cdn.example.com/test.jpg',
+      key: 'avatars/test.jpg'
+    };
+
+    service.uploadAvatar(file).subscribe({
+      next: (fileUrl) => {
+        expect(fileUrl).toBe(mockResponse.fileUrl);
+        done();
+      }
+    });
+
+    const req = httpMock.expectOne(`${service['API_URL']}/profile/me/avatar/upload-url`);
+    expect(req.request.method).toBe('POST');
+    req.flush(mockResponse);
+  });
+});
+6. Deployment & Production
+6.1 AWS S3 Setup
+Create S3 Bucket
+bash
+# Using AWS CLI
+aws s3 mb
+Claude Sonnet 4.5
+continue
+
+
+Thought Process
+expand
+The user wants me to continue with the deployment and production section for AWS S3 setup and file upload implementation.
+
+bash
+# Using AWS CLI
+aws s3 mb s3://etalente-uploads --region us-east-1
+
+# Enable versioning (for backup/recovery)
+aws s3api put-bucket-versioning \
+  --bucket etalente-uploads \
+  --versioning-configuration Status=Enabled
+
+# Enable server-side encryption
+aws s3api put-bucket-encryption \
+  --bucket etalente-uploads \
+  --server-side-encryption-configuration '{
+    "Rules": [{
+      "ApplyServerSideEncryptionByDefault": {
+        "SSEAlgorithm": "AES256"
+      }
+    }]
+  }'
+
+# Block public access (we'll allow specific objects via ACL)
+aws s3api put-public-access-block \
+  --bucket etalente-uploads \
+  --public-access-block-configuration \
+    "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+
+# Enable logging
+aws s3api put-bucket-logging \
+  --bucket etalente-uploads \
+  --bucket-logging-status '{
+    "LoggingEnabled": {
+      "TargetBucket": "etalente-logs",
+      "TargetPrefix": "s3-access-logs/"
+    }
+  }'
+Configure CORS
+bash
+# Create CORS configuration file: cors.json
+cat > cors.json <<EOF
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": ["https://app.etalente.com", "http://localhost:4200"],
+      "AllowedMethods": ["GET", "PUT", "POST", "DELETE"],
+      "AllowedHeaders": ["*"],
+      "ExposeHeaders": ["ETag"],
+      "MaxAgeSeconds": 3000
+    }
+  ]
+}
+EOF
+
+# Apply CORS configuration
+aws s3api put-bucket-cors \
+  --bucket etalente-uploads \
+  --cors-configuration file://cors.json
+Create Folder Structure
+bash
+# Create folders in S3
+aws s3api put-object --bucket etalente-uploads --key avatars/
+aws s3api put-object --bucket etalente-uploads --key company-logos/
+aws s3api put-object --bucket etalente-uploads --key documents/
+Set Bucket Policy
+bash
+# Create bucket policy file: bucket-policy.json
+cat > bucket-policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PublicReadGetObject",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::etalente-uploads/avatars/*",
+        "arn:aws:s3:::etalente-uploads/company-logos/*"
+      ]
+    }
+  ]
+}
+EOF
+
+# Apply bucket policy
+aws s3api put-bucket-policy \
+  --bucket etalente-uploads \
+  --policy file://bucket-policy.json
+6.2 IAM User/Role Setup
+Create IAM Policy
+bash
+# Create IAM policy file: s3-upload-policy.json
+cat > s3-upload-policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:PutObjectAcl",
+        "s3:GetObject",
+        "s3:DeleteObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::etalente-uploads",
+        "arn:aws:s3:::etalente-uploads/*"
+      ]
+    }
+  ]
+}
+EOF
+
+# Create IAM policy
+aws iam create-policy \
+  --policy-name EtalenteS3UploadPolicy \
+  --policy-document file://s3-upload-policy.json
+
+# Note the ARN from the response
+Create IAM User (for development)
+bash
+# Create IAM user
+aws iam create-user --user-name etalente-backend-dev
+
+# Attach policy to user
+aws iam attach-user-policy \
+  --user-name etalente-backend-dev \
+  --policy-arn arn:aws:iam::YOUR_ACCOUNT_ID:policy/EtalenteS3UploadPolicy
+
+# Create access keys
+aws iam create-access-key --user-name etalente-backend-dev
+
+# Save the AccessKeyId and SecretAccessKey from the output
+Create IAM Role (for production/EC2)
+bash
+# Create trust policy file: trust-policy.json
+cat > trust-policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "ec2.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+
+# Create IAM role
+aws iam create-role \
+  --role-name EtalenteBackendRole \
+  --assume-role-policy-document file://trust-policy.json
+
+# Attach policy to role
+aws iam attach-role-policy \
+  --role-name EtalenteBackendRole \
+  --policy-arn arn:aws:iam::YOUR_ACCOUNT_ID:policy/EtalenteS3UploadPolicy
+
+# Create instance profile
+aws iam create-instance-profile \
+  --instance-profile-name EtalenteBackendInstanceProfile
+
+# Add role to instance profile
+aws iam add-role-to-instance-profile \
+  --instance-profile-name EtalenteBackendInstanceProfile \
+  --role-name EtalenteBackendRole
+6.3 CloudFront Setup (Optional but Recommended)
+Create CloudFront Distribution
+bash
+# Create CloudFront distribution config: cloudfront-config.json
+cat > cloudfront-config.json <<EOF
+{
+  "CallerReference": "etalente-uploads-$(date +%s)",
+  "Comment": "CDN for Etalente uploads",
+  "Origins": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "Id": "S3-etalente-uploads",
+        "DomainName": "etalente-uploads.s3.amazonaws.com",
+        "S3OriginConfig": {
+          "OriginAccessIdentity": ""
+        }
+      }
+    ]
+  },
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "S3-etalente-uploads",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "AllowedMethods": {
+      "Quantity": 2,
+      "Items": ["GET", "HEAD"]
+    },
+    "ForwardedValues": {
+      "QueryString": false,
+      "Cookies": {
+        "Forward": "none"
+      }
+    },
+    "MinTTL": 0,
+    "DefaultTTL": 86400,
+    "MaxTTL": 31536000,
+    "Compress": true
+  },
+  "Enabled": true,
+  "PriceClass": "PriceClass_100"
+}
+EOF
+
+# Create distribution
+aws cloudfront create-distribution \
+  --distribution-config file://cloudfront-config.json
+
+# Note the DomainName from the response (e.g., d1234567890.cloudfront.net)
+Update Backend Configuration
+yaml
+# application-prod.yml
+aws:
+  s3:
+    bucket-name: etalente-uploads
+    region: us-east-1
+    cloudfront-domain: d1234567890.cloudfront.net  # Add this
+6.4 Environment Variables Setup
+Backend Environment Variables
+bash
+# .env (for local development)
+AWS_S3_BUCKET_NAME=etalente-uploads
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+CLOUDFRONT_DOMAIN=d1234567890.cloudfront.net
+For Production (Docker/Kubernetes)
+yaml
+# docker-compose.yml (Production)
+version: '3.8'
+
+services:
+  backend:
+    image: etalente-backend:latest
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN}
+For Kubernetes
+yaml
+# k8s/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aws-credentials
+type: Opaque
+stringData:
+  aws-access-key-id: AKIAIOSFODNN7EXAMPLE
+  aws-secret-access-key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-config
+data:
+  bucket-name: etalente-uploads
+  region: us-east-1
+  cloudfront-domain: d1234567890.cloudfront.net
+6.5 Monitoring & Alerts
+CloudWatch Alarms
+bash
+# Create alarm for high PUT request rate
+aws cloudwatch put-metric-alarm \
+  --alarm-name etalente-s3-high-put-requests \
+  --alarm-description "Alert when PUT requests exceed threshold" \
+  --metric-name NumberOfObjects \
+  --namespace AWS/S3 \
+  --statistic Sum \
+  --period 300 \
+  --threshold 1000 \
+  --comparison-operator GreaterThanThreshold \
+  --evaluation-periods 2 \
+  --dimensions Name=BucketName,Value=etalente-uploads
+
+# Create alarm for 4xx errors
+aws cloudwatch put-metric-alarm \
+  --alarm-name etalente-s3-4xx-errors \
+  --alarm-description "Alert on 4xx errors" \
+  --metric-name 4xxErrors \
+  --namespace AWS/S3 \
+  --statistic Sum \
+  --period 300 \
+  --threshold 10 \
+  --comparison-operator GreaterThanThreshold \
+  --evaluation-periods 1 \
+  --dimensions Name=BucketName,Value=etalente-uploads
+Backend Monitoring
+java
+// Add Micrometer metrics
+@Component
+public class S3MetricsRecorder {
+
+    private final Counter uploadSuccessCounter;
+    private final Counter uploadFailureCounter;
+    private final Timer uploadDurationTimer;
+
+    public S3MetricsRecorder(MeterRegistry registry) {
+        this.uploadSuccessCounter = Counter.builder("s3.upload.success")
+            .description("Successful S3 uploads")
+            .register(registry);
+
+        this.uploadFailureCounter = Counter.builder("s3.upload.failure")
+            .description("Failed S3 uploads")
+            .register(registry);
+
+        this.uploadDurationTimer = Timer.builder("s3.upload.duration")
+            .description("Time taken for S3 operations")
+            .register(registry);
+    }
+
+    public void recordUploadSuccess() {
+        uploadSuccessCounter.increment();
+    }
+
+    public void recordUploadFailure() {
+        uploadFailureCounter.increment();
+    }
+
+    public <T> T recordUploadDuration(Supplier<T> operation) {
+        return uploadDurationTimer.record(operation);
+    }
+}
+6.6 Cost Optimization
+S3 Lifecycle Policy
+bash
+# Create lifecycle policy: lifecycle-policy.json
+cat > lifecycle-policy.json <<EOF
+{
+  "Rules": [
+    {
+      "Id": "DeleteOldVersions",
+      "Status": "Enabled",
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 30
+      }
+    },
+    {
+      "Id": "TransitionToIA",
+      "Status": "Enabled",
+      "Transitions": [
+        {
+          "Days": 90,
+          "StorageClass": "STANDARD_IA"
+        }
+      ]
+    },
+    {
+      "Id": "DeleteIncompleteMultipartUploads",
+      "Status": "Enabled",
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 7
+      }
+    }
+  ]
+}
+EOF
+
+# Apply lifecycle policy
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket etalente-uploads \
+  --lifecycle-configuration file://lifecycle-policy.json
+Cost Estimation
+text
+Monthly S3 Costs (Estimated):
+- Storage: 100GB × $0.023/GB = $2.30
+- PUT requests: 10,000 × $0.005/1000 = $0.05
+- GET requests: 100,000 × $0.0004/1000 = $0.04
+- Data transfer: 50GB × $0.09/GB = $4.50
+- CloudFront: 100GB × $0.085/GB = $8.50
+
+Total estimated monthly cost: ~$15-20
+6.7 Backup Strategy
+Cross-Region Replication
+bash
+# Create replication policy: replication-policy.json
+cat > replication-policy.json <<EOF
+{
+  "Role": "arn:aws:iam::YOUR_ACCOUNT_ID:role/S3ReplicationRole",
+  "Rules": [
+    {
+      "Status": "Enabled",
+      "Priority": 1,
+      "DeleteMarkerReplication": {
+        "Status": "Enabled"
+      },
+      "Filter": {},
+      "Destination": {
+        "Bucket": "arn:aws:s3:::etalente-uploads-backup",
+        "ReplicationTime": {
+          "Status": "Enabled",
+          "Time": {
+            "Minutes": 15
+          }
+        },
+        "Metrics": {
+          "Status": "Enabled"
+        }
+      }
+    }
+  ]
+}
+EOF
+
+# Enable versioning on source bucket (required for replication)
+aws s3api put-bucket-versioning \
+  --bucket etalente-uploads \
+  --versioning-configuration Status=Enabled
+
+# Apply replication configuration
+aws s3api put-bucket-replication \
+  --bucket etalente-uploads \
+  --replication-configuration file://replication-policy.json
+6.8 Disaster Recovery Plan
+Backup Script
+bash
+#!/bin/bash
+# backup-s3.sh
+
+BUCKET_NAME="etalente-uploads"
+BACKUP_BUCKET="etalente-backups"
+DATE=$(date +%Y-%m-%d)
+
+echo "Starting backup of $BUCKET_NAME to $BACKUP_BUCKET at $DATE"
+
+# Sync to backup bucket
+aws s3 sync s3://$BUCKET_NAME s3://$BACKUP_BUCKET/$DATE/ \
+  --storage-class GLACIER \
+  --exclude "*.tmp" \
+  --exclude "*.temp"
+
+echo "Backup completed successfully"
+
+# Clean up old backups (older than 90 days)
+aws s3 ls s3://$BACKUP_BUCKET/ | while read -r line; do
+  CREATE_DATE=$(echo $line | awk '{print $1" "$2}')
+  CREATE_DATE_SECONDS=$(date -d "$CREATE_DATE" +%s)
+  CURRENT_DATE_SECONDS=$(date +%s)
+  DIFF_DAYS=$(( ($CURRENT_DATE_SECONDS - $CREATE_DATE_SECONDS) / 86400 ))
+
+  if [ $DIFF_DAYS -gt 90 ]; then
+    FOLDER=$(echo $line | awk '{print $4}')
+    echo "Deleting old backup: $FOLDER"
+    aws s3 rm s3://$BACKUP_BUCKET/$FOLDER --recursive
+  fi
+done
+Schedule with Cron
+bash
+# Add to crontab
+0 2 * * * /path/to/backup-s3.sh >> /var/log/s3-backup.log 2>&1
+7. Performance Optimization
+7.1 Image Optimization
+Backend: Auto-resize Images
+java
+// Add image processing dependency
+// build.gradle
+implementation 'org.imgscalr:imgscalr-lib:4.2'
+
+// ImageProcessingService.java
+@Service
+public class ImageProcessingService {
+
+    private static final int MAX_WIDTH = 1200;
+    private static final int THUMBNAIL_SIZE = 200;
+
+    /**
+     * Resize image before upload
+     */
+    public byte[] resizeImage(byte[] imageData, int maxWidth) throws IOException {
+        BufferedImage originalImage = ImageIO.read(new ByteArrayInputStream(imageData));
+
+        int originalWidth = originalImage.getWidth();
+        int originalHeight = originalImage.getHeight();
+
+        if (originalWidth <= maxWidth) {
+            return imageData; // No resize needed
+        }
+
+        // Calculate new dimensions
+        int newHeight = (int) ((double) originalHeight / originalWidth * maxWidth);
+
+        // Resize using imgscalr
+        BufferedImage resizedImage = Scalr.resize(
+            originalImage,
+            Scalr.Method.QUALITY,
+            Scalr.Mode.FIT_TO_WIDTH,
+            maxWidth,
+            newHeight,
+            Scalr.OP_ANTIALIAS
+        );
+
+        // Convert to byte array
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ImageIO.write(resizedImage, "jpg", baos);
+        return baos.toByteArray();
+    }
+
+    /**
+     * Generate thumbnail
+     */
+    public byte[] generateThumbnail(byte[] imageData) throws IOException {
+        return resizeImage(imageData, THUMBNAIL_SIZE);
+    }
+}
+Frontend: Progressive Image Loading
+typescript
+// image-progressive.component.ts
+@Component({
+  selector: 'app-progressive-image',
+  template: `
+    <div class="progressive-image-container">
+      <!-- Low quality placeholder -->
+      <img
+        *ngIf="!imageLoaded"
+        [src]="placeholderUrl"
+        class="placeholder"
+        [class.blur]="true"
+      />
+
+      <!-- Full quality image -->
+      <img
+        [src]="imageUrl"
+        (load)="onImageLoad()"
+        [class.loaded]="imageLoaded"
+        class="full-image"
+      />
+    </div>
+  `,
+  styles: [`
+    .progressive-image-container {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .placeholder {
+      filter: blur(10px);
+      transform: scale(1.1);
+    }
+
+    .full-image {
+      opacity: 0;
+      transition: opacity 0.3s ease-in;
+
+      &.loaded {
+        opacity: 1;
+      }
+    }
+  `]
+})
+export class ProgressiveImageComponent {
+  @Input() imageUrl!: string;
+  @Input() placeholderUrl?: string;
+
+  imageLoaded = false;
+
+  onImageLoad() {
+    this.imageLoaded = true;
+  }
+}
+7.2 Caching Strategy
+Backend Response Caching
+java
+@RestController
+@RequestMapping("/api/profile")
+public class ProfileController {
+
+    @GetMapping("/me")
+    @Cacheable(value = "user-profiles", key = "#userId")
+    public ResponseEntity<UserDto> getUserProfile(@PathVariable String userId) {
+        UserDto user = profileService.getUserProfile(userId);
+
+        // Set cache headers
+        return ResponseEntity.ok()
+            .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS))
+            .eTag(generateETag(user))
+            .body(user);
+    }
+
+    private String generateETag(UserDto user) {
+        return DigestUtils.md5DigestAsHex(
+            (user.getId() + user.getProfileImageUrl()).getBytes()
+        );
+    }
+}
+Frontend HTTP Caching
+typescript
+// http-cache.interceptor.ts
+@Injectable()
+export class HttpCacheInterceptor implements HttpInterceptor {
+  private cache = new Map<string, HttpResponse<any>>();
+
+  intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    // Only cache GET requests
+    if (req.method !== 'GET') {
+      return next.handle(req);
+    }
+
+    // Check cache
+    const cachedResponse = this.cache.get(req.url);
+    if (cachedResponse) {
+      return of(cachedResponse.clone());
+    }
+
+    // Make request and cache response
+    return next.handle(req).pipe(
+      tap(event => {
+        if (event instanceof HttpResponse) {
+          this.cache.set(req.url, event.clone());
+
+          // Clear cache after
+Claude Sonnet 4.5
+continue
+
+
+Thought Process
+expand
+The user wants me to continue from where I left off. I was in the middle of the HTTP caching interceptor implementation in the frontend section. Let me continue from there.
+
+typescript
+          this.cache.set(req.url, event.clone());
+
+          // Clear cache after 5 minutes
+          setTimeout(() => {
+            this.cache.delete(req.url);
+          }, 5 * 60 * 1000);
+        }
+      })
+    );
+  }
+}
+7.3 CDN Configuration
+CloudFront Cache Behaviors
+json
+{
+  "CacheBehaviors": [
+    {
+      "PathPattern": "avatars/*",
+      "TargetOriginId": "S3-etalente-uploads",
+      "ViewerProtocolPolicy": "redirect-to-https",
+      "AllowedMethods": ["GET", "HEAD"],
+      "CachedMethods": ["GET", "HEAD"],
+      "Compress": true,
+      "DefaultTTL": 2592000,
+      "MaxTTL": 31536000,
+      "MinTTL": 0,
+      "ForwardedValues": {
+        "QueryString": false,
+        "Cookies": { "Forward": "none" }
+      }
+    },
+    {
+      "PathPattern": "company-logos/*",
+      "TargetOriginId": "S3-etalente-uploads",
+      "ViewerProtocolPolicy": "redirect-to-https",
+      "AllowedMethods": ["GET", "HEAD"],
+      "CachedMethods": ["GET", "HEAD"],
+      "Compress": true,
+      "DefaultTTL": 2592000,
+      "MaxTTL": 31536000,
+      "MinTTL": 0,
+      "ForwardedValues": {
+        "QueryString": false,
+        "Cookies": { "Forward": "none" }
+      }
+    }
+  ]
+}
+8. Complete Implementation Summary
+8.1 Backend Checklist
+Dependencies
+ AWS SDK for S3
+ AWS SDK for STS
+ Apache Tika (file validation)
+ Commons IO
+Configuration
+ S3Config.java
+ application.yml with S3 settings
+ Environment variables setup
+Services
+ S3Service.java (pre-signed URLs)
+ ProfileService.java (avatar management)
+ OrganizationService.java (logo management)
+Controllers
+ ProfileController.java (avatar endpoints)
+ OrganizationController.java (logo endpoints)
+DTOs
+ UploadUrlRequest
+ UploadUrlResponse
+ UpdateAvatarRequest
+ UpdateCompanyLogoRequest
+Database
+ Add profileImageUrl to User entity
+ Add companyLogoUrl to Organization entity
+ Flyway migration scripts
+P0 Requirements
+ Add applicantsCount to JobPostResponse
+ Add newApplicantsCount to JobPostResponse
+ Add companyLogoUrl to JobPostResponse
+ Update JobPostService with counts
+ Add viewedByEmployer field to JobApplication
+Security
+ File type validation
+ File size validation
+ Pre-signed URL expiration
+ Role-based authorization
+8.2 Frontend Checklist
+Services
+ UploadService.ts (upload logic)
+ FileUploadGuard.ts (validation)
+ OrganizationService.ts
+Components
+ ImageUploadComponent (reusable)
+ ProfileEditComponent (avatar upload)
+ OrganizationSettingsComponent (logo upload)
+Features
+ Two-step upload process (get URL → upload to S3)
+ Image preview
+ Upload progress indicator
+ Image compression
+ Error handling
+ Delete functionality
+8.3 AWS Setup Checklist
+S3 Bucket
+ Create bucket
+ Enable versioning
+ Configure CORS
+ Set bucket policy
+ Enable encryption
+ Enable logging
+ Configure lifecycle policies
+IAM
+ Create IAM policy
+ Create IAM user/role
+ Generate access keys
+ Attach policies
+CloudFront (Optional)
+ Create distribution
+ Configure cache behaviors
+ Set up SSL certificate
+ Configure custom domain
+Monitoring
+ CloudWatch alarms
+ S3 access logs
+ Application metrics
+9. Quick Start Guide
+9.1 For Backend Developers
+Step 1: Add Dependencies
+gradle
+implementation 'software.amazon.awssdk:s3:2.20.26'
+implementation 'software.amazon.awssdk:sts:2.20.26'
+Step 2: Set Environment Variables
+bash
+export AWS_S3_BUCKET_NAME=etalente-uploads
+export AWS_REGION=us-east-1
+export AWS_ACCESS_KEY_ID=your-access-key
+export AWS_SECRET_ACCESS_KEY=your-secret-key
+Step 3: Run Migrations
+bash
+./gradlew flywayMigrate
+Step 4: Test Endpoints
+bash
+# Request upload URL
+curl -X POST http://localhost:8080/api/profile/me/avatar/upload-url \
+  -H "Authorization: Bearer YOUR_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contentType": "image/jpeg",
+    "contentLength": 1048576
+  }'
+
+# Update profile with avatar
+curl -X PUT http://localhost:8080/api/profile/me/avatar \
+  -H "Authorization: Bearer YOUR_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "profileImageUrl": "https://your-cdn.com/avatars/file.jpg"
+  }'
+9.2 For Frontend Developers
+Step 1: Add Upload Component
+bash
+ng generate component shared/components/image-upload
+Step 2: Import in Module
+typescript
+import { ImageUploadComponent } from './shared/components/image-upload/image-upload.component';
+
+@NgModule({
+  declarations: [ImageUploadComponent],
+  exports: [ImageUploadComponent]
+})
+export class SharedModule {}
+Step 3: Use in Template
+html
+<app-image-upload
+  [currentImageUrl]="user?.profileImageUrl"
+  uploadType="avatar"
+  (uploadSuccess)="onUploadSuccess($event)"
+  (uploadError)="onUploadError($event)"
+></app-image-upload>
+10. Troubleshooting Guide
+10.1 Common Issues
+Issue: "Access Denied" Error
+Symptom: 403 error when uploading to S3
+
+Solutions:
+
+Check IAM permissions
+Verify bucket policy
+Check pre-signed URL hasn't expired
+Verify CORS configuration
+bash
+# Test IAM permissions
+aws s3 ls s3://etalente-uploads --profile your-profile
+
+# Check bucket policy
+aws s3api get-bucket-policy --bucket etalente-uploads
+Issue: "CORS Error" in Browser
+Symptom: CORS policy error in browser console
+
+Solutions:
+
+Update S3 CORS configuration
+Ensure allowed origins include your frontend URL
+Check HTTP method is allowed
+bash
+# Update CORS
+aws s3api put-bucket-cors \
+  --bucket etalente-uploads \
+  --cors-configuration file://cors.json
+Issue: Upload Fails with "EntityTooLarge"
+Symptom: File upload fails with 413 error
+
+Solutions:
+
+Check file size validation on frontend
+Verify backend max file size setting
+Check S3 multipart upload threshold
+typescript
+// Frontend - add size validation
+if (file.size > 5 * 1024 * 1024) {
+  throw new Error('File size exceeds 5MB limit');
+}
+Issue: Images Not Displaying
+Symptom: Broken image links
+
+Solutions:
+
+Verify S3 object ACL is public-read
+Check bucket policy allows GetObject
+Verify CloudFront distribution is active
+Check CORS allows GET requests
+bash
+# Check object ACL
+aws s3api get-object-acl \
+  --bucket etalente-uploads \
+  --key avatars/your-file.jpg
+Issue: Slow Upload Performance
+Symptom: Uploads take too long
+
+Solutions:
+
+Implement image compression
+Use multipart upload for large files
+Enable CloudFront acceleration
+Check network latency
+typescript
+// Frontend - compress before upload
+const compressedFile = await this.uploadService.compressImage(file, 800);
+10.2 Debugging Tools
+Backend Logging
+java
+// Enable S3 debug logging
+logging:
+  level:
+    software.amazon.awssdk.request: DEBUG
+    com.etalente.backend.service.S3Service: DEBUG
+Frontend Debugging
+typescript
+// Add console logs in upload service
+console.log('Step 1: Requesting upload URL');
+console.log('Step 2: Uploading to S3');
+console.log('Step 3: Updating backend');
+AWS CloudTrail
+bash
+# Enable CloudTrail for S3 operations
+aws cloudtrail create-trail \
+  --name etalente-s3-trail \
+  --s3-bucket-name etalente-cloudtrail-logs
+
+# Start logging
+aws cloudtrail start-logging --name etalente-s3-trail
+11. Alternative: Local Storage (for Development)
+If you want to start without AWS and use local filesystem:
+
+Backend: Local File Storage Service
+java
+@Service
+@Profile("dev")
+public class LocalFileStorageService {
+
+    @Value("${upload.local-storage-path}")
+    private String storagePath;
+
+    @Value("${server.port}")
+    private int serverPort;
+
+    public UploadUrlResponse generateUploadUrl(String folder, String contentType, long contentLength) {
+        String fileName = UUID.randomUUID().toString() + getFileExtension(contentType);
+        String filePath = storagePath + "/" + folder + "/" + fileName;
+        String fileUrl = "http://localhost:" + serverPort + "/uploads/" + folder + "/" + fileName;
+
+        // Create directories if they don't exist
+        new File(storagePath + "/" + folder).mkdirs();
+
+        return new UploadUrlResponse(fileUrl, fileUrl, filePath);
+    }
+
+    public void saveFile(MultipartFile file, String folder) throws IOException {
+        String fileName = UUID.randomUUID().toString() + getFileExtension(file.getContentType());
+        String filePath = storagePath + "/" + folder + "/" + fileName;
+
+        File destinationFile = new File(filePath);
+        file.transferTo(destinationFile);
+    }
+
+    public void deleteFile(String fileUrl) {
+        String filePath = extractLocalPath(fileUrl);
+        File file = new File(filePath);
+        if (file.exists()) {
+            file.delete();
+        }
+    }
+
+    private String getFileExtension(String contentType) {
+        switch (contentType) {
+            case "image/jpeg": return ".jpg";
+            case "image/png": return ".png";
+            case "image/webp": return ".webp";
+            default: return ".bin";
+        }
+    }
+
+    private String extractLocalPath(String fileUrl) {
+        // Extract path from URL
+        return fileUrl.replace("http://localhost:" + serverPort + "/uploads/", storagePath + "/");
+    }
+}
+Configuration
+yaml
+# application-dev.yml
+upload:
+  local-storage-path: ./uploads
+
+spring:
+  web:
+    resources:
+      static-locations: file:./uploads/
+12. Final Recommendations
+12.1 For MVP/Development
+Use Local Storage Initially:
+
+✅ Faster to set up
+✅ No AWS costs
+✅ Easy to test
+✅ Can migrate to S3 later
+When to Migrate to S3:
+
+When you have > 10 active users
+When you need CDN
+Before production launch
+When you need automatic backups
+12.2 For Production
+Use AWS S3 + CloudFront:
+
+✅ Scalable
+✅ Reliable
+✅ Global CDN
+✅ Automatic backups
+✅ Cost-effective at scale
+Don't Forget:
+
+Enable versioning
+Set up lifecycle policies
+Configure CloudWatch alarms
+Enable access logging
+Use IAM roles (not access keys) in production
+Set up cross-region replication for critical data
+12.3 Cost Management
+Strategies to Reduce Costs:
+
+Use intelligent tiering for storage
+Implement lifecycle policies
+Enable compression
+Use CloudFront (reduces S3 data transfer costs)
+Delete old/unused files regularly
+Monitor usage with AWS Cost Explorer
+13. Summary
+What We've Built
+✅ P0 (Critical) - Employer Dashboard
+
+Added applicantsCount to JobPostResponse
+Added newApplicantsCount to JobPostResponse
+Added companyLogoUrl to JobPostResponse
+Updated JobPostService with applicant counts
+Added viewedByEmployer field to track new applicants
+✅ P1 (High) - Profile Picture Uploads
+
+Two-step upload process (pre-signed URL)
+Avatar upload endpoints
+Image validation and compression
+Progress tracking
+Delete functionality
+✅ P2 (Medium) - Company Logo Uploads
+
+Similar two-step process
+Logo upload endpoints
+Organization settings integration
+Role-based authorization
+✅ Security & Best Practices
+
+Pre-signed URLs (secure, direct-to-S3)
+File type and size validation
+Proper IAM permissions
+CORS configuration
+CloudFront CDN integration
+✅ Production-Ready
+
+Monitoring and alerts
+Backup strategies
+Cost optimization
+Error handling
+Comprehensive testing
+Quick Decision Matrix
+Requirement	Use Local Storage	Use S3	Use S3 + CloudFront
+MVP/Prototype	✅ Best	⚠️ Overkill	❌ Overkill
+< 100 users	✅ OK	✅ Good	⚠️ Not needed yet
+100-1000 users	❌ Not scalable	✅ Best	✅ Recommended
+> 1000 users	❌ Not scalable	✅ Good	✅ Best
+Global users	❌ Slow	⚠️ OK	✅ Best
+Next Steps
+Immediate (Week 1)
+
+Implement backend endpoints
+Add database migrations
+Create upload service (frontend)
+Build image upload component
+Short-term (Week 2-3)
+
+Set up AWS S3 bucket
+Configure IAM permissions
+Deploy to staging
+Test end-to-end flow
+Medium-term (Month 1)
+
+Add CloudFront CDN
+Implement monitoring
+Set up automated backups
+Optimize performance
+Long-term (Month 2+)
+
+Add image processing (thumbnails, auto-resize)
+Implement advanced caching
+Add analytics
+Consider additional storage providers
+Your teams now have everything they need to implement a production-ready file upload system with AWS S3!
