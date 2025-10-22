@@ -96,7 +96,8 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 user.getRole().name(),
                 user.getFirstName(),
                 user.getLastName(),
-                isNewUser
+                isNewUser,
+                user.getProfileImageUrl() // Pass the actual profileImageUrl
         );
 
         long expiresIn = jwtService.getTimeUntilExpiration(jwt);

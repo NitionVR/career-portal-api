@@ -198,7 +198,8 @@ public class RegistrationServiceImpl implements RegistrationService {
                 user.getRole().name(),
                 user.getFirstName(),
                 user.getLastName(),
-                false // User is not new anymore
+                false, // User is not new anymore
+                null // profileImageUrl is null for new registrations
         );
 
         long expiresIn = jwtService.getTimeUntilExpiration(jwt);

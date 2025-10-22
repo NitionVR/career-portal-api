@@ -15,15 +15,17 @@ public class VerifyTokenResponse {
         private String firstName;
         private String lastName;
         private boolean isNewUser;
+        private String profileImageUrl;
 
         public UserDto(String id, String email, String role, String firstName,
-                      String lastName, boolean isNewUser) {
+                      String lastName, boolean isNewUser, String profileImageUrl) {
             this.id = id;
             this.email = email;
             this.role = role;
             this.firstName = firstName;
             this.lastName = lastName;
             this.isNewUser = isNewUser;
+            this.profileImageUrl = profileImageUrl;
         }
 
         // Getters and setters
@@ -45,6 +47,9 @@ public class VerifyTokenResponse {
         @JsonProperty("isNewUser")
         public boolean isNewUser() { return isNewUser; }
         public void setNewUser(boolean newUser) { isNewUser = newUser; }
+
+        public String getProfileImageUrl() { return profileImageUrl; }
+        public void setProfileImageUrl(String profileImageUrl) { this.profileImageUrl = profileImageUrl; }
     }
 
     public VerifyTokenResponse(String token, UserDto user, long expiresIn) {

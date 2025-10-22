@@ -56,7 +56,7 @@ class AuthenticationControllerTest extends BaseIntegrationTest {
         String email = "test@example.com";
         String role = "CANDIDATE";
 
-        VerifyTokenResponse.UserDto userDto = new VerifyTokenResponse.UserDto(userId, email, role, "Test", "User", false);
+        VerifyTokenResponse.UserDto userDto = new VerifyTokenResponse.UserDto(userId, email, role, "Test", "User", false, null);
         VerifyTokenResponse response = new VerifyTokenResponse(jwt, userDto, 3600000L);
 
         when(authenticationService.exchangeOneTimeTokenForJwt(ott)).thenReturn(response);

@@ -96,7 +96,8 @@ public class ProfileServiceImpl implements ProfileService {
                 updatedUser.getRole().name(),
                 updatedUser.getFirstName(),
                 updatedUser.getLastName(),
-                false // isNewUser is now false
+                false, // isNewUser is now false
+                null // profileImageUrl is not available here
         );
 
         long expiresIn = jwtService.getTimeUntilExpiration(newToken);

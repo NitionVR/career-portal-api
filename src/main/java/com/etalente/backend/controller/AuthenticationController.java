@@ -78,7 +78,8 @@ public class AuthenticationController {
                         user.getRole().name(),
                         user.getFirstName(),
                         user.getLastName(),
-                        user.isNewUser()
+                        user.isNewUser(),
+                        user.getProfileImageUrl()
                 );
 
                 long expiresIn = jwtService.getTimeUntilExpiration(token);
