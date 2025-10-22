@@ -51,6 +51,7 @@ novu:
 aws:
   s3:
     region: ${AWS_REGION} # Rely on IAM roles for credentials
+    bucket-name: ${AWS_S3_BUCKET_NAME}
 upload:
   max-file-size: ${UPLOAD_MAX_FILE_SIZE:5242880}  # 5MB
   allowed-content-types:

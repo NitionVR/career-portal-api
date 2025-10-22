@@ -59,6 +59,7 @@ aws:
   s3:
     access-key-id: "test-key"
     secret-access-key: "test-secret"
+    bucket-name: ${AWS_S3_BUCKET_NAME:etalente-uploads-local}
 
 upload:
   max-file-size: 5242880  # 5MB
