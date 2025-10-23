@@ -87,7 +87,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
       ListenerArn: !Ref HttpListener
-      Priority: 1
+      Priority: 2
       Conditions:
         - Field: path-pattern
           Values:
@@ -118,7 +118,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
       ListenerArn: !Ref HttpListener
-      Priority: 2 # Higher priority than /api/* rule
+      Priority: 1 # Higher precedence
       Conditions:
         - Field: path-pattern
           Values:
