@@ -50,11 +50,14 @@ public class S3Service {
      * @return UploadUrlResponse with uploadUrl and fileUrl
      */
     public UploadUrlResponse generatePresignedUploadUrl(String folder, String contentType, long contentLength) {
+        return generatePresignedUploadUrl(folder, contentType, contentLength, null);
+    }
+
+    public UploadUrlResponse generatePresignedUploadUrl(String folder, String contentType, long contentLength, String customKey) {
         validateContentType(contentType);
         validateFileSize(contentLength);
 
-        String fileName = generateFileName(contentType);
-        String key = folder + "/" + fileName;
+        String key = (customKey != null && !customKey.isEmpty()) ? customKey : folder + "/" + generateFileName(contentType);
 
         try {
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
