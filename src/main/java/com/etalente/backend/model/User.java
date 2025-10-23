@@ -48,6 +48,10 @@ public class User {
     @Column(columnDefinition = "jsonb")
     private JsonNode profile;
 
+    @Type(JsonType.class)
+    @Column(columnDefinition = "jsonb")
+    private JsonNode resumes;
+
     // Hiring Manager-specific fields
     private String companyName;
     private String industry;
@@ -188,6 +192,14 @@ public class User {
 
     public void setProfile(JsonNode profile) {
         this.profile = profile;
+    }
+
+    public JsonNode getResumes() {
+        return resumes;
+    }
+
+    public void setResumes(JsonNode resumes) {
+        this.resumes = resumes;
     }
 
     public String getCompanyName() {
