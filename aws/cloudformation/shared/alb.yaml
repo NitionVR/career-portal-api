@@ -96,6 +96,37 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref BackendTargetGroup
 
+  DocumentParserTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${ProjectName}-document-parser-tg
+      Port: 8000 # FastAPI application port
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /api/v1/document-parser/health # Health check for FastAPI app
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      TargetType: ip
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-document-parser-tg
+
+  HttpListenerRuleDocumentParser:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpListener
+      Priority: 2 # Higher priority than /api/* rule
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /api/v1/document-parser/*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref DocumentParserTargetGroup
+
 Outputs:
   AlbArn:
     Description: The ARN of the Application Load Balancer
@@ -117,3 +148,8 @@ Outputs:
     Value: !Ref FrontendTargetGroup
     Export:
       Name: !Sub ${ProjectName}-FrontendTargetGroupArn
+  DocumentParserTargetGroupArn:
+    Description: The ARN of the Document Parser Target Group
+    Value: !Ref DocumentParserTargetGroup
+    Export:
+      Name: !Sub ${ProjectName}-DocumentParserTargetGroupArn

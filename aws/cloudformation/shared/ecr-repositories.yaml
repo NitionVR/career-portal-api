@@ -60,6 +60,32 @@ Resources:
         - Key: Name
           Value: !Sub ${ProjectName}-frontend-ecr
 
+  DocumentParserEcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${ProjectName}-document-parser
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep only the last 30 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 30
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-document-parser-ecr
+
 Outputs:
   BackendEcrRepositoryUri:
     Description: The URI of the Backend ECR repository
@@ -72,3 +98,9 @@ Outputs:
     Value: !GetAtt FrontendEcrRepository.RepositoryUri
     Export:
       Name: !Sub ${ProjectName}-FrontendEcrRepositoryUri
+
+  DocumentParserEcrRepositoryUri:
+    Description: The URI of the Document Parser ECR repository
+    Value: !GetAtt DocumentParserEcrRepository.RepositoryUri
+    Export:
+      Name: !Sub ${ProjectName}-DocumentParserEcrRepositoryUri
