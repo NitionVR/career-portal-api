@@ -9,6 +9,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/organization")
 public class OrganizationController {
@@ -85,5 +88,17 @@ public class OrganizationController {
         OrganizationDto org = organizationService.getOrganizationByUserId(userId);
 
         return ResponseEntity.ok(org);
+    }
+
+    /**
+     * Get all members of the current user's organization.
+     * GET /api/organization/members
+     */
+    @GetMapping("/members")
+    @PreAuthorize("hasAnyRole('HIRING_MANAGER', 'RECRUITER')")
+    public ResponseEntity<List<OrganizationMemberDto>> getOrganizationMembers() {
+        UUID organizationId = organizationContext.getCurrentUser().getOrganization().getId();
+        List<OrganizationMemberDto> members = organizationService.getOrganizationMembers(organizationId);
+        return ResponseEntity.ok(members);
     }
 }

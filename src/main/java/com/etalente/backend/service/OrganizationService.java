@@ -1,6 +1,7 @@
 package com.etalente.backend.service;
 
 import com.etalente.backend.dto.OrganizationDto;
+import com.etalente.backend.dto.OrganizationMemberDto;
 import com.etalente.backend.exception.ResourceNotFoundException;
 import com.etalente.backend.model.Organization;
 import com.etalente.backend.model.User;
@@ -11,7 +12,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -94,5 +97,23 @@ public class OrganizationService {
         }
 
         return OrganizationDto.fromEntity(organization);
+    }
+
+    /**
+     * Get all members of an organization.
+     */
+    @Transactional(readOnly = true)
+    public List<OrganizationMemberDto> getOrganizationMembers(UUID organizationId) {
+        return userRepository.findByOrganizationId(organizationId).stream()
+                .map(user -> new OrganizationMemberDto(
+                        user.getId(),
+                        user.getEmail(),
+                        user.getFirstName(),
+                        user.getLastName(),
+                        user.getRole(),
+                        "ACTIVE", // Assuming all retrieved members are active for now
+                        user.getCreatedAt()
+                ))
+                .collect(Collectors.toList());
     }
 }
