@@ -6,11 +6,13 @@ import com.etalente.backend.service.ProfileService;
 import com.etalente.backend.service.S3Service;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -92,6 +94,42 @@ public class ProfileController {
 
         }
 
+    @PostMapping("/me/resumes/upload-url")
+    public ResponseEntity<UploadUrlResponse> getResumeUploadUrl(@Valid @RequestBody ResumeUploadRequest request) {
+        UUID userId = organizationContext.getCurrentUser().getId();
+        UploadUrlResponse response = profileService.getResumeUploadUrl(
+            userId,
+            request.getContentType(),
+            request.getContentLength(),
+            request.getFileName()
+        );
+        return ResponseEntity.ok(response);
     }
+
+    @PostMapping("/me/resumes")
+    public ResponseEntity<ResumeDto> addResumeToProfile(@Valid @RequestBody ResumeDto request) {
+        UUID userId = organizationContext.getCurrentUser().getId();
+        ResumeDto newResume = profileService.addResumeToProfile(
+            userId,
+            request.getUrl(),
+            request.getFilename()
+        );
+        return ResponseEntity.status(HttpStatus.CREATED).body(newResume);
+    }
+
+    @DeleteMapping("/me/resumes/{resumeId}")
+    public ResponseEntity<Void> deleteResume(@PathVariable UUID resumeId) {
+        UUID userId = organizationContext.getCurrentUser().getId();
+        profileService.deleteResume(userId, resumeId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/me/resumes")
+    public ResponseEntity<List<ResumeDto>> getResumes() {
+        UUID userId = organizationContext.getCurrentUser().getId();
+        List<ResumeDto> resumes = profileService.getResumes(userId);
+        return ResponseEntity.ok(resumes);
+    }
+}
 
     
