@@ -37,7 +37,7 @@ out/
 .vscode/
 
 ###
-*.spec
+# *.spec
 venv/
 ##resume.json
 #job_schema.json

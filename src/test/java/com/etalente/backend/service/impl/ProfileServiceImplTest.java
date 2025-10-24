@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
@@ -46,7 +47,8 @@ class ProfileServiceImplTest {
     private JwtService jwtService;
     @Mock
     private S3Service s3Service;
-    private ObjectMapper objectMapper;
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper();
     @Mock
     private DocumentParserClient documentParserClient;
 
@@ -59,7 +61,6 @@ class ProfileServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
         userId = UUID.randomUUID();
         candidateUser = new User();
@@ -134,7 +135,7 @@ class ProfileServiceImplTest {
             String resumeUrl = "http://s3.url/resume.pdf";
             String fileName = "my_resume.pdf";
             when(userRepository.findById(userId)).thenReturn(Optional.of(candidateUser));
-            when(objectMapper.valueToTree(any(List.class))).thenReturn(new ObjectMapper().createArrayNode());
+            doReturn(objectMapper.createArrayNode()).when(objectMapper).valueToTree(any(List.class));
             when(userRepository.save(any(User.class))).thenReturn(candidateUser);
 
             // When
@@ -187,7 +188,7 @@ class ProfileServiceImplTest {
             resumeIdToDelete = UUID.randomUUID();
             resumeUrlToDelete = "http://s3.url/resume_to_delete.pdf";
             ResumeDto existingResume = new ResumeDto(resumeIdToDelete, resumeUrlToDelete, "delete.pdf", LocalDateTime.now());
-            candidateUser.setResumes(new ObjectMapper().valueToTree(List.of(existingResume)));
+            candidateUser.setResumes(objectMapper.valueToTree(List.of(existingResume)));
         }
 
         @Test
@@ -195,7 +196,7 @@ class ProfileServiceImplTest {
             // Given
             when(userRepository.findById(userId)).thenReturn(Optional.of(candidateUser));
             doNothing().when(s3Service).deleteFile(anyString());
-            when(objectMapper.valueToTree(any(List.class))).thenReturn(new ObjectMapper().createArrayNode());
+            doReturn(objectMapper.createArrayNode()).when(objectMapper).valueToTree(any(List.class));
             when(userRepository.save(any(User.class))).thenReturn(candidateUser);
 
             // When
@@ -239,10 +240,9 @@ class ProfileServiceImplTest {
             // Given
             ResumeDto resume1 = new ResumeDto(UUID.randomUUID(), "http://s3.url/resume1.pdf", "resume1.pdf", LocalDateTime.now());
             ResumeDto resume2 = new ResumeDto(UUID.randomUUID(), "http://s3.url/resume2.pdf", "resume2.pdf", LocalDateTime.now());
-            candidateUser.setResumes(new ObjectMapper().valueToTree(List.of(resume1, resume2)));
+            candidateUser.setResumes(objectMapper.valueToTree(List.of(resume1, resume2)));
             when(userRepository.findById(userId)).thenReturn(Optional.of(candidateUser));
-            when(objectMapper.convertValue(any(JsonNode.class), eq(ResumeDto.class)))
-                    .thenReturn(resume1, resume2); // Mock conversion for each element
+            doReturn(resume1).doReturn(resume2).when(objectMapper).convertValue(any(JsonNode.class), eq(ResumeDto.class));
 
             // When
             List<ResumeDto> result = profileService.getResumes(userId);
@@ -283,7 +283,6 @@ class ProfileServiceImplTest {
 
             when(userRepository.findById(userId)).thenReturn(Optional.of(candidateUser));
             when(documentParserClient.extractResume(resumeS3Url)).thenReturn(extractedData);
-            when(objectMapper.createObjectNode()).thenReturn(new ObjectMapper().createObjectNode()); // For initial profile
             when(userRepository.save(any(User.class))).thenReturn(candidateUser);
 
             // When
@@ -318,7 +317,6 @@ class ProfileServiceImplTest {
             String resumeS3Url = "http://s3.url/empty.pdf";
             when(userRepository.findById(userId)).thenReturn(Optional.of(candidateUser));
             when(documentParserClient.extractResume(resumeS3Url)).thenReturn(new ObjectMapper().createObjectNode());
-            when(objectMapper.createObjectNode()).thenReturn(new ObjectMapper().createObjectNode());
             when(userRepository.save(any(User.class))).thenReturn(candidateUser);
 
             // When
