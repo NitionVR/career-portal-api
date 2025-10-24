@@ -39,8 +39,8 @@ out/
 ###
 *.spec
 venv/
-resume.json
-job_schema.json
+##resume.json
+#job_schema.json
 # Misc
 .gradle
 .idea

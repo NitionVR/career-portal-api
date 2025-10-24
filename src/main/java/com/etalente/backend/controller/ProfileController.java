@@ -130,6 +130,11 @@ public class ProfileController {
         List<ResumeDto> resumes = profileService.getResumes(userId);
         return ResponseEntity.ok(resumes);
     }
-}
 
-    
+    @PostMapping("/me/autofill-resume")
+    public ResponseEntity<JsonNode> autofillProfileFromResume(@Valid @RequestBody ResumeDto request) {
+        UUID userId = organizationContext.getCurrentUser().getId();
+        JsonNode updatedProfile = profileService.autofillProfileFromResume(userId, request.getUrl());
+        return ResponseEntity.ok(updatedProfile);
+    }
+}

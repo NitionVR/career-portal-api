@@ -99,7 +99,7 @@ public class InvitationServiceImpl implements InvitationService {
         tokenStore.ifPresent(store -> store.addToken(request.email(), savedInvitation.getToken()));
 
         // Send email
-        String invitationLink = invitationLinkUrl + "?token=" + savedInvitation.getToken();
+        String invitationLink = invitationLinkUrl + "?token=" + savedInvitation.getToken() + "&action=accept_invitation";
         emailService.sendRecruiterInvitation(
                 request.email(),
                 inviter.getFirstName() + " " + inviter.getLastName(),

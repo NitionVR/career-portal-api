@@ -64,3 +64,6 @@ app:
   job:
     seeding:
       enabled: true
+
+document-parser:
+  base-url: ${DOCUMENT_PARSER_BASE_URL:http://etalente-alb-665506398.af-south-1.elb.amazonaws.com/api/v1/document-parser}

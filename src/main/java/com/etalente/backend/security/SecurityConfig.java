@@ -46,7 +46,8 @@ public class SecurityConfig {
                                 "/api/register/**",
                                 "/api/invitations/validate/**",
                                 "/api/invitations/accept/**",
-                                "/actuator/**",
+                                "/actuator/**",          // ✅ This should allow /actuator/health
+                                "/api/actuator/**",      // ✅ Add this line
                                 "/error",
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html",

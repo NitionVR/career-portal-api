@@ -24,4 +24,6 @@ public interface ProfileService {
     ResumeDto addResumeToProfile(UUID userId, String resumeUrl, String fileName);
     void deleteResume(UUID userId, UUID resumeId);
     List<ResumeDto> getResumes(UUID userId);
+
+    JsonNode autofillProfileFromResume(UUID userId, String resumeS3Url);
 }

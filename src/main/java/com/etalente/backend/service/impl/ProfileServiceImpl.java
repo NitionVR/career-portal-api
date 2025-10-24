@@ -7,6 +7,7 @@ import com.etalente.backend.dto.UserDto;
 import com.etalente.backend.dto.VerifyTokenResponse;
 import com.etalente.backend.exception.BadRequestException;
 import com.etalente.backend.exception.ResourceNotFoundException;
+import com.etalente.backend.integration.documentparser.DocumentParserClient;
 import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
 import com.etalente.backend.repository.UserRepository;
@@ -42,12 +43,14 @@ public class ProfileServiceImpl implements ProfileService {
     private final JwtService jwtService;
     private final S3Service s3Service;
     private final ObjectMapper objectMapper;
+    private final DocumentParserClient documentParserClient;
 
-    public ProfileServiceImpl(UserRepository userRepository, JwtService jwtService, S3Service s3Service, ObjectMapper objectMapper) {
+    public ProfileServiceImpl(UserRepository userRepository, JwtService jwtService, S3Service s3Service, ObjectMapper objectMapper, DocumentParserClient documentParserClient) {
         this.userRepository = userRepository;
         this.jwtService = jwtService;
         this.s3Service = s3Service;
         this.objectMapper = objectMapper;
+        this.documentParserClient = documentParserClient;
     }
 
     @Override
@@ -268,5 +271,39 @@ public class ProfileServiceImpl implements ProfileService {
         return StreamSupport.stream(user.getResumes().spliterator(), false)
                 .map(jsonNode -> objectMapper.convertValue(jsonNode, ResumeDto.class))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public JsonNode autofillProfileFromResume(UUID userId, String resumeS3Url) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (user.getRole() != Role.CANDIDATE) {
+            throw new BadRequestException("Only candidates can autofill their profile from a resume");
+        }
+
+        // Call document parser to extract resume data
+        JsonNode extractedProfileData = documentParserClient.extractResume(resumeS3Url);
+
+        // Merge extracted data into existing profile, excluding firstName and lastName
+        ObjectNode currentProfile = (user.getProfile() != null && !user.getProfile().isNull())
+                ? (ObjectNode) user.getProfile() : objectMapper.createObjectNode();
+
+        // Iterate over extracted data and merge, skipping firstName and lastName
+        extractedProfileData.fields().forEachRemaining(entry -> {
+            String fieldName = entry.getKey();
+            JsonNode fieldValue = entry.getValue();
+
+            if (!"firstName".equals(fieldName) && !"lastName".equals(fieldName)) {
+                currentProfile.set(fieldName, fieldValue);
+            }
+        });
+
+        user.setProfile(currentProfile);
+        user.setProfileComplete(true); // Assume profile is complete after autofill
+        userRepository.save(user);
+
+        logger.info("Profile autofilled for user {} from resume: {}", userId, resumeS3Url);
+        return user.getProfile();
     }
 }
