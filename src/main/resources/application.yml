@@ -45,6 +45,7 @@ upload:
     - image/jpeg
     - image/png
     - image/webp
+    - application/pdf
   presigned-url-expiration-minutes: 15
 
 # ===============================

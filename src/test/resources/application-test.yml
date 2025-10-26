@@ -43,6 +43,7 @@ upload:
   allowed-content-types:
     - image/jpeg
     - image/png
+    - application/pdf
   presigned-url-expiration-minutes: 15
 
 logging:

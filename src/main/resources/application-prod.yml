@@ -58,6 +58,7 @@ upload:
   allowed-content-types:
     - image/jpeg
     - image/png
+    - application/pdf
   presigned-url-expiration-minutes: ${PRESIGNED_URL_EXPIRATION_MINUTES:15}
 
 app:
