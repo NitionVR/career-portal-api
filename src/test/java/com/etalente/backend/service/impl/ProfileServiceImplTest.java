@@ -317,7 +317,6 @@ class ProfileServiceImplTest {
             String resumeS3Url = "http://s3.url/empty.pdf";
             when(userRepository.findById(userId)).thenReturn(Optional.of(candidateUser));
             when(documentParserClient.extractResume(resumeS3Url)).thenReturn(new ObjectMapper().createObjectNode());
-            when(userRepository.save(any(User.class))).thenReturn(candidateUser);
 
             // When
             JsonNode updatedProfile = profileService.autofillProfileFromResume(userId, resumeS3Url);
@@ -325,8 +324,8 @@ class ProfileServiceImplTest {
             // Then
             assertThat(updatedProfile).isNotNull();
             assertThat(updatedProfile.isEmpty()).isTrue();
-            verify(userRepository, times(1)).save(candidateUser);
-            assertThat(candidateUser.isProfileComplete()).isTrue();
+            verify(userRepository, never()).save(any(User.class)); // Verify that userRepository.save() was NOT called
+            assertThat(candidateUser.isProfileComplete()).isFalse(); // ProfileComplete should remain as it was
         }
     }
 }

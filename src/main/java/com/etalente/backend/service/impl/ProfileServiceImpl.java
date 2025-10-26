@@ -285,6 +285,15 @@ public class ProfileServiceImpl implements ProfileService {
         // Call document parser to extract resume data
         JsonNode extractedProfileData = documentParserClient.extractResume(resumeS3Url);
 
+        // Handle case where document parser returns no data
+        if (extractedProfileData == null || extractedProfileData.isNull() || extractedProfileData.isEmpty()) {
+            logger.warn("Document parser returned no extracted profile data for resume: {}", resumeS3Url);
+            // If no data is extracted, we can either return an empty profile or the existing one
+            // For now, let's return the current profile without changes
+            return (user.getProfile() != null && !user.getProfile().isNull())
+                    ? user.getProfile() : objectMapper.createObjectNode();
+        }
+
         // Merge extracted data into existing profile, excluding firstName and lastName
         ObjectNode currentProfile = (user.getProfile() != null && !user.getProfile().isNull())
                 ? (ObjectNode) user.getProfile() : objectMapper.createObjectNode();
