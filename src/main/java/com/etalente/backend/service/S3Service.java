@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -230,6 +231,34 @@ public class S3Service {
         } catch (Exception e) {
             logger.error("Failed to extract key from URL: {}", fileUrl, e);
             return null;
+        }
+    }
+
+    /**
+     * Download a file from S3 and return its content as a byte array.
+     *
+     * @param fileUrl The public URL of the file to download.
+     * @return The content of the file as a byte array.
+     * @throws RuntimeException if the file cannot be downloaded.
+     */
+    public byte[] downloadFile(String fileUrl) {
+        try {
+            String key = extractKeyFromUrl(fileUrl);
+            if (key == null) {
+                throw new BadRequestException("Could not extract S3 key from URL: " + fileUrl);
+            }
+
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .build();
+
+            ResponseInputStream<GetObjectResponse> s3Object = s3Client.getObject(getObjectRequest);
+            return s3Object.readAllBytes();
+
+        } catch (Exception e) {
+            logger.error("Failed to download file from S3: {}", fileUrl, e);
+            throw new RuntimeException("Failed to download file from S3: " + fileUrl, e);
         }
     }
 }
