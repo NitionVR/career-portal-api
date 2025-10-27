@@ -241,4 +241,43 @@ public class InvitationServiceImpl implements InvitationService {
             return Map.of("valid", false, "error", e.getMessage());
         }
     }
+
+    @Override
+    public void resendInvitation(UUID invitationId, UUID resenderId) {
+        RecruiterInvitation invitation = invitationRepository.findById(invitationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Invitation not found"));
+
+        User resender = userRepository.findById(resenderId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (resender.getRole() != Role.HIRING_MANAGER) {
+            throw new UnauthorizedException("Only hiring managers can resend invitations");
+        }
+
+        if (!resender.getOrganization().getId().equals(invitation.getOrganization().getId())) {
+            throw new UnauthorizedException("You are not in the same organization as the invitation");
+        }
+
+        if (invitation.getStatus() != InvitationStatus.PENDING) {
+            throw new BadRequestException("Can only resend pending invitations");
+        }
+
+        // Reset token and expiry
+        invitation.setToken(UUID.randomUUID().toString());
+        invitation.setExpiresAt(LocalDateTime.now().plusHours(invitationExpiryHours));
+        invitationRepository.save(invitation);
+
+        // Store token for test purposes
+        tokenStore.ifPresent(store -> store.addToken(invitation.getEmail(), invitation.getToken()));
+
+        // Send email
+        String invitationLink = invitationLinkUrl + "?token=" + invitation.getToken() + "&action=accept_invitation";
+        emailService.sendRecruiterInvitation(
+                invitation.getEmail(),
+                invitation.getInvitedBy().getFirstName() + " " + invitation.getInvitedBy().getLastName(),
+                invitation.getOrganization().getName(),
+                invitationLink,
+                "We are sending you this invitation again."
+        );
+    }
 }

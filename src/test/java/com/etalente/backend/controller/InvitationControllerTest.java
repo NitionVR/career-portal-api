@@ -142,4 +142,50 @@ class InvitationControllerTest extends BaseIntegrationTest {
         assertEquals(Role.RECRUITER, newUser.getRole());
         assertEquals(org.getId(), newUser.getOrganization().getId());
     }
+
+    private RecruiterInvitation createInvitation(InvitationStatus status, Organization organization, User inviter) {
+        RecruiterInvitation invitation = new RecruiterInvitation();
+        invitation.setEmail("test@example.com");
+        invitation.setToken(UUID.randomUUID().toString());
+        invitation.setOrganization(organization);
+        invitation.setInvitedBy(inviter);
+        invitation.setStatus(status);
+        invitation.setExpiresAt(LocalDateTime.now().plusHours(72));
+        return invitationRepository.save(invitation);
+    }
+
+    @Test
+    void resendInvitation_byHiringManager_shouldSucceed() throws Exception {
+        User hiringManager = testHelper.createUser("hm@example.com", Role.HIRING_MANAGER);
+        String hiringManagerJwt = testHelper.generateJwtForUser(hiringManager);
+        RecruiterInvitation invitation = createInvitation(InvitationStatus.PENDING, hiringManager.getOrganization(), hiringManager);
+
+        mockMvc.perform(post("/api/invitations/{invitationId}/resend", invitation.getId())
+                        .header("Authorization", "Bearer " + hiringManagerJwt))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void resendInvitation_byRecruiter_shouldBeForbidden() throws Exception {
+        User hiringManager = testHelper.createUser("hm@example.com", Role.HIRING_MANAGER);
+        Organization organization = hiringManager.getOrganization();
+        User recruiter = testHelper.createUser("recruiter@example.com", Role.RECRUITER, organization);
+        String recruiterJwt = testHelper.generateJwtForUser(recruiter);
+        RecruiterInvitation invitation = createInvitation(InvitationStatus.PENDING, organization, hiringManager);
+
+        mockMvc.perform(post("/api/invitations/{invitationId}/resend", invitation.getId())
+                        .header("Authorization", "Bearer " + recruiterJwt))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void resendInvitation_forAcceptedInvitation_shouldFail() throws Exception {
+        User hiringManager = testHelper.createUser("hm@example.com", Role.HIRING_MANAGER);
+        String hiringManagerJwt = testHelper.generateJwtForUser(hiringManager);
+        RecruiterInvitation invitation = createInvitation(InvitationStatus.ACCEPTED, hiringManager.getOrganization(), hiringManager);
+
+        mockMvc.perform(post("/api/invitations/{invitationId}/resend", invitation.getId())
+                        .header("Authorization", "Bearer " + hiringManagerJwt))
+                .andExpect(status().isBadRequest());
+    }
 }

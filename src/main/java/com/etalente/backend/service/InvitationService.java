@@ -17,4 +17,5 @@ public interface InvitationService {
     void revokeInvitation(UUID invitationId, UUID inviterId);
     Page<RecruiterInvitation> getOrganizationInvitations(UUID userId, Pageable pageable);
     Map<String, Object> validateInvitationToken(String token);
+    void resendInvitation(UUID invitationId, UUID resenderId);
 }

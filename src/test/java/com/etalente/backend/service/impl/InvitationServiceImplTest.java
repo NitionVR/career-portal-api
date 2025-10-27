@@ -188,4 +188,25 @@ class InvitationServiceImplTest {
         });
         assertEquals(InvitationStatus.EXPIRED, invitation.getStatus());
     }
+
+    @Test
+    @DisplayName("resendInvitation should resend a pending invitation")
+    void resendInvitation_shouldResendPendingInvitation() {
+        // Given
+        RecruiterInvitation invitation = new RecruiterInvitation();
+        invitation.setId(UUID.randomUUID());
+        invitation.setStatus(InvitationStatus.PENDING);
+        invitation.setOrganization(organization);
+        invitation.setInvitedBy(hiringManager);
+        invitation.setEmail("test@example.com");
+
+        when(invitationRepository.findById(invitation.getId())).thenReturn(Optional.of(invitation));
+        when(userRepository.findById(hiringManager.getId())).thenReturn(Optional.of(hiringManager));
+
+        // When
+        invitationService.resendInvitation(invitation.getId(), hiringManager.getId());
+
+        // Then
+        verify(emailService).sendRecruiterInvitation(any(), any(), any(), any(), any());
+    }
 }

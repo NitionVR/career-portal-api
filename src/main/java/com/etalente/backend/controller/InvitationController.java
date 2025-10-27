@@ -102,4 +102,12 @@ public class InvitationController {
                         invitation.getExpiresAt()
                 ));
     }
+
+    @PostMapping("/{invitationId}/resend")
+    @PreAuthorize("hasRole('HIRING_MANAGER')")
+    public ResponseEntity<Void> resendInvitation(@PathVariable UUID invitationId, Authentication authentication) {
+        UUID resenderId = UUID.fromString(authentication.getName());
+        invitationService.resendInvitation(invitationId, resenderId);
+        return ResponseEntity.ok().build();
+    }
 }
