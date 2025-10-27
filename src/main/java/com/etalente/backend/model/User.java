@@ -69,6 +69,9 @@ public class User {
     @LastModifiedDate
     private LocalDateTime updatedAt;
 
+    @Enumerated(EnumType.STRING)
+    private UserAccountStatus accountStatus = UserAccountStatus.ACTIVE;
+
     @ManyToOne
     @JoinColumn(name = "organization_id")
     private Organization organization;
@@ -288,5 +291,13 @@ public class User {
 
     public void setInvitedAt(LocalDateTime invitedAt) {
         this.invitedAt = invitedAt;
+    }
+
+    public UserAccountStatus getAccountStatus() {
+        return accountStatus;
+    }
+
+    public void setAccountStatus(UserAccountStatus accountStatus) {
+        this.accountStatus = accountStatus;
     }
 }
