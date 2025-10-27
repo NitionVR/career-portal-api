@@ -283,36 +283,158 @@ public class ProfileServiceImpl implements ProfileService {
         }
 
         // Call document parser to extract resume data
-        JsonNode extractedProfileData = documentParserClient.extractResume(resumeS3Url);
+        JsonNode documentParserResponse = documentParserClient.extractResume(resumeS3Url);
 
-        // Handle case where document parser returns no data
-        if (extractedProfileData == null || extractedProfileData.isNull() || extractedProfileData.isEmpty()) {
+        if (documentParserResponse == null || documentParserResponse.isNull() || documentParserResponse.isEmpty()) {
             logger.warn("Document parser returned no extracted profile data for resume: {}", resumeS3Url);
-            // If no data is extracted, we can either return an empty profile or the existing one
-            // For now, let's return the current profile without changes
             return (user.getProfile() != null && !user.getProfile().isNull())
                     ? user.getProfile() : objectMapper.createObjectNode();
         }
 
-        // Merge extracted data into existing profile, excluding firstName and lastName
+        // Extract ONLY the JSON Resume schema data from extracted_data
+        JsonNode extractedData = documentParserResponse.get("extracted_data");
+        if (extractedData == null || extractedData.isNull()) {
+            logger.warn("No extracted_data found in document parser response");
+            return (user.getProfile() != null && !user.getProfile().isNull())
+                    ? user.getProfile() : objectMapper.createObjectNode();
+        }
+
+        // Get current profile or create new one
         ObjectNode currentProfile = (user.getProfile() != null && !user.getProfile().isNull())
-                ? (ObjectNode) user.getProfile() : objectMapper.createObjectNode();
+                ? (ObjectNode) user.getProfile().deepCopy() : objectMapper.createObjectNode();
 
-        // Iterate over extracted data and merge, skipping firstName and lastName
-        extractedProfileData.fields().forEachRemaining(entry -> {
-            String fieldName = entry.getKey();
-            JsonNode fieldValue = entry.getValue();
+        // Merge root fields
+        mergeJsonNodes(currentProfile, extractedData);
 
-            if (!"firstName".equals(fieldName) && !"lastName".equals(fieldName)) {
-                currentProfile.set(fieldName, fieldValue);
+        // Merge each section with deduplication
+        mergeSection(currentProfile, extractedData, "basics");
+        mergeArraySection(currentProfile, extractedData, "work");
+        mergeArraySection(currentProfile, extractedData, "education");
+        mergeArraySection(currentProfile, extractedData, "skills");
+        mergeArraySection(currentProfile, extractedData, "projects");
+        mergeArraySection(currentProfile, extractedData, "awards");
+        mergeArraySection(currentProfile, extractedData, "certificates");
+        mergeArraySection(currentProfile, extractedData, "interests");
+        mergeArraySection(currentProfile, extractedData, "languages");
+        mergeArraySection(currentProfile, extractedData, "publications");
+        mergeArraySection(currentProfile, extractedData, "references");
+        mergeArraySection(currentProfile, extractedData, "volunteer");
+
+        // Preserve firstName and lastName from user entity in basics
+        if (currentProfile.has("basics") && currentProfile.get("basics").isObject()) {
+            ObjectNode basics = (ObjectNode) currentProfile.get("basics");
+            if (user.getFirstName() != null) {
+                String fullName = user.getFirstName() + (user.getLastName() != null ? " " + user.getLastName() : "");
+                basics.put("name", fullName);
             }
-        });
+            if (user.getEmail() != null) {
+                basics.put("email", user.getEmail());
+            }
+        }
 
         user.setProfile(currentProfile);
-        user.setProfileComplete(true); // Assume profile is complete after autofill
+        user.setProfileComplete(true);
         userRepository.save(user);
 
         logger.info("Profile autofilled for user {} from resume: {}", userId, resumeS3Url);
-        return user.getProfile();
+        return currentProfile; // Return the full profile, not just basics
+    }
+
+    // Helper method to merge a single section (like basics)
+    private void mergeSection(ObjectNode target, JsonNode source, String sectionName) {
+        JsonNode sourceSection = source.get(sectionName);
+        if (sourceSection == null || sourceSection.isNull()) {
+            return;
+        }
+
+        if (target.has(sectionName) && target.get(sectionName).isObject() && sourceSection.isObject()) {
+            mergeJsonNodes((ObjectNode) target.get(sectionName), sourceSection);
+        } else {
+            target.set(sectionName, sourceSection.deepCopy());
+        }
+    }
+
+    // Helper method to merge and deduplicate array sections
+    private void mergeArraySection(ObjectNode target, JsonNode source, String sectionName) {
+        JsonNode sourceArray = source.get(sectionName);
+        if (sourceArray == null || !sourceArray.isArray() || sourceArray.isEmpty()) {
+            return;
+        }
+
+        ArrayNode targetArray;
+        if (target.has(sectionName) && target.get(sectionName).isArray()) {
+            targetArray = (ArrayNode) target.get(sectionName);
+        } else {
+            targetArray = objectMapper.createArrayNode();
+            target.set(sectionName, targetArray);
+        }
+
+        // Deduplicate by converting to Set using JSON string representation
+        List<JsonNode> uniqueItems = new ArrayList<>();
+        List<String> seenItems = new ArrayList<>();
+
+        // Add existing items
+        for (JsonNode item : targetArray) {
+            String itemStr = item.toString();
+            if (!seenItems.contains(itemStr)) {
+                uniqueItems.add(item);
+                seenItems.add(itemStr);
+            }
+        }
+
+        // Add new items from source, skipping duplicates
+        for (JsonNode item : sourceArray) {
+            String itemStr = item.toString();
+            if (!seenItems.contains(itemStr)) {
+                uniqueItems.add(item);
+                seenItems.add(itemStr);
+            }
+        }
+
+        // Rebuild array with unique items
+        targetArray.removeAll();
+        uniqueItems.forEach(targetArray::add);
+    }
+
+    // Update the existing mergeJsonNodes to handle profiles properly
+    private void mergeJsonNodes(ObjectNode mainNode, JsonNode updateNode) {
+        updateNode.fields().forEachRemaining(entry -> {
+            String fieldName = entry.getKey();
+            JsonNode updateValue = entry.getValue();
+
+            // Skip these fields as they come from user entity
+            if ("name".equals(fieldName) || "email".equals(fieldName)) {
+                return;
+            }
+
+            if (mainNode.has(fieldName)) {
+                JsonNode mainValue = mainNode.get(fieldName);
+
+                if (mainValue.isObject() && updateValue.isObject()) {
+                    mergeJsonNodes((ObjectNode) mainValue, updateValue);
+                } else if (mainValue.isArray() && updateValue.isArray()) {
+                    // For arrays in basics (like profiles), deduplicate
+                    ArrayNode mainArray = (ArrayNode) mainValue;
+                    ArrayNode updateArray = (ArrayNode) updateValue;
+
+                    List<String> seenItems = new ArrayList<>();
+                    for (JsonNode item : mainArray) {
+                        seenItems.add(item.toString());
+                    }
+
+                    for (JsonNode item : updateArray) {
+                        String itemStr = item.toString();
+                        if (!seenItems.contains(itemStr)) {
+                            mainArray.add(item);
+                            seenItems.add(itemStr);
+                        }
+                    }
+                } else {
+                    mainNode.set(fieldName, updateValue);
+                }
+            } else {
+                mainNode.set(fieldName, updateValue.deepCopy());
+            }
+        });
     }
 }
