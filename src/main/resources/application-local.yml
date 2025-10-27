@@ -35,6 +35,8 @@ logging:
     org.springframework.security: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.web.client: TRACE
+    org.springframework.http.client: TRACE
 
 jwt:
   secret-key: ${JWT_SECRET:YW5vdGhlcmxvbmdzZWNyZXRrZXlmb3Jsb2NhbGRldjQ1Ng==} # Use placeholder with default

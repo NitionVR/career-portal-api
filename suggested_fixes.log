@@ -1,233 +1,183 @@
-The issue is that SQLFunctionTemplate was removed in Hibernate 6.x. Here's the corrected CustomPostgreSQLDialect:
+expand
+Now I can see the issues! There are several problems:
 
+Problems Identified:
+Document Parser Response Structure: The parser returns data wrapped in extracted_data, and you're storing the ENTIRE response (including message, timestamp, extracted_data, etc.) instead of just the JSON Resume schema fields.
+
+Duplicate Data: The response has massive duplication - work experiences repeated 5 times, profiles repeated 5 times, etc.
+
+Empty basics.profiles: The top-level basics.profiles is empty, but the actual profiles are in extracted_data.basics.profiles.
+
+Wrong Return in autofillProfileFromResume(): Line 289 returns UserDto.fromEntity(user).getBasics() instead of the full profile.
+
+Here's the fix:
 java
-package com.etalente.backend.config;
+@Override
+public JsonNode autofillProfileFromResume(UUID userId, String resumeS3Url) {
+    User user = userRepository.findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-import org.hibernate.boot.model.FunctionContributions;
-import org.hibernate.dialect.PostgreSQLDialect;
-import org.hibernate.query.sqm.function.PatternFunctionDescriptorBuilder;
-import org.hibernate.type.BasicTypeReference;
-import org.hibernate.type.StandardBasicTypes;
+    if (user.getRole() != Role.CANDIDATE) {
+        throw new BadRequestException("Only candidates can autofill their profile from a resume");
+    }
 
-public class CustomPostgreSQLDialect extends PostgreSQLDialect {
+    // Call document parser to extract resume data
+    JsonNode documentParserResponse = documentParserClient.extractResume(resumeS3Url);
 
-    @Override
-    public void initializeFunctionRegistry(FunctionContributions functionContributions) {
-        super.initializeFunctionRegistry(functionContributions);
+    if (documentParserResponse == null || documentParserResponse.isNull() || documentParserResponse.isEmpty()) {
+        logger.warn("Document parser returned no extracted profile data for resume: {}", resumeS3Url);
+        return (user.getProfile() != null && !user.getProfile().isNull())
+                ? user.getProfile() : objectMapper.createObjectNode();
+    }
 
-        var typeConfiguration = functionContributions.getTypeConfiguration();
-        var functionRegistry = functionContributions.getFunctionRegistry();
+    // Extract ONLY the JSON Resume schema data from extracted_data
+    JsonNode extractedData = documentParserResponse.get("extracted_data");
+    if (extractedData == null || extractedData.isNull()) {
+        logger.warn("No extracted_data found in document parser response");
+        return (user.getProfile() != null && !user.getProfile().isNull())
+                ? user.getProfile() : objectMapper.createObjectNode();
+    }
 
-        // Register jsonb_extract_path_text function
-        functionRegistry.registerPattern(
-                "jsonb_extract_path_text",
-                "jsonb_extract_path_text(?1, ?2)",
-                typeConfiguration.getBasicTypeRegistry().resolve(StandardBasicTypes.STRING)
-        );
+    // Get current profile or create new one
+    ObjectNode currentProfile = (user.getProfile() != null && !user.getProfile().isNull())
+            ? (ObjectNode) user.getProfile().deepCopy() : objectMapper.createObjectNode();
 
-        // Register cast_to_integer function using PostgreSQL's ::integer syntax
-        functionRegistry.registerPattern(
-                "cast_to_integer",
-                "(?1)::integer",
-                typeConfiguration.getBasicTypeRegistry().resolve(StandardBasicTypes.INTEGER)
-        );
+    // Merge each section with deduplication
+    mergeSection(currentProfile, extractedData, "basics");
+    mergeArraySection(currentProfile, extractedData, "work");
+    mergeArraySection(currentProfile, extractedData, "education");
+    mergeArraySection(currentProfile, extractedData, "skills");
+    mergeArraySection(currentProfile, extractedData, "projects");
+    mergeArraySection(currentProfile, extractedData, "awards");
+    mergeArraySection(currentProfile, extractedData, "certificates");
+    mergeArraySection(currentProfile, extractedData, "interests");
+    mergeArraySection(currentProfile, extractedData, "languages");
+    mergeArraySection(currentProfile, extractedData, "publications");
+    mergeArraySection(currentProfile, extractedData, "references");
+    mergeArraySection(currentProfile, extractedData, "volunteer");
 
-        // Register cast_to_text function using PostgreSQL's ::text syntax
-        functionRegistry.registerPattern(
-                "cast_to_text",
-                "(?1)::text",
-                typeConfiguration.getBasicTypeRegistry().resolve(StandardBasicTypes.STRING)
-        );
+    // Preserve firstName and lastName from user entity in basics
+    if (currentProfile.has("basics") && currentProfile.get("basics").isObject()) {
+        ObjectNode basics = (ObjectNode) currentProfile.get("basics");
+        if (user.getFirstName() != null) {
+            String fullName = user.getFirstName() + (user.getLastName() != null ? " " + user.getLastName() : "");
+            basics.put("name", fullName);
+        }
+        if (user.getEmail() != null) {
+            basics.put("email", user.getEmail());
+        }
+    }
+
+    user.setProfile(currentProfile);
+    user.setProfileComplete(true);
+    userRepository.save(user);
+
+    logger.info("Profile autofilled for user {} from resume: {}", userId, resumeS3Url);
+    return currentProfile; // Return the full profile, not just basics
+}
+
+// Helper method to merge a single section (like basics)
+private void mergeSection(ObjectNode target, JsonNode source, String sectionName) {
+    JsonNode sourceSection = source.get(sectionName);
+    if (sourceSection == null || sourceSection.isNull()) {
+        return;
+    }
+
+    if (target.has(sectionName) && target.get(sectionName).isObject() && sourceSection.isObject()) {
+        mergeJsonNodes((ObjectNode) target.get(sectionName), sourceSection);
+    } else {
+        target.set(sectionName, sourceSection.deepCopy());
     }
 }
-However, you also need to register this dialect. Update your application.properties or application.yml:
 
-For application.properties:
-
-properties
-spring.jpa.properties.hibernate.dialect=com.etalente.backend.config.CustomPostgreSQLDialect
-Or for application.yml:
-
-yaml
-spring:
-  jpa:
-    properties:
-      hibernate:
-        dialect: com.etalente.backend.config.CustomPostgreSQLDialect
-If the issue persists, here's an alternative approach that uses native PostgreSQL operators directly in the service without custom functions:
-
-Update ApplicantServiceImpl.java:
-
-java
-package com.etalente.backend.service.impl;
-
-import com.etalente.backend.dto.ApplicantSummaryDto;
-import com.etalente.backend.model.JobApplication;
-import com.etalente.backend.repository.JobApplicationRepository;
-import com.etalente.backend.service.ApplicantService;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.persistence.criteria.Join;
-import jakarta.persistence.criteria.Predicate;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-
-@Service
-@Transactional(readOnly = true)
-public class ApplicantServiceImpl implements ApplicantService {
-
-    private final JobApplicationRepository jobApplicationRepository;
-    private final ObjectMapper objectMapper;
-
-    public ApplicantServiceImpl(JobApplicationRepository jobApplicationRepository, ObjectMapper objectMapper) {
-        this.jobApplicationRepository = jobApplicationRepository;
-        this.objectMapper = objectMapper;
+// Helper method to merge and deduplicate array sections
+private void mergeArraySection(ObjectNode target, JsonNode source, String sectionName) {
+    JsonNode sourceArray = source.get(sectionName);
+    if (sourceArray == null || !sourceArray.isArray() || sourceArray.isEmpty()) {
+        return;
     }
 
-    @Override
-    public Page<ApplicantSummaryDto> getApplicants(Pageable pageable,
-                                                   String search,
-                                                   String skillSearch,
-                                                   String jobId,
-                                                   List<String> statuses,
-                                                   Integer experienceMin,
-                                                   List<String> education,
-                                                   String location,
-                                                   Integer aiMatchScoreMin,
-                                                   UUID organizationId) {
-
-        Specification<JobApplication> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-
-            // Filter by organizationId (mandatory for employer views)
-            Join<Object, Object> jobPostJoin = root.join("jobPost");
-            predicates.add(cb.equal(jobPostJoin.get("organization").get("id"), organizationId));
-
-            // Filter by jobId
-            if (jobId != null && !jobId.isEmpty()) {
-                predicates.add(cb.equal(jobPostJoin.get("id"), UUID.fromString(jobId)));
-            }
-
-            // Filter by status
-            if (statuses != null && !statuses.isEmpty()) {
-                predicates.add(root.get("status").as(String.class).in(statuses));
-            }
-
-            // General search (candidate name, job title)
-            if (search != null && !search.isEmpty()) {
-                String lowerCaseSearch = search.toLowerCase();
-                Join<Object, Object> candidateJoin = root.join("candidate");
-                Predicate candidateNameMatch = cb.or(
-                        cb.like(cb.lower(candidateJoin.get("firstName")), "%" + lowerCaseSearch + "%"),
-                        cb.like(cb.lower(candidateJoin.get("lastName")), "%" + lowerCaseSearch + "%")
-                );
-                Predicate jobTitleMatch = cb.like(cb.lower(jobPostJoin.get("title")), "%" + lowerCaseSearch + "%");
-                predicates.add(cb.or(candidateNameMatch, jobTitleMatch));
-            }
-
-            // Skill search (within JobPost's skills JSONB)
-            if (skillSearch != null && !skillSearch.isEmpty()) {
-                predicates.add(cb.like(
-                    cb.lower(cb.function("cast", String.class, jobPostJoin.get("skills"), cb.literal(String.class))),
-                    "%" + skillSearch.toLowerCase() + "%"
-                ));
-            }
-
-            // Experience Min (within User's profile JSONB)
-            if (experienceMin != null) {
-                Join<Object, Object> candidateJoin = root.join("candidate");
-                predicates.add(cb.greaterThanOrEqualTo(
-                    cb.function("cast", Integer.class,
-                        cb.function("jsonb_extract_path_text", String.class,
-                            candidateJoin.get("profile"),
-                            cb.literal("experienceYears")
-                        ),
-                        cb.literal(Integer.class)
-                    ),
-                    experienceMin
-                ));
-            }
-
-            // Education (within User's profile JSONB)
-            if (education != null && !education.isEmpty()) {
-                Join<Object, Object> candidateJoin = root.join("candidate");
-                for (String edu : education) {
-                    predicates.add(cb.like(
-                        cb.lower(cb.function("cast", String.class, candidateJoin.get("profile"), cb.literal(String.class))),
-                        "%" + edu.toLowerCase() + "%"
-                    ));
-                }
-            }
-
-            // Location (within JobPost's location JSONB)
-            if (location != null && !location.isEmpty()) {
-                predicates.add(cb.like(
-                    cb.lower(cb.function("cast", String.class, jobPostJoin.get("location"), cb.literal(String.class))),
-                    "%" + location.toLowerCase() + "%"
-                ));
-            }
-
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-
-        return jobApplicationRepository.findAll(spec, pageable)
-                .map(this::convertToDto);
+    ArrayNode targetArray;
+    if (target.has(sectionName) && target.get(sectionName).isArray()) {
+        targetArray = (ArrayNode) target.get(sectionName);
+    } else {
+        targetArray = objectMapper.createArrayNode();
+        target.set(sectionName, targetArray);
     }
 
-    private ApplicantSummaryDto convertToDto(JobApplication jobApplication) {
-        // Extract skills from JobPost JSONB
-        List<String> skills = new ArrayList<>();
-        JsonNode skillsNode = jobApplication.getJobPost().getSkills();
-        if (skillsNode != null && skillsNode.isArray()) {
-            for (JsonNode skill : skillsNode) {
-                if (skill.has("name")) {
-                    skills.add(skill.get("name").asText());
-                }
-            }
+    // Deduplicate by converting to Set using JSON string representation
+    List<JsonNode> uniqueItems = new ArrayList<>();
+    List<String> seenItems = new ArrayList<>();
+
+    // Add existing items
+    for (JsonNode item : targetArray) {
+        String itemStr = item.toString();
+        if (!seenItems.contains(itemStr)) {
+            uniqueItems.add(item);
+            seenItems.add(itemStr);
         }
-
-        // Extract experienceYears from Candidate's profile JSONB
-        Integer experienceYears = null;
-        JsonNode candidateProfileNode = jobApplication.getCandidate().getProfile();
-        if (candidateProfileNode != null && candidateProfileNode.has("experienceYears")) {
-            experienceYears = candidateProfileNode.get("experienceYears").asInt();
-        }
-
-        // Extract location from JobPost JSONB
-        String location = null;
-        JsonNode jobLocationNode = jobApplication.getJobPost().getLocation();
-        if (jobLocationNode != null && jobLocationNode.has("city")) {
-            location = jobLocationNode.get("city").asText();
-        }
-
-        Integer aiMatchScore = null;
-
-        return new ApplicantSummaryDto(
-                jobApplication.getId().toString(),
-                jobApplication.getCandidate().getFirstName() + " " + jobApplication.getCandidate().getLastName(),
-                jobApplication.getJobPost().getTitle(),
-                jobApplication.getJobPost().getId().toString(),
-                jobApplication.getCandidate().getProfileImageUrl(),
-                aiMatchScore,
-                skills,
-                experienceYears,
-                location,
-                jobApplication.getApplicationDate(),
-                jobApplication.getStatus().name()
-        );
     }
+
+    // Add new items from source, skipping duplicates
+    for (JsonNode item : sourceArray) {
+        String itemStr = item.toString();
+        if (!seenItems.contains(itemStr)) {
+            uniqueItems.add(item);
+            seenItems.add(itemStr);
+        }
+    }
+
+    // Rebuild array with unique items
+    targetArray.removeAll();
+    uniqueItems.forEach(targetArray::add);
 }
-The key changes:
 
-✅ Fixed CustomPostgreSQLDialect to use Hibernate 6.x API (initializeFunctionRegistry and registerPattern)
-✅ Used PostgreSQL's native casting syntax (::text, ::integer)
-✅ Alternative approach using standard cast function in the service
-Try the first approach first (with the updated dialect). If it still doesn't work, use the alternative service implementation with standard cast function.
+// Update the existing mergeJsonNodes to handle profiles properly
+private void mergeJsonNodes(ObjectNode mainNode, JsonNode updateNode) {
+    updateNode.fields().forEachRemaining(entry -> {
+        String fieldName = entry.getKey();
+        JsonNode updateValue = entry.getValue();
 
+        // Skip these fields as they come from user entity
+        if ("name".equals(fieldName) || "email".equals(fieldName)) {
+            return;
+        }
+
+        if (mainNode.has(fieldName)) {
+            JsonNode mainValue = mainNode.get(fieldName);
+
+            if (mainValue.isObject() && updateValue.isObject()) {
+                mergeJsonNodes((ObjectNode) mainValue, updateValue);
+            } else if (mainValue.isArray() && updateValue.isArray()) {
+                // For arrays in basics (like profiles), deduplicate
+                ArrayNode mainArray = (ArrayNode) mainValue;
+                ArrayNode updateArray = (ArrayNode) updateValue;
+
+                List<String> seenItems = new ArrayList<>();
+                for (JsonNode item : mainArray) {
+                    seenItems.add(item.toString());
+                }
+
+                for (JsonNode item : updateArray) {
+                    String itemStr = item.toString();
+                    if (!seenItems.contains(itemStr)) {
+                        mainArray.add(item);
+                        seenItems.add(itemStr);
+                    }
+                }
+            } else {
+                mainNode.set(fieldName, updateValue);
+            }
+        } else {
+            mainNode.set(fieldName, updateValue.deepCopy());
+        }
+    });
+}
+Key changes:
+
+Extract only extracted_data from the document parser response, ignoring metadata fields
+Deduplicate arrays using string comparison
+Return the full profile instead of just basics
+Preserve user's name and email in basics section
+Properly merge basics.profiles with deduplication
+This should fix the /me endpoint to return a clean, deduplicated JSON Resume structure with profiles properly nested under basics!
