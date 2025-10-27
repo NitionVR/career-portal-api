@@ -99,4 +99,18 @@ public class TestHelper {
 
         return savedUser;
     }
+
+    public User createUser(String email, Role role, Organization organization) {
+        User user = new User();
+        user.setEmail(email);
+        user.setRole(role);
+        user.setUsername("testuser-" + UUID.randomUUID());
+        user.setFirstName(faker.name().firstName());
+        user.setLastName(faker.name().lastName());
+        user.setCompanyName(organization.getName());
+        user.setIndustry(organization.getIndustry());
+        user.setOrganization(organization);
+
+        return userRepository.save(user);
+    }
 }

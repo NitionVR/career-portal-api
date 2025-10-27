@@ -113,4 +113,50 @@ public class OrganizationControllerTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value(organization.getName()));
     }
+
+    @Test
+    void updateMemberRole_byHiringManager_shouldSucceed() throws Exception {
+        User member = testHelper.createUser("member@example.com", Role.RECRUITER, organization);
+        com.etalente.backend.dto.UpdateMemberRoleRequest request = new com.etalente.backend.dto.UpdateMemberRoleRequest(Role.HIRING_MANAGER);
+
+        mockMvc.perform(put("/api/organization/members/{memberId}/role", member.getId())
+                        .header("Authorization", "Bearer " + hiringManagerJwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void updateMemberRole_byRecruiter_shouldBeForbidden() throws Exception {
+        User recruiter = testHelper.createUser("recruiter@example.com", Role.RECRUITER, organization);
+        String recruiterJwt = testHelper.generateJwtForUser(recruiter);
+        User member = testHelper.createUser("member@example.com", Role.RECRUITER, organization);
+        com.etalente.backend.dto.UpdateMemberRoleRequest request = new com.etalente.backend.dto.UpdateMemberRoleRequest(Role.HIRING_MANAGER);
+
+        mockMvc.perform(put("/api/organization/members/{memberId}/role", member.getId())
+                        .header("Authorization", "Bearer " + recruiterJwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void removeMember_byHiringManager_shouldSucceed() throws Exception {
+        User member = testHelper.createUser("member@example.com", Role.RECRUITER, organization);
+
+        mockMvc.perform(delete("/api/organization/members/{memberId}", member.getId())
+                        .header("Authorization", "Bearer " + hiringManagerJwt))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void removeMember_byRecruiter_shouldBeForbidden() throws Exception {
+        User recruiter = testHelper.createUser("recruiter@example.com", Role.RECRUITER, organization);
+        String recruiterJwt = testHelper.generateJwtForUser(recruiter);
+        User member = testHelper.createUser("member@example.com", Role.RECRUITER, organization);
+
+        mockMvc.perform(delete("/api/organization/members/{memberId}", member.getId())
+                        .header("Authorization", "Bearer " + recruiterJwt))
+                .andExpect(status().isForbidden());
+    }
 }
