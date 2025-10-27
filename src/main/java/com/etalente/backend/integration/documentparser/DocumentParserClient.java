@@ -7,10 +7,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.http.MediaType;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
 
@@ -19,13 +20,19 @@ import java.util.Map;
 public class DocumentParserClient {
 
     private final RestClient restClient;
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final S3Service s3Service;
+    private final String baseUrl;
 
-    public DocumentParserClient(@Value("${document-parser.base-url}") String baseUrl, ObjectMapper objectMapper, S3Service s3Service) {
+    public DocumentParserClient(@Value("${document-parser.base-url}") String baseUrl,
+                                ObjectMapper objectMapper,
+                                S3Service s3Service) {
+        this.baseUrl = baseUrl;
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .build();
+        this.restTemplate = new RestTemplate();
         this.objectMapper = objectMapper;
         this.s3Service = s3Service;
     }
@@ -35,27 +42,41 @@ public class DocumentParserClient {
         try {
             // 1. Download the file from S3
             byte[] fileContent = s3Service.downloadFile(resumeS3Url);
+            log.info("Downloaded file content size: {} bytes", fileContent.length);
 
             // 2. Create a Multipart request body
             LinkedMultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-            body.add("file", new ByteArrayResource(fileContent) {
+
+            ByteArrayResource resource = new ByteArrayResource(fileContent) {
                 @Override
                 public String getFilename() {
-                    // Extract filename from S3 URL
                     String[] parts = resumeS3Url.split("/");
-                    return parts[parts.length - 1];
+                    String filename = parts[parts.length - 1];
+                    log.info("Multipart filename: {}", filename);
+                    return filename;
                 }
-            });
+            };
 
-            // 3. Send the multipart request
-            JsonNode response = restClient.post()
-                    .uri("/extract/")
-                    .contentType(MediaType.MULTIPART_FORM_DATA) // Set content type to multipart/form-data
-                    .body(body)
-                    .retrieve()
-                    .body(JsonNode.class);
-            log.info("Successfully extracted resume from document parser.");
-            return response;
+            body.add("file", resource); // lowercase "file"
+
+            // 3. Set headers
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+            HttpEntity<LinkedMultiValueMap<String, Object>> requestEntity =
+                new HttpEntity<>(body, headers);
+
+            // 4. Send the multipart request using RestTemplate
+            log.info("Sending multipart request to document parser");
+            ResponseEntity<JsonNode> response = restTemplate.postForEntity(
+                baseUrl + "/extract/",
+                requestEntity,
+                JsonNode.class
+            );
+
+            log.info("Successfully extracted resume from document parser. Status: {}", response.getStatusCode());
+            return response.getBody();
+
         } catch (Exception e) {
             log.error("Failed to extract resume from document parser for URL: {}", resumeS3Url, e);
             throw new ServiceException("Failed to extract resume data", e);
@@ -80,3 +101,4 @@ public class DocumentParserClient {
         }
     }
 }
+

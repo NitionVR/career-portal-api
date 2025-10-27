@@ -254,7 +254,9 @@ public class S3Service {
                     .build();
 
             ResponseInputStream<GetObjectResponse> s3Object = s3Client.getObject(getObjectRequest);
-            return s3Object.readAllBytes();
+            byte[] fileBytes = s3Object.readAllBytes();
+            logger.info("Successfully downloaded file from S3: {} ({} bytes)", fileUrl, fileBytes.length);
+            return fileBytes;
 
         } catch (Exception e) {
             logger.error("Failed to download file from S3: {}", fileUrl, e);
