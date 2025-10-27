@@ -4,6 +4,7 @@ import com.etalente.backend.dto.OrganizationDto;
 import com.etalente.backend.dto.OrganizationMemberDto;
 import com.etalente.backend.exception.ResourceNotFoundException;
 import com.etalente.backend.model.Organization;
+import com.etalente.backend.model.Role;
 import com.etalente.backend.model.User;
 import com.etalente.backend.repository.OrganizationRepository;
 import com.etalente.backend.repository.UserRepository;
@@ -111,9 +112,39 @@ public class OrganizationService {
                         user.getFirstName(),
                         user.getLastName(),
                         user.getRole(),
-                        "ACTIVE", // Assuming all retrieved members are active for now
+                        user.getAccountStatus().name(), // Assuming all retrieved members are active for now
                         user.getCreatedAt()
                 ))
                 .collect(Collectors.toList());
+    }
+
+    public void updateMemberRole(UUID hiringManagerId, UUID memberId, Role newRole) {
+        User hiringManager = userRepository.findById(hiringManagerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Hiring manager not found"));
+
+        User member = userRepository.findById(memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("Member not found"));
+
+        if (!hiringManager.getOrganization().equals(member.getOrganization())) {
+            throw new SecurityException("Users are not in the same organization");
+        }
+
+        member.setRole(newRole);
+        userRepository.save(member);
+    }
+
+    public void removeMember(UUID hiringManagerId, UUID memberId) {
+        User hiringManager = userRepository.findById(hiringManagerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Hiring manager not found"));
+
+        User member = userRepository.findById(memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("Member not found"));
+
+        if (!hiringManager.getOrganization().equals(member.getOrganization())) {
+            throw new SecurityException("Users are not in the same organization");
+        }
+
+        member.setAccountStatus(com.etalente.backend.model.UserAccountStatus.INACTIVE);
+        userRepository.save(member);
     }
 }

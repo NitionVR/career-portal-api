@@ -101,4 +101,20 @@ public class OrganizationController {
         List<OrganizationMemberDto> members = organizationService.getOrganizationMembers(organizationId);
         return ResponseEntity.ok(members);
     }
+
+    @PutMapping("/members/{memberId}/role")
+    @PreAuthorize("hasRole('HIRING_MANAGER')")
+    public ResponseEntity<Void> updateMemberRole(@PathVariable UUID memberId, @Valid @RequestBody com.etalente.backend.dto.UpdateMemberRoleRequest request) {
+        UUID hiringManagerId = organizationContext.getCurrentUser().getId();
+        organizationService.updateMemberRole(hiringManagerId, memberId, request.newRole());
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/members/{memberId}")
+    @PreAuthorize("hasRole('HIRING_MANAGER')")
+    public ResponseEntity<Void> removeMember(@PathVariable UUID memberId) {
+        UUID hiringManagerId = organizationContext.getCurrentUser().getId();
+        organizationService.removeMember(hiringManagerId, memberId);
+        return ResponseEntity.noContent().build();
+    }
 }
